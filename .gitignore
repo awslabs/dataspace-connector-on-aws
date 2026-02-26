@@ -1,0 +1,18 @@
+.kiro
+.vscode
+
+# CDK files
+cdk/build
+cdk/dist
+cdk/node_modules
+
+cdk/.eslintcache
+cdk/cdk.context.json
+
+# EDC files
+edc/.gradle
+edc/.kotlin
+
+edc/**/build
+edc/**/bin
+edc/**/dynamodb-local-metadata.json

@@ -1,0 +1,35 @@
+{
+  "name": "dataspace-connector-on-aws",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "private": true,
+  "scripts": {
+    "prebuild": "npm run format",
+    "clean": "rm -rf build dist cdk.out node_modules",
+    "watch": "tsc -w",
+    "prepare": "npm run-script build",
+    "lint": "eslint --cache lib && prettier --list-different --cache .",
+    "format": "eslint --fix --cache lib && prettier --write --cache .",
+    "build": "tsc && cdk synth",
+    "cdk": "cdk"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.239.0",
+    "constructs": "^10.5.1",
+    "eslint-config-prettier": "^10.1.8"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.3",
+    "@eslint/js": "^10.0.1",
+    "@tsconfig/node20": "^20.1.9",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.0",
+    "eslint": "^10.0.1",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3"
+  }
+}

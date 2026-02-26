@@ -1,0 +1,6 @@
+{
+  "app": "node dist/app",
+  "requireApproval": "never",
+  "output": "build/cdk.out",
+  "context": {}
+}

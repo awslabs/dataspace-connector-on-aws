@@ -1,0 +1,47 @@
+[versions]
+aws-sdk = "2.31.+"
+edc = "0.7.+"
+edc-aws = "0.7.2"
+junit-jupiter = "5.10.3"
+kotlin = "2.0.+"
+log4j = "2.24.+"
+tx = "0.7.+"
+
+[libraries]
+aws-dynamodb-local = { module = "com.amazonaws:DynamoDBLocal", version = "2.6.+" }
+aws-sdk-dynamodb = { module = "software.amazon.awssdk:dynamodb", version.ref = "aws-sdk"}
+aws-sdk-dynamodb-enhanced = { module = "software.amazon.awssdk:dynamodb-enhanced", version.ref = "aws-sdk"}
+edc-controlplane-core = { module = "org.eclipse.edc:control-plane-core", version.ref = "edc" }
+edc-dpf-awss3-validator = { module = "org.eclipse.edc.aws:validator-data-address-s3", version.ref = "edc-aws" }
+edc-lib-query = { module = "org.eclipse.edc:query-lib", version.ref = "edc" }
+edc-lib-store = { module = "org.eclipse.edc:store-lib", version.ref = "edc" }
+edc-provision-aws-s3 = { module = "org.eclipse.edc.aws:provision-aws-s3", version.ref = "edc-aws" }
+edc-spi-asset = { module = "org.eclipse.edc:asset-spi", version.ref = "edc" }
+edc-spi-contract = { module = "org.eclipse.edc:contract-spi", version.ref = "edc" }
+edc-spi-core = { module = "org.eclipse.edc:core-spi", version.ref = "edc" }
+edc-spi-dataplane = { module = "org.eclipse.edc:data-plane-spi", version.ref = "edc" }
+edc-spi-dataplane-selector = { module = "org.eclipse.edc:data-plane-selector-spi", version.ref = "edc" }
+edc-spi-policy = { module = "org.eclipse.edc:policy-spi", version.ref = "edc" }
+edc-spi-policy-monitor = { module = "org.eclipse.edc:policy-monitor-spi", version.ref = "edc" }
+edc-spi-store-edr = { module = "org.eclipse.edc:edr-store-spi", version.ref = "edc" }
+edc-spi-transfer = { module = "org.eclipse.edc:transfer-spi", version.ref = "edc" }
+edc-spi-validator = { module = "org.eclipse.edc:validator-spi", version.ref = "edc" }
+edc-transaction-local = { module = "org.eclipse.edc:transaction-local", version.ref = "edc" }
+edc-vault-aws = { module = "org.eclipse.edc.aws:vault-aws", version.ref = "edc-aws" }
+jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version = "2.18.+" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
+kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
+log4j-api = { module = "org.apache.logging.log4j:log4j-api", version.ref = "log4j" }
+log4j-bom = { module = "org.apache.logging.log4j:log4j-bom", version.ref = "log4j" }
+log4j-core = { module = "org.apache.logging.log4j:log4j-core", version.ref = "log4j" }
+log4j-layout-template-json = { module = "org.apache.logging.log4j:log4j-layout-template-json", version.ref = "log4j" }
+log4j-slf4j2-impl = { module = "org.apache.logging.log4j:log4j-slf4j2-impl", version.ref = "log4j" }
+tx-controlplane-base = { module = "org.eclipse.tractusx.edc:edc-controlplane-base", version.ref = "tx" }
+tx-core-bpn-validation = { module = "org.eclipse.tractusx.edc:bpn-validation-core", version.ref = "tx" }
+tx-dataplane-base = { module = "org.eclipse.tractusx.edc:edc-dataplane-base", version.ref = "tx" }
+tx-spi-bpn-validation = { module = "org.eclipse.tractusx.edc:bpn-validation-spi", version.ref = "tx"}
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version = "12.1.+" }

@@ -1,0 +1,132 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+import { Construct } from "constructs";
+import { Stack } from "aws-cdk-lib";
+import { IRole, PolicyStatement } from "aws-cdk-lib/aws-iam";
+import { LogGroup } from "aws-cdk-lib/aws-logs";
+
+import { IVpc, Peer, Port, SecurityGroup } from "aws-cdk-lib/aws-ec2";
+
+import {
+  AwsLogDriverMode,
+  ContainerImage,
+  CpuArchitecture,
+  FargateTaskDefinition,
+  ICluster,
+  LogDriver,
+} from "aws-cdk-lib/aws-ecs";
+
+import { EdcNlbOutputs } from "./edc-nlb";
+import { EDC_IAM_ENVIRONMENT_VARIABLE_KEYS } from "../config/environments";
+import { EdcFargateService } from "./edc-fargate-service";
+import { ControlPlanePortMapping } from "../config/port-mappings";
+
+export interface EdcControlPlaneProps {
+  readonly apiAuthKey: string;
+  readonly cluster: ICluster;
+  readonly cpu: number;
+  readonly dspCallbackAddress: string;
+  readonly edcIamEnvVars: { [key: string]: string };
+  readonly image: ContainerImage;
+  readonly memoryLimitMiB: number;
+  readonly nlbOutputs: EdcNlbOutputs;
+  readonly policyMonitorIteration: string;
+  readonly portMapping: ControlPlanePortMapping;
+  readonly taskRolePolicyStatements: PolicyStatement[];
+  readonly vpc: IVpc;
+}
+
+export class EdcControlPlane extends Construct {
+  readonly taskRole: IRole;
+
+  constructor(scope: Construct, id: string, props: EdcControlPlaneProps) {
+    super(scope, id);
+
+    const securityGroup = new SecurityGroup(this, "ControlPlaneSecurityGroup", {
+      allowAllOutbound: false,
+      vpc: props.vpc,
+    });
+    Object.values(props.portMapping).forEach((port) =>
+      securityGroup.addIngressRule(
+        Peer.securityGroupId(props.nlbOutputs.securityGroupId),
+        Port.tcp(port),
+      ),
+    );
+    securityGroup.addEgressRule(Peer.anyIpv4(), Port.HTTP);
+    securityGroup.addEgressRule(Peer.anyIpv4(), Port.HTTPS);
+    securityGroup.addEgressRule(Peer.anyIpv4(), Port.tcpRange(1024, 65535));
+
+    const taskDefinition = new FargateTaskDefinition(this, "TaskDefinition", {
+      cpu: props.cpu,
+      memoryLimitMiB: props.memoryLimitMiB,
+      runtimePlatform: {
+        cpuArchitecture: CpuArchitecture.X86_64,
+      },
+    });
+    props.taskRolePolicyStatements.forEach((policyStatement) =>
+      taskDefinition.addToTaskRolePolicy(policyStatement),
+    );
+
+    const containerName = "ControlPlane";
+
+    taskDefinition.addContainer("ControlPlaneContainer", {
+      containerName: containerName,
+      environment: {
+        "edc.api.auth.key": props.apiAuthKey,
+        "edc.dsp.callback.address": props.dspCallbackAddress,
+        "edc.hostname": props.nlbOutputs.dnsName,
+        "edc.iam.did.web.use.https": "true",
+        "edc.iam.sts.oauth.client.secret.alias":
+          EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.OAUTH_CLIENT_SECRET,
+        "edc.policy.monitor.state-machine.iteration-wait-millis":
+          props.policyMonitorIteration,
+        "edc.runtime.id": id,
+        "edc.vault.aws.region": Stack.of(this).region,
+
+        ...props.edcIamEnvVars,
+
+        "web.http.default.port": `${props.portMapping.default}`,
+        "web.http.default.path": "/api",
+        "web.http.management.port": `${props.portMapping.management}`,
+        "web.http.management.path": "/management",
+        "web.http.management.auth.key": props.apiAuthKey,
+        "web.http.control.port": `${props.portMapping.control}`,
+        "web.http.control.path": "/control",
+        "web.http.protocol.port": `${props.portMapping.protocol}`,
+        "web.http.protocol.path": "/api/v1/dsp",
+        "web.http.observability.port": `${props.portMapping.observability}`,
+        "web.http.observability.path": "/api/check",
+
+        JDK_JAVA_OPTIONS: [
+          "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+          "-Djava.util.logging.level=WARNING",
+          "-Dorg.eclipse.edc.level=INFO",
+        ].join(" "),
+      },
+      image: props.image,
+      logging: LogDriver.awsLogs({
+        logGroup: new LogGroup(this, "LogGroup"),
+        mode: AwsLogDriverMode.NON_BLOCKING,
+        streamPrefix: "EdcControlPlane",
+      }),
+      portMappings: Object.entries(props.portMapping).map((entry) => {
+        return {
+          name: entry[0],
+          containerPort: entry[1],
+          hostPort: entry[1],
+        };
+      }),
+    });
+
+    new EdcFargateService(this, "ControlPlaneFargateService", {
+      cluster: props.cluster,
+      containerName: containerName,
+      securityGroups: [securityGroup],
+      targetGroups: props.nlbOutputs.controlPlaneTargetGroups,
+      taskDefinition: taskDefinition,
+    });
+
+    this.taskRole = taskDefinition.taskRole;
+  }
+}
