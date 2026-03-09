@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "private": true,
   "scripts": {
@@ -24,7 +24,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
     "@eslint/js": "^10.0.1",
-    "@tsconfig/node20": "^20.1.9",
+    "@tsconfig/node24": "^24.0.4",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.4.0",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
