@@ -16,3 +16,7 @@ edc/.kotlin
 edc/**/build
 edc/**/bin
 edc/**/dynamodb-local-metadata.json
+
+# MCP files
+__pycache__
+.venv

@@ -3,6 +3,64 @@
 
 openapi: 3.0.1
 paths:
+  /callback/{processId}/deprovision:
+    post:
+      operationId: callDeprovisionWebhook
+      parameters:
+        - in: path
+          name: processId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeprovisionedResource"
+      responses:
+        default:
+          content:
+            application/json: {}
+          description: default response
+      tags:
+        - HTTP Provisioner Webhook
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/management/callback/{processId}/deprovision
+  /callback/{processId}/provision:
+    post:
+      operationId: callProvisionWebhook
+      parameters:
+        - in: path
+          name: processId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProvisionerWebhookRequest"
+      responses:
+        default:
+          content:
+            application/json: {}
+          description: default response
+      tags:
+        - HTTP Provisioner Webhook
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/management/callback/{processId}/provision
   /v3/assets:
     post:
       description: Creates a new asset together with a data address
@@ -49,6 +107,77 @@ paths:
         connectionId: "${vpcLinkId}"
         connectionType: VPC_LINK
         uri: "http://${loadBalancerDnsName}/management/v3/assets"
+    put:
+      description:
+        "Updates an asset with the given ID if it exists. If the asset\
+        \ is not found, no further action is taken. DANGER ZONE: Note that updating\
+        \ assets can have unexpected results, especially for contract offers that\
+        \ have been sent out or are ongoing in contract negotiations."
+      operationId: updateAssetV3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssetInput"
+      responses:
+        "204":
+          description: Asset was updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: "Request was malformed, e.g. id was null"
+        "404":
+          description: "Asset could not be updated, because it does not exist."
+      tags:
+        - Asset V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: PUT
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: "http://${loadBalancerDnsName}/management/v3/assets"
+  /v3/assets/request:
+    post:
+      description: Request all assets according to a particular query
+      operationId: requestAssetsV3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuerySpec"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AssetOutput"
+          description: The assets matching the query
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: Request body was malformed
+      tags:
+        - Asset V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: "http://${loadBalancerDnsName}/management/v3/assets/request"
   /v3/assets/{id}:
     delete:
       description:
@@ -149,6 +278,31 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         uri: http://${loadBalancerDnsName}/management/v3/assets/{id}
+  /v3/catalog/dataset/request:
+    post:
+      operationId: getDatasetV3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetRequest"
+      responses:
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dataset"
+          description: Gets single dataset from a connector
+      tags:
+        - Catalog V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/management/v3/catalog/dataset/request
   /v3/catalog/request:
     post:
       operationId: requestCatalogV3
@@ -174,6 +328,42 @@ paths:
         connectionId: "${vpcLinkId}"
         connectionType: VPC_LINK
         uri: http://${loadBalancerDnsName}/management/v3/catalog/request
+  /v3/contractagreements/request:
+    post:
+      description: Gets all contract agreements according to a particular query
+      operationId: queryAgreementsV3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuerySpec"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContractAgreement"
+          description: The contract agreements matching the query
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: Request body was malformed
+      tags:
+        - Contract Agreement V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/management/v3/contractagreements/request
   /v3/contractagreements/{id}:
     get:
       description: Gets an contract agreement with the given ID
@@ -310,6 +500,81 @@ paths:
         connectionId: "${vpcLinkId}"
         connectionType: VPC_LINK
         uri: http://${loadBalancerDnsName}/management/v3/contractdefinitions
+    put:
+      description:
+        Updated a contract definition with the given ID. The supplied JSON
+        structure must be a valid JSON-LD object
+      operationId: updateContractDefinitionV3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContractDefinitionInput"
+      responses:
+        "204":
+          description: Contract definition was updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: "Request was malformed, e.g. id was null"
+        "404":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: A contract definition with the given ID does not exist
+      tags:
+        - Contract Definition V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: PUT
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/management/v3/contractdefinitions
+  /v3/contractdefinitions/request:
+    post:
+      description: Returns all contract definitions according to a query
+      operationId: queryContractDefinitionsV3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuerySpec"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContractDefinitionOutput"
+          description: The contract definitions matching the query
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: Request was malformed
+      tags:
+        - Contract Definition V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/management/v3/contractdefinitions/request
   /v3/contractdefinitions/{id}:
     delete:
       description:
@@ -444,6 +709,42 @@ paths:
         connectionId: "${vpcLinkId}"
         connectionType: VPC_LINK
         uri: http://${loadBalancerDnsName}/management/v3/contractnegotiations
+  /v3/contractnegotiations/request:
+    post:
+      description: Returns all contract negotiations according to a query
+      operationId: queryNegotiationsV3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuerySpec"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContractNegotiation"
+          description: The contract negotiations that match the query
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: Request was malformed
+      tags:
+        - Contract Negotiation V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/management/v3/contractnegotiations/request
   /v3/contractnegotiations/{id}:
     get:
       description: Gets a contract negotiation with the given ID
@@ -538,6 +839,51 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         uri: http://${loadBalancerDnsName}/management/v3/contractnegotiations/{id}/agreement
+  /v3/contractnegotiations/{id}/state:
+    get:
+      description: Gets the state of a contract negotiation with the given ID
+      operationId: getNegotiationStateV3
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NegotiationState"
+          description: The contract negotiation's state
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: "Request was malformed, e.g. id was null"
+        "404":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: An contract negotiation with the given ID does not exist
+      tags:
+        - Contract Negotiation V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+        uri: http://${loadBalancerDnsName}/management/v3/contractnegotiations/{id}/state
   /v3/contractnegotiations/{id}/terminate:
     post:
       description: Terminates the contract negotiation.
@@ -587,6 +933,31 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         uri: http://${loadBalancerDnsName}/management/v3/contractnegotiations/{id}/terminate
+  /v3/dataplanes:
+    get:
+      description: Returns a list of all currently registered data plane instances
+      operationId: getAllDataPlaneInstancesV3
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DataPlaneInstanceSchema"
+          description:
+            A (potentially empty) list of currently registered data plane
+            instances
+      tags:
+        - Dataplane Selector V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/management/v3/dataplanes
   /v2/edrs/request:
     post:
       description: Request all Edr entries according to a particular query
@@ -623,6 +994,45 @@ paths:
         connectionId: "${vpcLinkId}"
         connectionType: VPC_LINK
         uri: http://${loadBalancerDnsName}/management/v2/edrs/request
+  /v2/edrs/{transferProcessId}:
+    delete:
+      description: Removes an EDR entry given the transfer process ID
+      operationId: removeEdrEntryV3
+      parameters:
+        - in: path
+          name: transferProcessId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: EDR entry was deleted successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: "Request was malformed, e.g. id was null"
+        "404":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: An EDR entry with the given ID does not exist
+      tags:
+        - EDR Cache V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: DELETE
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/management/v2/edrs/{transferProcessId}
   /v2/edrs/{transferProcessId}/dataaddress:
     get:
       deprecated: true
@@ -717,6 +1127,42 @@ paths:
         connectionId: "${vpcLinkId}"
         connectionType: VPC_LINK
         uri: http://${loadBalancerDnsName}/management/v3/policydefinitions
+  /v3/policydefinitions/request:
+    post:
+      description: Returns all policy definitions according to a query
+      operationId: queryPolicyDefinitionsV3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuerySpec"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PolicyDefinitionOutput"
+          description: The policy definitions matching the query
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: Request was malformed
+      tags:
+        - Policy Definition V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/management/v3/policydefinitions/request
   /v3/policydefinitions/{id}:
     delete:
       description:
@@ -817,6 +1263,217 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         uri: http://${loadBalancerDnsName}/management/v3/policydefinitions/{id}
+    put:
+      description:
+        "Updates an existing Policy, If the Policy is not found, an error\
+        \ is reported"
+      operationId: updatePolicyDefinitionV3
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyDefinitionInput"
+      responses:
+        "204":
+          description: policy definition was updated successfully.
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: Request body was malformed
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorDetail"
+          description:
+            "policy definition could not be updated, because it does not\
+            \ exists"
+      tags:
+        - Policy Definition V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: PUT
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+        uri: http://${loadBalancerDnsName}/management/v3/policydefinitions/{id}
+  /v3/secrets:
+    post:
+      description: Creates a new secret.
+      operationId: createSecretV3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SecretInput"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdResponse"
+          description:
+            Secret was created successfully. Returns the secret Id and
+            created timestamp
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: Request body was malformed
+        "409":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description:
+            "Could not create secret, because a secret with that ID already\
+            \ exists"
+      tags:
+        - Secret V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/management/v3/secrets
+    put:
+      description:
+        "Updates a secret with the given ID if it exists. If the secret\
+        \ is not found, no further action is taken. "
+      operationId: updateSecretV3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SecretInput"
+      responses:
+        "204":
+          description: Secret was updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: "Request was malformed, e.g. id was null"
+        "404":
+          description: "Secret could not be updated, because it does not exist."
+      tags:
+        - Secret V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: PUT
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/management/v3/secrets
+  /v3/secrets/{id}:
+    delete:
+      description: Removes a secret with the given ID if possible.
+      operationId: removeSecretV3
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Secret was deleted successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: "Request was malformed, e.g. id was null"
+        "404":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: A secret with the given ID does not exist
+      tags:
+        - Secret V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: DELETE
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+        uri: http://${loadBalancerDnsName}/management/v3/secrets/{id}
+    get:
+      description: Gets a secret with the given ID
+      operationId: getSecretV3
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecretOutput"
+          description: The secret
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: "Request was malformed, e.g. id was null"
+        "404":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: A secret with the given ID does not exist
+      tags:
+        - Secret V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+        uri: http://${loadBalancerDnsName}/management/v3/secrets/{id}
   /v3/transferprocesses:
     post:
       description:
@@ -862,6 +1519,42 @@ paths:
         connectionId: "${vpcLinkId}"
         connectionType: VPC_LINK
         uri: http://${loadBalancerDnsName}/management/v3/transferprocesses
+  /v3/transferprocesses/request:
+    post:
+      description: Returns all transfer process according to a query
+      operationId: queryTransferProcessesV3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuerySpec"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransferProcess"
+          description: The transfer processes matching the query
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: Request was malformed
+      tags:
+        - Transfer Process V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/management/v3/transferprocesses/request
   /v3/transferprocesses/{id}:
     get:
       description: Gets an transfer process with the given ID
@@ -907,6 +1600,278 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         uri: http://${loadBalancerDnsName}/management/v3/transferprocesses/{id}
+  /v3/transferprocesses/{id}/deprovision:
+    post:
+      description:
+        "Requests the deprovisioning of resources associated with a transfer\
+        \ process. Due to the asynchronous nature of transfers, a successful response\
+        \ only indicates that the request was successfully received. This may take\
+        \ a long time, so clients must poll the /{id}/state endpoint to track the\
+        \ state."
+      operationId: deprovisionTransferProcessV3
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description:
+            Request to deprovision the transfer process was successfully
+            received
+          links:
+            poll-state:
+              operationId: deprovisionTransferProcessV3
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: "Request was malformed, e.g. id was null"
+        "404":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: A transfer process with the given ID does not exist
+      tags:
+        - Transfer Process V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+        uri: http://${loadBalancerDnsName}/management/v3/transferprocesses/{id}/deprovision
+  /v3/transferprocesses/{id}/resume:
+    post:
+      description:
+        "Requests the resumption of a suspended transfer process. Due to\
+        \ the asynchronous nature of transfers, a successful response only indicates\
+        \ that the request was successfully received. This may take a long time, so\
+        \ clients must poll the /{id}/state endpoint to track the state."
+      operationId: resumeTransferProcessV3
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Request to resume the transfer process was successfully received
+          links:
+            poll-state:
+              operationId: resumeTransferProcessV3
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: "Request was malformed, e.g. id was null"
+        "404":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: A transfer process with the given ID does not exist
+      tags:
+        - Transfer Process V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+        uri: http://${loadBalancerDnsName}/management/v3/transferprocesses/{id}/resume
+  /v3/transferprocesses/{id}/state:
+    get:
+      description: Gets the state of a transfer process with the given ID
+      operationId: getTransferProcessStateV3
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferState"
+          description: The  transfer process's state
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: "Request was malformed, e.g. id was null"
+        "404":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: An  transfer process with the given ID does not exist
+      tags:
+        - Transfer Process V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+        uri: http://${loadBalancerDnsName}/management/v3/transferprocesses/{id}/state
+  /v3/transferprocesses/{id}/suspend:
+    post:
+      description:
+        "Requests the suspension of a transfer process. Due to the asynchronous\
+        \ nature of transfers, a successful response only indicates that the request\
+        \ was successfully received. This may take a long time, so clients must poll\
+        \ the /{id}/state endpoint to track the state."
+      operationId: suspendTransferProcessV3
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SuspendTransfer"
+      responses:
+        "204":
+          description: Request to suspend the transfer process was successfully received
+          links:
+            poll-state:
+              operationId: suspendTransferProcessV3
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: "Request was malformed, e.g. id was null"
+        "404":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: A transfer process with the given ID does not exist
+        "409":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description:
+            "Could not suspend the transfer process, because it is already\
+            \ completed or terminated."
+      tags:
+        - Transfer Process V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+        uri: http://${loadBalancerDnsName}/management/v3/transferprocesses/{id}/suspend
+  /v3/transferprocesses/{id}/terminate:
+    post:
+      description:
+        "Requests the termination of a transfer process. Due to the asynchronous\
+        \ nature of transfers, a successful response only indicates that the request\
+        \ was successfully received. This may take a long time, so clients must poll\
+        \ the /{id}/state endpoint to track the state."
+      operationId: terminateTransferProcessV3
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TerminateTransfer"
+      responses:
+        "204":
+          description:
+            Request to terminate the transfer process was successfully
+            received
+          links:
+            poll-state:
+              operationId: terminateTransferProcessV3
+        "400":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: "Request was malformed, e.g. id was null"
+        "404":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description: A transfer process with the given ID does not exist
+        "409":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiErrorDetail"
+          description:
+            "Could not terminate transfer process, because it is already\
+            \ completed or terminated."
+      tags:
+        - Transfer Process V3
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: "${vpcLinkId}"
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+        uri: http://${loadBalancerDnsName}/management/v3/transferprocesses/{id}/terminate
 components:
   schemas:
     ApiErrorDetail:
