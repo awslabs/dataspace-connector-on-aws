@@ -4,12 +4,27 @@ A Model Context Protocol (MCP) server for interacting with the Eclipse Dataspace
 
 ## Features
 
-This MCP server provides 4 tools for managing EDC resources:
+This MCP server provides 14 tools covering the full EDC Management API workflow:
 
-1. **create_asset** - Create a new asset with data address
-2. **create_policy_definition** - Create a new policy definition with ODRL rules
-3. **create_contract_definition** - Create a contract definition linking assets to policies
-4. **request_catalog** - Request the catalog from another EDC connector to discover available datasets
+### Provider-side tools
+- **create_asset** - Create a new asset with data address
+- **create_policy_definition** - Create a new policy definition with ODRL rules
+- **create_contract_definition** - Create a contract definition linking assets to policies
+
+### Consumer-side tools
+- **request_catalog** - Request the catalog from another EDC connector to discover available datasets
+- **initiate_contract_negotiation** - Start a contract negotiation with a provider (passes full policy from catalog)
+- **get_negotiation_state** - Poll the state of a contract negotiation
+- **get_contract_agreement** - Retrieve a finalized contract agreement
+- **initiate_transfer** - Start a data transfer using a contract agreement
+- **get_transfer_state** - Poll the state of a transfer process
+- **get_edr_data_address** - Get the endpoint data reference (EDR) for an active transfer
+
+### Query tools
+- **query_assets** - List/search assets with filtering and pagination
+- **query_contract_negotiations** - List/search contract negotiations
+- **query_transfer_processes** - List/search transfer processes
+- **query_contract_agreements** - List/search contract agreements
 
 ## Installation
 
@@ -48,6 +63,8 @@ The server uses boto3's standard credential chain:
 - AWS credentials file (`~/.aws/credentials`)
 - AWS SSO credentials
 - IAM role (if running on EC2/ECS/Lambda)
+
+Credentials are refreshed automatically on each request, so temporary credentials (IAM roles, SSO) work without restarting the server.
 
 Make sure your AWS credentials have `execute-api:Invoke` permission for the API Gateway.
 
@@ -104,56 +121,107 @@ Add to your `.kiro/settings/mcp.json`:
 
 ## Example Usage
 
-### Discover available datasets from a provider
+### End-to-end consumer flow
 
 ```python
-# Request catalog from another connector
-request_catalog(
+# 1. Discover available datasets from a provider
+catalog = request_catalog(
     counter_party_address="https://provider.example.com/dsp",
     counter_party_id="BPNL000000000001"
 )
+
+# 2. Extract offer details from catalog and negotiate a contract
+# The permission/prohibition/obligation must be passed through exactly from the catalog offer
+offer = catalog["dcat:dataset"][0]["odrl:hasPolicy"]
+negotiation = initiate_contract_negotiation(
+    counter_party_address="https://provider.example.com/dsp",
+    offer_id=offer["@id"],
+    asset_id="dataset-id",
+    assigner="BPNL000000000001",
+    permission=[offer["odrl:permission"]],
+    prohibition=offer["odrl:prohibition"],
+    obligation=offer["odrl:obligation"]
+)
+
+# 3. Poll until negotiation is finalized
+state = get_negotiation_state(negotiation_id=negotiation["@id"])
+
+# 4. Retrieve the contract agreement (get agreement ID from negotiation query)
+agreement = get_contract_agreement(agreement_id="<agreement-id>")
+
+# 5. Initiate a data transfer
+transfer = initiate_transfer(
+    counter_party_address="https://provider.example.com/dsp",
+    contract_id=agreement["@id"],
+    transfer_type="HttpData-PULL"
+)
+
+# 6. Poll until transfer is started
+state = get_transfer_state(transfer_process_id=transfer["@id"])
+
+# 7. Get the endpoint data reference with access token
+edr = get_edr_data_address(transfer_process_id=transfer["@id"])
 ```
 
-### Create a data offering step by step
+### Create a data offering (provider side)
 
 ```python
-# 1. First create a policy
+# 1. Create a policy
 create_policy_definition(
     policy_id="allow-all",
     policy={
         "@context": "http://www.w3.org/ns/odrl.jsonld",
         "@type": "Set",
-        "permission": [{
-            "action": "use"
-        }]
+        "permission": [{"action": "use"}]
     }
 )
 
 # 2. Create an asset
 create_asset(
-    asset_id="weather-data",
+    asset_id="my-dataset",
     properties={
-        "name": "Weather Dataset",
-        "description": "Historical weather data",
+        "name": "Sample Dataset",
+        "description": "A shared dataset",
         "contentType": "application/json"
     },
     data_address={
         "type": "HttpData",
-        "baseUrl": "https://api.weather.com/data"
+        "baseUrl": "https://example.com/api/data"
     }
 )
 
 # 3. Create contract definition linking asset to policy
 create_contract_definition(
-    contract_definition_id="weather-contract",
+    contract_definition_id="my-contract-def",
     access_policy_id="allow-all",
     contract_policy_id="allow-all",
     assets_selector=[{
         "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id",
         "operator": "=",
-        "operandRight": "weather-data"
+        "operandRight": "my-dataset"
     }]
 )
+```
+
+### Query existing resources
+
+```python
+# List all assets
+query_assets(limit=10)
+
+# Find finalized negotiations
+query_contract_negotiations(filter_expression=[{
+    "operandLeft": "state",
+    "operator": "=",
+    "operandRight": "FINALIZED"
+}])
+
+# List active transfers
+query_transfer_processes(filter_expression=[{
+    "operandLeft": "state",
+    "operator": "=",
+    "operandRight": "STARTED"
+}])
 ```
 
 ## Development
@@ -163,11 +231,3 @@ Run the server directly:
 ```bash
 python server.py
 ```
-
-## Next Steps
-
-Future enhancements could include:
-- List/query operations for assets, policies, and contracts
-- Update and delete operations
-- Contract negotiation tools
-- Transfer process initiation and monitoring
