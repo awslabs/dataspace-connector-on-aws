@@ -14,7 +14,9 @@ IMPORTANT: Run ALL checks in a SINGLE bash command to avoid opening multiple ter
 echo "=== Java ===" && java -version 2>&1 && echo "=== Container Runtime ===" && (docker info 2>/dev/null || finch info 2>/dev/null || echo "MISSING: docker or finch") && echo "=== Node ===" && node --version && echo "=== npm ===" && npm --version && echo "=== CDK ===" && cdk --version && echo "=== Python ===" && python3 --version && echo "=== uv ===" && uv --version && echo "=== AWS Identity ===" && aws sts get-caller-identity
 ```
 
-If the container runtime is Finch (not Docker), check whether `CDK_DOCKER` is already set:
+If the container runtime is Finch (not Docker), perform these additional checks:
+
+1. Check whether `CDK_DOCKER` is already set:
 
 ```bash
 echo $CDK_DOCKER
@@ -23,7 +25,19 @@ echo $CDK_DOCKER
 - If it's already set to `finch`, no action needed.
 - If it's empty, uncomment `export CDK_DOCKER=finch` in `deploy.sh`.
 
-If Docker is the container runtime, skip this — CDK uses Docker by default.
+2. Check whether the Finch VM is running:
+
+```bash
+finch vm status
+```
+
+- If it returns `Running`, no action needed.
+- If it returns `Nonexistent`, run `finch vm init` (this downloads the VM image and may take a few minutes).
+- If it returns `Stopped`, run `finch vm start`.
+
+Wait for the VM to be fully running before proceeding to deployment. A missing or stopped Finch VM will cause Docker image builds to fail during `cdk deploy`.
+
+If Docker is the container runtime, skip these Finch-specific checks — CDK uses Docker by default.
 
 If any check fails, tell the user:
 > "Some prerequisites are missing. Please review the project README for setup instructions, then come back when your machine is ready."
@@ -38,8 +52,16 @@ Also check the user's AWS profile:
 echo $AWS_PROFILE
 ```
 
-If set, store it — it will be needed for MCP configuration in Phase 7. If not set, ask the user:
+If set, store it — it will be needed for MCP configuration in Phase 7 and for running `deploy.sh`. If not set, ask the user:
 > "Which AWS CLI profile should be used for this deployment? (Run `aws configure list-profiles` to see available profiles.)"
+
+IMPORTANT: Once the profile is known (whether from `$AWS_PROFILE` or the user), re-run the identity check with that profile to get the correct ARN for the deployment account:
+
+```bash
+aws sts get-caller-identity --profile <profile-name>
+```
+
+Use the ARN from THIS output (not the earlier unqualified check) for IAM principal configuration in Phase 4. The default `aws sts get-caller-identity` without `--profile` may return a different account/identity than the one used for deployment.
 
 ---
 
@@ -58,6 +80,11 @@ Store the chosen region — it will be needed for MCP configuration later.
 ## Phase 3: Configure Catena-X Identity
 
 The user needs to fill in their Catena-X membership details in `cdk/lib/config/environments.ts`.
+
+First, check whether the `edcIam` object already has values populated (i.e., fields are not empty strings `""`). If values are already present, show the user the current configuration and ask:
+> "The Catena-X identity fields in `environments.ts` are already populated. Would you like to keep the existing values or reconfigure?"
+
+If the user wants to keep existing values, skip to Phase 4.
 
 In a fresh clone, the `edcIam` object has 7 fields all set to empty strings (`""`). These must be populated with values from the Cofinity-X Portal:
 
@@ -79,14 +106,19 @@ Collect all values from the user, then update the `edcIam` object in `cdk/lib/co
 
 The user needs to configure IAM access and optionally adjust resource sizing.
 
+First, check whether `managementApiPrincipals` and `observabilityApiPrincipals` in `environments.ts` already contain uncommented `ArnPrincipal` entries. If so, show the user the current values and ask:
+> "IAM principals are already configured. Would you like to keep the existing values or update them?"
+
+If the user wants to keep existing values, skip to the Optional sections below.
+
 ### Required: IAM Principals
 
 Ask the user:
 > "Which IAM role or user ARN should have access to the Management API? I need the full ARN (e.g., `arn:aws:iam::123456789012:role/MyRole`)."
 
-You can help them find it by running:
+You can help them find it by running (use the deployment profile identified in Phase 1):
 ```bash
-aws sts get-caller-identity
+aws sts get-caller-identity --profile <deployment-profile>
 ```
 
 The ARN from the output can be used directly. In the blank config, the `managementApiPrincipals` and `observabilityApiPrincipals` arrays contain a commented-out placeholder:
@@ -127,10 +159,19 @@ Only modify if the user explicitly asks.
 Tell the user:
 > "Configuration is complete. I'll now run the deployment. This will build the EDC Java artifacts, install CDK dependencies, bootstrap your AWS account (if needed), and deploy the CloudFormation stack. This typically takes 10-15 minutes."
 
-Run the deployment:
+IMPORTANT: `deploy.sh` is a long-running process (10-15+ minutes). Start it as a background process so you can monitor progress without blocking. If a specific AWS profile is needed, prepend it to the command:
+
 ```bash
-./deploy.sh
+AWS_PROFILE=<deployment-profile> ./deploy.sh
 ```
+
+If `$AWS_PROFILE` is already exported in the user's shell, you can run `./deploy.sh` directly.
+
+Poll the process output at 30-second intervals to monitor progress. Do NOT poll more frequently — rapid polling generates excessive tool calls and can cause the agent to stall or hit context limits on long deployments. The deployment has these major phases:
+1. Gradle build (~30s) — look for `BUILD SUCCESSFUL`
+2. npm install + CDK synth (~30s) — look for `Synthesis time`
+3. Docker image build + ECR push (~3-5 min) — look for `Published` messages
+4. CloudFormation stack creation (~5-10 min) — look for resource creation progress `(N/104)` and final `✅` success marker
 
 This script:
 1. Builds the EDC control plane and data plane JARs (`./gradlew clean shadowJar`)
@@ -158,9 +199,12 @@ Alternatively, they can use the CLI:
 ```bash
 aws secretsmanager put-secret-value \
     --secret-id "<EdcOauthClientSecretArn from output>" \
-    --secret-string "<oauth-client-secret>" \
-    --region <chosen-region>
+    --secret-string '<oauth-client-secret>' \
+    --region <chosen-region> \
+    --profile <deployment-profile>
 ```
+
+IMPORTANT: The `--secret-string` value MUST be wrapped in single quotes (`'`), not double quotes (`"`). Secrets often contain `$` or other special characters that bash interprets inside double quotes.
 
 ---
 
@@ -199,7 +243,7 @@ Write or merge the `dataspace-connector-on-aws` server entry into `.kiro/setting
 }
 ```
 
-If `.kiro/settings/mcp.json` already exists, preserve other server entries and only add/update the `dataspace-connector-on-aws` key.
+If `.kiro/settings/mcp.json` already exists, preserve other server entries and only add/update the `dataspace-connector-on-aws` key. If the `dataspace-connector-on-aws` entry already exists (e.g., from a previous deployment), update ALL env values to match the current deployment — do not leave stale values from a prior region or account.
 
 ---
 
