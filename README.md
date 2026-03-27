@@ -12,7 +12,7 @@ The goal is to provide easy access to production-ready connector deployments wit
 
 ## Quick Start
 
-**Prerequisites:** `corretto@17`, `docker`, `cdk`, `npm` and `node@20`
+**Prerequisites:** `corretto@17`, `docker`, `cdk`, `npm` and `node@24`
 
 Adjust the EDC and CDK configuration in [`environments.ts`](https://github.com/awslabs/dataspace-connector-on-aws/blob/main/cdk/lib/config/environments.ts) as needed. Provide your Catena-X membership information and technical user as outlined in the Cofinity-X Portal.
 

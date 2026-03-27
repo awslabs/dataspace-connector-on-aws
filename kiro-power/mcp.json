@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "dataspace-connector-on-aws": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "PLACEHOLDER_MCP_DIRECTORY",
+        "run",
+        "dataspace-connector-mcp"
+      ],
+      "env": {
+        "EDC_MANAGEMENT_URL": "PLACEHOLDER_MANAGEMENT_API_URL",
+        "EDC_API_KEY": "PLACEHOLDER_API_KEY",
+        "EDC_USE_AWS_IAM": "true",
+        "AWS_REGION": "PLACEHOLDER_AWS_REGION",
+        "AWS_PROFILE": "PLACEHOLDER_AWS_PROFILE"
+      }
+    }
+  }
+}

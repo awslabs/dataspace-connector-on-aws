@@ -5,7 +5,7 @@
 
 set -e
 
-export AWS_REGION=us-east-1
+export AWS_REGION=eu-central-1
 export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
 # Set in case of Finch container builds
