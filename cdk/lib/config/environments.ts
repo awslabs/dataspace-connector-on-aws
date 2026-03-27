@@ -45,6 +45,10 @@ const edcIam = {
  */
 
 export const DataspaceConnectorStackConfig: DataspaceConnectorStackProps = {
+  // Optional: Custom domain for EDC API endpoints (see README for details)
+  // certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id>",
+  // domainName: "edc.example.com",
+  // hostedZoneId: "Z0123456789ABCDEFGHIJ",
   controlPlaneCpu: 256,
   controlPlaneMemoryLimitMiB: 1024,
   controlPlanePolicyMonitorIteration: "600000", // Run every 10 minutes

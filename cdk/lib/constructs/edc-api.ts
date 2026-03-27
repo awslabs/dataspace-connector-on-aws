@@ -88,6 +88,10 @@ export class EdcApi extends Construct {
       throw new Error("Certificate is required when hostedZone is provided");
     }
 
+    if (props.certificate && !props.hostedZone) {
+      throw new Error("Hosted zone is required when certificate is provided");
+    }
+
     let domainName;
     if (props.hostedZone && props.certificate) {
       domainName = new DomainName(this, "DomainName", {

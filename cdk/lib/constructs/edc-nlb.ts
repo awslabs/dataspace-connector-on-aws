@@ -10,6 +10,10 @@ import {
 import { Construct } from "constructs";
 import { IVpc, Peer, Port, SecurityGroup } from "aws-cdk-lib/aws-ec2";
 import { VpcLink } from "aws-cdk-lib/aws-apigateway";
+import {
+  CONTROL_PLANE_PORT_CONTROL,
+  DATA_PLANE_PORT_CONTROL,
+} from "../config/port-mappings";
 
 export interface EdcNlbProps {
   readonly controlPlaneHealthCheck: HealthCheck;
@@ -56,7 +60,13 @@ export class EdcNlb extends NetworkLoadBalancer {
     // Allow data plane to register at control plane control API
     nlbSecurityGroup.addIngressRule(
       Peer.ipv4(props.vpc.vpcCidrBlock),
-      Port.tcp(8083),
+      Port.tcp(CONTROL_PLANE_PORT_CONTROL),
+    );
+
+    // Allow control plane to health-check data plane control API
+    nlbSecurityGroup.addIngressRule(
+      Peer.ipv4(props.vpc.vpcCidrBlock),
+      Port.tcp(DATA_PLANE_PORT_CONTROL),
     );
     this.addSecurityGroup(nlbSecurityGroup);
 

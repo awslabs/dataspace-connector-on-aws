@@ -48,6 +48,28 @@ After deployment, navigate to the [AWS Secrets Manager console](https://console.
 
 ## Configuration
 
+### Custom Domain (Optional)
+
+By default, the EDC APIs are exposed via auto-generated API Gateway URLs (e.g. `https://<api-id>.execute-api.<region>.amazonaws.com/dsp/`). To use your own domain instead, you need:
+
+1. A [Route 53 hosted zone](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/CreatingHostedZone.html) for your domain
+2. An [ACM certificate](https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-public.html) in `us-east-1` (required for edge-optimized API Gateway endpoints, regardless of your stack's deployment region)
+
+Add these three values to your configuration in [`environments.ts`](cdk/lib/config/environments.ts):
+
+```typescript
+certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id>",
+domainName: "edc.example.com",
+hostedZoneId: "Z0123456789ABCDEFGHIJ",
+```
+
+All three values are required when enabling a custom domain. This will:
+- Create an API Gateway custom domain with TLS 1.2
+- Create a Route 53 A record pointing to the API Gateway
+- Disable the default `execute-api` endpoints
+- Map all EDC APIs as base paths: `/status`, `/management`, `/dsp`, `/data`
+- Automatically configure the EDC's DSP callback and data plane public URLs to use your domain
+
 ### Management API Authentication
 
 This project uses a dual-layer security model for the EDC's Management API:

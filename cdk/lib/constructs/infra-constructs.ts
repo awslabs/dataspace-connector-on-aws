@@ -13,6 +13,8 @@ import { Bucket, IBucket } from "aws-cdk-lib/aws-s3";
 import { TableV2 } from "aws-cdk-lib/aws-dynamodb";
 import { DockerImageAsset, Platform } from "aws-cdk-lib/aws-ecr-assets";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
+import { ICertificate } from "aws-cdk-lib/aws-certificatemanager";
+import { IHostedZone } from "aws-cdk-lib/aws-route53";
 
 import {
   ControlPlanePortMapping,
@@ -26,9 +28,11 @@ import { EdcDdb } from "./edc-ddb";
 import { EdcNlb, EdcNlbOutputs } from "./edc-nlb";
 
 export interface InfraConstructsProps {
+  readonly certificate?: ICertificate;
   readonly controlPlanePortMapping: ControlPlanePortMapping;
   readonly dataPlanePortMapping: DataPlanePortMapping;
   readonly edcStateRemovalPolicy: RemovalPolicy;
+  readonly hostedZone?: IHostedZone;
   readonly managementApiPrincipals: IPrincipal[];
   readonly observabilityApiPrincipals: IPrincipal[];
   readonly vpcIpAddresses: string;
@@ -119,8 +123,10 @@ export class InfraConstructs extends Construct {
     // Create public-facing EDC APIs
 
     this.api = new EdcApi(scope, "EdcApi", {
+      certificate: props.certificate,
       controlPlanePortMapping: props.controlPlanePortMapping,
       dataPlanePortMapping: props.dataPlanePortMapping,
+      hostedZone: props.hostedZone,
       loadBalancerAddress: nlb.loadBalancerDnsName,
       managementApiPrincipals: props.managementApiPrincipals,
       observabilityApiPrincipals: props.observabilityApiPrincipals,
