@@ -23,7 +23,7 @@ import {
 } from "../config/port-mappings";
 
 import { EdcNlbOutputs } from "./edc-nlb";
-import { EDC_IAM_ENVIRONMENT_VARIABLE_KEYS } from "../config/environments";
+import { EDC_SECRETS_MANAGER_ALIASES } from "../config/environments";
 import { EdcFargateService } from "./edc-fargate-service";
 
 export interface EdcDataPlaneProps {
@@ -81,16 +81,16 @@ export class EdcDataPlane extends Construct {
         "edc.hostname": props.nlbOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",
         "edc.iam.sts.oauth.client.secret.alias":
-          EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.OAUTH_CLIENT_SECRET,
+          EDC_SECRETS_MANAGER_ALIASES.OAUTH_CLIENT_SECRET,
         "edc.runtime.id": id,
         "edc.vault.aws.region": Stack.of(this).region,
         "tx.edc.dataplane.token.refresh.endpoint": props.apiPublicUrl,
 
         // This declares the aliases to use in AWS Secrets Manager for consumer pull scenarios
         "edc.transfer.proxy.token.signer.privatekey.alias":
-          "edc.transfer.proxy.token.signer.privatekey",
+          EDC_SECRETS_MANAGER_ALIASES.TOKEN_SIGNER_PRIVATE_KEY,
         "edc.transfer.proxy.token.verifier.publickey.alias":
-          "edc.transfer.proxy.token.verifier.publickey",
+          EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY,
 
         ...props.edcIamEnvVars,
 

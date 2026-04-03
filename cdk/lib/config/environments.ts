@@ -18,8 +18,12 @@ export const EDC_IAM_ENVIRONMENT_VARIABLE_KEYS = {
   OAUTH_TOKEN_URL: "edc.iam.sts.oauth.token.url",
   PARTICIPANT_ID: "edc.participant.id",
   TRUSTED_ISSUER_ID: "edc.iam.trusted-issuer.issuer-1.id",
+};
 
+export const EDC_SECRETS_MANAGER_ALIASES = {
   OAUTH_CLIENT_SECRET: "edc.iam.sts.oauth.client.secret",
+  TOKEN_SIGNER_PRIVATE_KEY: "edc.transfer.proxy.token.signer.privatekey",
+  TOKEN_VERIFIER_PUBLIC_KEY: "edc.transfer.proxy.token.verifier.publickey",
 };
 
 /**

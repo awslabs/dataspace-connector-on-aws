@@ -21,11 +21,12 @@ import {
   DataPlanePortMapping,
 } from "../config/port-mappings";
 
-import { EDC_IAM_ENVIRONMENT_VARIABLE_KEYS } from "../config/environments";
+import { EDC_SECRETS_MANAGER_ALIASES } from "../config/environments";
 
 import { EdcApi } from "./edc-api";
 import { EdcDdb } from "./edc-ddb";
 import { EdcNlb, EdcNlbOutputs } from "./edc-nlb";
+import { EdcTokenKeyPair } from "./edc-token-key-pair";
 
 export interface InfraConstructsProps {
   readonly certificate?: ICertificate;
@@ -136,8 +137,17 @@ export class InfraConstructs extends Construct {
     // Create empty EDC OAuth client secret
 
     const oauthClientSecret = new Secret(scope, "EdcOauthClientSecret", {
-      secretName: EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.OAUTH_CLIENT_SECRET,
+      secretName: EDC_SECRETS_MANAGER_ALIASES.OAUTH_CLIENT_SECRET,
       description: "EDC OAuth client secret from Cofinity-X Portal",
+    });
+
+    // Generate EC key pair for data plane EDR token signing
+
+    new EdcTokenKeyPair(scope, "EdcTokenKeyPair", {
+      privateKeySecretName:
+        EDC_SECRETS_MANAGER_ALIASES.TOKEN_SIGNER_PRIVATE_KEY,
+      publicKeySecretName:
+        EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY,
     });
 
     new CfnOutput(scope, "EdcOauthClientSecretArn", {

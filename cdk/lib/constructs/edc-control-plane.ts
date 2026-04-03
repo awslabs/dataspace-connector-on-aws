@@ -18,7 +18,7 @@ import {
 } from "aws-cdk-lib/aws-ecs";
 
 import { EdcNlbOutputs } from "./edc-nlb";
-import { EDC_IAM_ENVIRONMENT_VARIABLE_KEYS } from "../config/environments";
+import { EDC_SECRETS_MANAGER_ALIASES } from "../config/environments";
 import { EdcFargateService } from "./edc-fargate-service";
 import { ControlPlanePortMapping } from "../config/port-mappings";
 
@@ -78,7 +78,7 @@ export class EdcControlPlane extends Construct {
         "edc.hostname": props.nlbOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",
         "edc.iam.sts.oauth.client.secret.alias":
-          EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.OAUTH_CLIENT_SECRET,
+          EDC_SECRETS_MANAGER_ALIASES.OAUTH_CLIENT_SECRET,
         "edc.policy.monitor.state-machine.iteration-wait-millis":
           props.policyMonitorIteration,
         "edc.runtime.id": id,

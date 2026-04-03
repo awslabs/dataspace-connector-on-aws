@@ -220,6 +220,16 @@ The EDR contains:
 
 Explain to the user how to use these to fetch the actual data (e.g., via `curl` or any HTTP client).
 
+IMPORTANT: The `endpoint` URL from the EDR is the base URL of the data plane public API. When fetching data, append `public/` to the endpoint path. For example:
+
+```bash
+curl -H "Authorization: <authorization-token-from-edr>" "<endpoint>public/"
+```
+
+The data plane acts as a proxy — it forwards the request to the provider's actual data source (the `baseUrl` configured in the asset's data address) and returns the response. The `Authorization` header contains the EDR token, not AWS credentials — the data plane API does not require IAM auth.
+
+After explaining the curl command, execute it to verify the data is actually flowing. If the response contains the expected data from the asset's data source, the end-to-end flow is validated.
+
 ---
 
 ## Phase 5: Self-Test with Loopback
