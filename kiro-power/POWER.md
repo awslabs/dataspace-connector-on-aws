@@ -1,7 +1,7 @@
 ---
 name: "dataspace-connector-on-aws"
 displayName: "Dataspace Connector on AWS"
-description: "Deploy and interact with a production-ready Catena-X Dataspace Connector on AWS. Guides you from zero to a fully configured, running connector with validated MCP access within minutes."
+description: "Deploy and interact with a production-ready Catena-X Dataspace Connector on AWS. Guides you from zero to a fully deployed connector with validated end-to-end data exchange within minutes."
 keywords: ["dataspace", "connector", "catena-x", "edc", "tractus-x"]
 author: "AWS"
 ---
@@ -14,12 +14,12 @@ This power helps you deploy and operate a production-ready Dataspace Connector f
 
 The connector uses Tractus-X EDC with AWS-native integrations: Amazon DynamoDB for control plane persistence, AWS Secrets Manager for credentials, Amazon S3 for data transfer, and Amazon API Gateway with IAM authorization for secure API access.
 
-With this power, you can go from zero to a fully deployed, configured connector with validated MCP access in minutes.
+With this power, you can go from zero to a fully deployed connector with validated end-to-end data exchange in minutes.
 
 ## Available Steering Files
 
 - **deploy-connector** — Step-by-step guided workflow to configure, deploy, and validate your connector on AWS
-- **prototype-data-exchange** — Hands-on workflow to create data offerings, browse catalogs, negotiate contracts, and transfer data using the MCP tools
+- **validate-data-exchange** — End-to-end validation workflow to create data offerings, negotiate contracts, transfer data, and troubleshoot issues
 
 ## Available MCP Tools
 
@@ -79,7 +79,7 @@ To deploy your connector, activate the **deploy-connector** steering file which 
 5. Post-deployment setup (OAuth client secret)
 6. Configuring and validating MCP access
 
-Once deployed, activate the **prototype-data-exchange** steering file to start experimenting with data exchange scenarios — creating offerings, browsing catalogs, negotiating contracts, and transferring data.
+Once deployed, activate the **validate-data-exchange** steering file to validate the full data exchange flow end-to-end — creating offerings, negotiating contracts, transferring data, and verifying the payload reaches the consumer.
 
 ## Tool Usage Examples
 

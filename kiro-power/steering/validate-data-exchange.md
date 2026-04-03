@@ -1,8 +1,8 @@
-# Prototype Data Exchange Workflow
+# Validate Data Exchange Workflow
 
-This steering file guides the agent through prototyping data exchange scenarios using a deployed Dataspace Connector. The connector must already be deployed and MCP tools connected (see the **deploy-connector** steering file).
+This steering file guides the agent through validating the data exchange capabilities of a deployed Dataspace Connector. The connector must already be deployed and MCP tools connected (see the **deploy-connector** steering file).
 
-This workflow helps users rapidly experiment with EDC concepts: creating data offerings, browsing catalogs, negotiating contracts, and transferring data.
+This workflow verifies the full data exchange flow end-to-end: creating data offerings, browsing catalogs, negotiating contracts, transferring data, and fetching the actual payload through the data plane.
 
 ---
 
@@ -31,15 +31,16 @@ Store both log group names — they are needed for diagnosing any issues in Phas
 ## Phase 2: Understand the User's Goal
 
 Ask the user:
-> "What would you like to prototype? Here are some common scenarios:
+> "What would you like to do? The recommended first step is a full end-to-end validation using the loopback self-test — this creates a data offering on your connector and then consumes it from the same connector, verifying the entire flow.
 >
-> 1. **Create a data offering** — Register an asset, define access policies, and publish a contract offer so other connectors can discover and consume your data
-> 2. **Consume data from another connector** — Browse a provider's catalog, negotiate a contract, and transfer data
-> 3. **Self-test with loopback** — Create an offering on your own connector, then consume it from the same connector (useful for validating your setup end-to-end)
+> 1. **End-to-end validation (recommended)** — Self-test with loopback to verify your connector is fully operational
+> 2. **Create a data offering** — Register an asset, define access policies, and publish a contract offer so other connectors can discover and consume your data
+> 3. **Consume data from another connector** — Browse a provider's catalog, negotiate a contract, and transfer data
 >
-> Which scenario interests you, or describe your own?"
+> Press Enter for the recommended end-to-end validation, or choose another option."
 
-Proceed to the relevant phase based on their answer.
+If the user picks option 1 or presses Enter, proceed to Phase 5 (Self-Test with Loopback).
+Otherwise, proceed to the relevant phase based on their answer.
 
 ---
 
@@ -51,10 +52,10 @@ Walk the user through creating a complete data offering. Ask for details or use 
 
 Ask the user:
 > "What access policy should govern your data? Common options:
-> - **Open access** — Anyone can use the data (good for prototyping)
+> - **Open access** — Anyone can use the data (good for testing)
 > - **BPN-restricted** — Only specific business partners can access it
 >
-> For prototyping, open access is simplest. Want to go with that?"
+> For validation, open access is simplest. Want to go with that?"
 
 For open access:
 ```python
@@ -80,7 +81,7 @@ Ask the user:
 > - The content type (e.g., `application/json`, `text/csv`)"
 
 If the user doesn't have a real data source, suggest a placeholder:
-> "For prototyping, we can use a public test endpoint like `https://jsonplaceholder.typicode.com/posts` as the data source."
+> "For testing, we can use a public test endpoint like `https://jsonplaceholder.typicode.com/posts` as the data source."
 
 ```python
 create_asset(
@@ -271,13 +272,13 @@ request_catalog(
 Follow Phase 4 steps 4.2 through 4.6 using the user's own connector as both provider and consumer.
 
 After successful completion:
-> "Your connector is fully operational — you've validated the complete data exchange flow end-to-end. You're ready to start sharing data with other Catena-X participants."
+> "Your connector is fully operational — the complete data exchange flow has been validated end-to-end, from data offering creation through contract negotiation, data transfer, and payload retrieval. You're ready to start sharing data with other Catena-X participants."
 
 ---
 
 ## Phase 6: Inspect and Clean Up
 
-After prototyping, help the user review what was created:
+After testing, help the user review what was created:
 
 ```python
 query_assets(limit=50)
@@ -286,7 +287,7 @@ query_contract_agreements(limit=50)
 query_transfer_processes(limit=50)
 ```
 
-Note: The EDC Management API does not provide delete operations for assets, policies, or contract definitions through the standard endpoints used by this MCP server. Resources created during prototyping will persist. For a clean slate, the user can redeploy the stack (DynamoDB tables are set to `DESTROY` removal policy by default).
+Note: The EDC Management API does not provide delete operations for assets, policies, or contract definitions through the standard endpoints used by this MCP server. Resources created during testing will persist. For a clean slate, the user can redeploy the stack (DynamoDB tables are set to `DESTROY` removal policy by default).
 
 ---
 
