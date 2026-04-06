@@ -4,6 +4,8 @@ This steering file guides the agent through validating the data exchange capabil
 
 This workflow verifies the full data exchange flow end-to-end: creating data offerings, browsing catalogs, negotiating contracts, transferring data, and fetching the actual payload through the data plane.
 
+The default validation uses Amazon S3 as the data source, which exercises the full AWS-native data path (IAM roles, S3 data plane extension, token signing). An HttpData alternative is also available for quick smoke tests against external URLs.
+
 ---
 
 ## Phase 1: Verify Connectivity
@@ -33,13 +35,15 @@ Store both log group names — they are needed for diagnosing any issues in Phas
 Ask the user:
 > "What would you like to do? The recommended first step is a full end-to-end validation using the loopback self-test — this creates a data offering on your connector and then consumes it from the same connector, verifying the entire flow.
 >
-> 1. **End-to-end validation (recommended)** — Self-test with loopback to verify your connector is fully operational
-> 2. **Create a data offering** — Register an asset, define access policies, and publish a contract offer so other connectors can discover and consume your data
-> 3. **Consume data from another connector** — Browse a provider's catalog, negotiate a contract, and transfer data
+> 1. **End-to-end validation with S3 (recommended)** — Uploads test data to S3, registers it as an asset, and validates the full AWS-native data path including S3 proxy, IAM roles, and token signing
+> 2. **Quick validation with HttpData** — Lighter self-test using an external HTTP endpoint as the data source (skips S3)
+> 3. **Create a data offering** — Register an asset, define access policies, and publish a contract offer so other connectors can discover and consume your data
+> 4. **Consume data from another connector** — Browse a provider's catalog, negotiate a contract, and transfer data
 >
-> Press Enter for the recommended end-to-end validation, or choose another option."
+> Press Enter for the recommended S3 end-to-end validation, or choose another option."
 
-If the user picks option 1 or presses Enter, proceed to Phase 5 (Self-Test with Loopback).
+If the user picks option 1 or presses Enter, proceed to Phase 5 (Self-Test with S3 Loopback).
+If option 2, proceed to Phase 6 (Quick Validation with HttpData).
 Otherwise, proceed to the relevant phase based on their answer.
 
 ---
@@ -73,12 +77,36 @@ For BPN-restricted access, ask for the allowed BPNLs and construct an appropriat
 
 ### Step 3.2: Create an Asset
 
-Ask the user:
-> "What data do you want to share? I need:
-> - A short name/ID for the asset
-> - A description
-> - The data source URL (where the actual data lives)
-> - The content type (e.g., `application/json`, `text/csv`)"
+Ask the user what type of data source they want to use:
+
+#### Option A: Amazon S3 data source
+
+The user needs to provide:
+- Asset ID and name
+- S3 bucket name, object key, and region
+
+```python
+create_asset(
+    asset_id="<user-chosen-id>",
+    properties={
+        "name": "<user-provided-name>",
+        "description": "<user-provided-description>",
+        "contentType": "<content-type>"
+    },
+    data_address={
+        "type": "AmazonS3",
+        "region": "<aws-region>",
+        "bucketName": "<bucket-name>",
+        "keyName": "<object-key>"
+    }
+)
+```
+
+#### Option B: HTTP data source
+
+The user needs to provide:
+- Asset ID and name
+- The data source URL
 
 If the user doesn't have a real data source, suggest a placeholder:
 > "For testing, we can use a public test endpoint like `https://jsonplaceholder.typicode.com/posts` as the data source."
@@ -208,7 +236,7 @@ Poll until the transfer reaches `STARTED`:
 get_transfer_state(transfer_process_id="<transfer-id>")
 ```
 
-If the transfer state is `TERMINATED` instead of progressing to `STARTED`, do NOT retry blindly. Follow the troubleshooting procedure in Phase 7 to diagnose the root cause.
+If the transfer state is `TERMINATED` instead of progressing to `STARTED`, do NOT retry blindly. Follow the troubleshooting procedure in Phase 8 to diagnose the root cause.
 
 Then retrieve the endpoint data reference:
 ```python
@@ -227,17 +255,130 @@ IMPORTANT: The `endpoint` URL from the EDR is the base URL of the data plane pub
 curl -H "Authorization: <authorization-token-from-edr>" "<endpoint>public/"
 ```
 
-The data plane acts as a proxy — it forwards the request to the provider's actual data source (the `baseUrl` configured in the asset's data address) and returns the response. The `Authorization` header contains the EDR token, not AWS credentials — the data plane API does not require IAM auth.
+The data plane acts as a proxy — it forwards the request to the provider's actual data source (the `baseUrl` or S3 object configured in the asset's data address) and returns the response. The `Authorization` header contains the EDR token, not AWS credentials — the data plane API does not require IAM auth.
 
 After explaining the curl command, execute it to verify the data is actually flowing. If the response contains the expected data from the asset's data source, the end-to-end flow is validated.
 
 ---
 
-## Phase 5: Self-Test with Loopback
+## Phase 5: Self-Test with S3 Loopback (Recommended)
 
-This combines Phase 3 and Phase 4 against the user's own connector. Useful for validating the full setup.
+This is the recommended validation path. It exercises the full AWS-native data flow: S3 upload → asset registration → catalog → negotiation → transfer → EDR → data plane S3 proxy → consumer HTTP download.
 
-### Step 5.1: Create a Test Offering
+### Step 5.1: Discover Stack Resources
+
+Retrieve the S3 bucket name, DSP endpoint, and BPNL. The bucket name and DSP endpoint come from CloudFormation outputs (they contain CDK-generated suffixes):
+
+```bash
+aws cloudformation describe-stacks --stack-name DataspaceConnectorStack --region <region> \
+    --query 'Stacks[0].Outputs' --output json
+```
+
+Extract:
+- `EdcDataPlaneBucketName` → S3 bucket name
+- `EdcApiDspApiEndpoint` → DSP endpoint URL
+
+Read the `PARTICIPANT_ID` from `cdk/lib/config/environments.ts` (the `edc.participant.id` field in the `edcIam` object) for the BPNL.
+
+If the user already has these values from a prior deployment, use them directly.
+
+### Step 5.2: Upload Test Data to S3
+
+Generate a short generic test document and upload it to the stack's S3 bucket:
+
+```bash
+echo '{"id":"test-001","name":"Sample Record","description":"Test data for validating the dataspace connector S3 data exchange.","value":42,"timestamp":"2025-01-01T00:00:00Z"}' \
+    | aws s3 cp - "s3://<bucket-name>/test/sample-data.json" \
+    --content-type "application/json" \
+    --region <region> \
+    --profile <deployment-profile>
+```
+
+Verify the upload:
+```bash
+aws s3 ls "s3://<bucket-name>/test/sample-data.json" --region <region> --profile <deployment-profile>
+```
+
+### Step 5.3: Create the S3 Test Offering
+
+Create a policy, asset, and contract definition for the test data:
+
+**Policy:**
+```python
+create_policy_definition(
+    policy_id="test-s3-policy",
+    policy={
+        "@context": "http://www.w3.org/ns/odrl.jsonld",
+        "@type": "Set",
+        "permission": [{"action": "use"}]
+    }
+)
+```
+
+**Asset with S3 data address:**
+```python
+create_asset(
+    asset_id="test-s3-asset",
+    properties={
+        "name": "Test S3 Dataset",
+        "description": "Test dataset stored in S3 for validating the connector",
+        "contentType": "application/json"
+    },
+    data_address={
+        "type": "AmazonS3",
+        "region": "<region>",
+        "bucketName": "<bucket-name>",
+        "keyName": "test/sample-data.json"
+    }
+)
+```
+
+**Contract definition:**
+```python
+create_contract_definition(
+    contract_definition_id="test-s3-contract-def",
+    access_policy_id="test-s3-policy",
+    contract_policy_id="test-s3-policy",
+    assets_selector=[{
+        "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id",
+        "operator": "=",
+        "operandRight": "test-s3-asset"
+    }]
+)
+```
+
+### Step 5.4: Browse Own Catalog
+
+```python
+request_catalog(
+    counter_party_address="<own-dsp-endpoint>",
+    counter_party_id="<own-bpnl>"
+)
+```
+
+Locate the `test-s3-asset` entry in the catalog response and extract the offer details.
+
+### Step 5.5: Complete the Consumer Flow
+
+Follow Phase 4 steps 4.2 through 4.6 using the user's own connector as both provider and consumer, targeting the `test-s3-asset` offer from the catalog.
+
+### Step 5.6: Verify the Payload
+
+After the curl returns the data, verify it matches the document uploaded in Step 5.2. The response should be:
+```json
+{"id":"test-001","name":"Sample Record","description":"Test data for validating the dataspace connector S3 data exchange.","value":42,"timestamp":"2025-01-01T00:00:00Z"}
+```
+
+After successful completion:
+> "Your connector is fully operational — the complete S3 data exchange flow has been validated end-to-end. Data was uploaded to S3, registered as an asset, discovered via catalog, negotiated, transferred, and retrieved through the data plane proxy. The data plane successfully read from S3 using its IAM role and proxied the content to the consumer over HTTP. You're ready to start sharing data with other Catena-X participants."
+
+---
+
+## Phase 6: Quick Validation with HttpData Loopback
+
+This is a lighter alternative to the S3 self-test. It uses an external HTTP endpoint as the data source, which validates the core EDC flow (catalog, negotiation, transfer, EDR, proxy) but does not exercise the S3 data plane extension or IAM roles.
+
+### Step 6.1: Create a Test Offering
 
 Use Phase 3 with these defaults (or let the user customize):
 - Policy ID: `test-policy`
@@ -247,18 +388,9 @@ Use Phase 3 with these defaults (or let the user customize):
 - Content type: `application/json`
 - Contract definition ID: `test-contract-def`
 
-### Step 5.2: Browse Own Catalog
+### Step 6.2: Browse Own Catalog
 
-To browse your own connector's catalog, you need the DSP endpoint and BPNL. These can be retrieved independently:
-
-**DSP endpoint** — query the CloudFormation stack outputs:
-```bash
-aws cloudformation describe-stacks --stack-name DataspaceConnectorStack --region <region> --query 'Stacks[0].Outputs[?OutputKey==`EdcApiDspApiEndpointDC133D20`].OutputValue' --output text
-```
-
-**BPNL** — read the `PARTICIPANT_ID` from `cdk/lib/config/environments.ts` (the `edc.participant.id` field in the `edcIam` object).
-
-If the user already has these values from a prior deployment, use them directly.
+Retrieve the DSP endpoint and BPNL as described in Phase 5 Step 5.1, then:
 
 ```python
 request_catalog(
@@ -267,16 +399,16 @@ request_catalog(
 )
 ```
 
-### Step 5.3: Complete the Flow
+### Step 6.3: Complete the Flow
 
 Follow Phase 4 steps 4.2 through 4.6 using the user's own connector as both provider and consumer.
 
 After successful completion:
-> "Your connector is fully operational — the complete data exchange flow has been validated end-to-end, from data offering creation through contract negotiation, data transfer, and payload retrieval. You're ready to start sharing data with other Catena-X participants."
+> "Your connector's core data exchange flow is working — catalog, negotiation, transfer, and HTTP proxy are all operational. For a more thorough validation that includes S3 data sources, run the S3 self-test (option 1)."
 
 ---
 
-## Phase 6: Inspect and Clean Up
+## Phase 7: Inspect and Clean Up
 
 After testing, help the user review what was created:
 
@@ -287,15 +419,15 @@ query_contract_agreements(limit=50)
 query_transfer_processes(limit=50)
 ```
 
-Note: The EDC Management API does not provide delete operations for assets, policies, or contract definitions through the standard endpoints used by this MCP server. Resources created during testing will persist. For a clean slate, the user can redeploy the stack (DynamoDB tables are set to `DESTROY` removal policy by default).
+Note: The EDC Management API does not provide delete operations for assets, policies, or contract definitions through the standard endpoints used by this MCP server. Resources created during testing will persist, including any S3 test objects uploaded during the S3 self-test — do not delete them independently, as that would leave broken asset records. For a clean slate, the user can redeploy the stack (DynamoDB tables are set to `DESTROY` removal policy by default).
 
 ---
 
-## Phase 7: Troubleshooting
+## Phase 8: Troubleshooting
 
 When any EDC operation reaches an unexpected state (e.g., transfer `TERMINATED` instead of `STARTED`, negotiation `TERMINATED` instead of `FINALIZED`), follow this systematic approach. Do NOT retry or restart services without first collecting and interpreting logs.
 
-### Step 7.1: Query the Failed Process for Error Details
+### Step 8.1: Query the Failed Process for Error Details
 
 For a failed transfer, query the provider-side transfer process. The consumer transfer has a `correlationId` that maps to the provider's transfer process ID:
 
@@ -328,7 +460,7 @@ query_contract_negotiations(filter_expression=[{
 }])
 ```
 
-### Step 7.2: Discover CloudWatch Log Groups
+### Step 8.2: Discover CloudWatch Log Groups
 
 The control plane and data plane each write to their own CloudWatch log group. The names include CDK-generated suffixes, so discover them first:
 
@@ -343,9 +475,9 @@ This returns two log group names like:
 
 Store both — you'll need them for log queries.
 
-### Step 7.3: Pull Time-Correlated Logs from Both Services
+### Step 8.3: Pull Time-Correlated Logs from Both Services
 
-Using the timestamp from the failed process (the `stateTimestamp` field from Step 7.1), pull logs from BOTH the control plane and data plane in a window around that time. Always check both services — the root cause may be on either side.
+Using the timestamp from the failed process (the `stateTimestamp` field from Step 8.1), pull logs from BOTH the control plane and data plane in a window around that time. Always check both services — the root cause may be on either side.
 
 First, find the latest log stream for each service:
 ```bash
@@ -372,15 +504,17 @@ aws logs filter-log-events --log-group-name "<log-group-name>" --region <region>
 
 Useful filter patterns: `SEVERE`, `WARNING`, `ERROR`, `DataPlane`, `TransferProcess`, `ContractNegotiation`.
 
-### Step 7.4: Interpret and Act
+### Step 8.4: Interpret and Act
 
-With the error detail from Step 7.1 and the correlated logs from Step 7.3, interpret the root cause before taking action. Common patterns:
+With the error detail from Step 8.1 and the correlated logs from Step 8.3, interpret the root cause before taking action. Common patterns:
 
 | Error Detail | Likely Cause | Where to Look |
 |---|---|---|
 | `DataPlane not found` | Data plane registration expired or data plane not running | Control plane logs for `DataPlaneSelectorManagerImpl` state changes; data plane logs for `DataPlaneHealthCheck` registration |
 | `Policy not equal to offer` | Contract negotiation used a policy that doesn't match the catalog offer | Control plane logs for policy evaluation; verify `permission`/`prohibition`/`obligation` arrays match the catalog exactly |
 | `Contract agreement not found` | Invalid or expired contract agreement ID used for transfer | Control plane logs; verify the agreement ID exists via `get_contract_agreement` |
+| `Failed to decode token` | Token signing key mismatch between control plane and data plane | Verify both planes have `edc.transfer.proxy.token.signer.privatekey.alias` and `edc.transfer.proxy.token.verifier.publickey.alias` set to the same Secrets Manager key names |
+| S3 `AccessDenied` | Data plane Fargate task role lacks `s3:GetObject` permission on the bucket | Check the task role policies; verify the bucket ARN matches |
 | No logs in data plane | Data plane task may have crashed or not started | Check ECS service status: `aws ecs describe-services --cluster <cluster> --services <service>` |
 
 IMPORTANT: Always collect logs from BOTH services before drawing conclusions. Do not restart services or retry operations without understanding the root cause first.

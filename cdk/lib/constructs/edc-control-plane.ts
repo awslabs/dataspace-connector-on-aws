@@ -84,6 +84,12 @@ export class EdcControlPlane extends Construct {
         "edc.runtime.id": id,
         "edc.vault.aws.region": Stack.of(this).region,
 
+        // This declares the aliases to use in AWS Secrets Manager for consumer pull scenarios
+        "edc.transfer.proxy.token.signer.privatekey.alias":
+          EDC_SECRETS_MANAGER_ALIASES.TOKEN_SIGNER_PRIVATE_KEY,
+        "edc.transfer.proxy.token.verifier.publickey.alias":
+          EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY,
+
         ...props.edcIamEnvVars,
 
         "web.http.default.port": `${props.portMapping.default}`,

@@ -155,5 +155,10 @@ export class InfraConstructs extends Construct {
       description:
         "Populate with the OAuth client secret of your EDC's technical user",
     });
+
+    new CfnOutput(scope, "EdcDataPlaneBucketName", {
+      value: this.s3Bucket.bucketName,
+      description: "S3 bucket for data plane asset storage",
+    });
   }
 }
