@@ -3,6 +3,1587 @@
 
 openapi: 3.0.1
 paths:
+  /.well-known/dspace-version:
+    get:
+      operationId: getProtocolVersions
+      parameters:
+        - in: header
+          name: Authorization
+          schema:
+            type: string
+      responses:
+        default:
+          content:
+            application/json: {}
+          description: default response
+      x-amazon-apigateway-integration:
+        type: mock
+        passthroughBehavior: never
+        requestTemplates:
+          application/json: '{"statusCode": 200}
+
+            '
+        responses:
+          2\d{2}:
+            statusCode: 200
+            responseTemplates:
+              application/json: "{\n  \"Success\": true\n}\n"
+  /2024/1/catalog/datasets/{id}:
+    get:
+      operationId: getDataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/catalog/datasets/{id}
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2024/1/catalog/request:
+    post:
+      operationId: requestCatalog
+      parameters:
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: continuationToken
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/catalog/request
+  /2024/1/negotiations/offer:
+    post:
+      operationId: initialContractOffer
+      parameters:
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/offer
+  /2024/1/negotiations/request:
+    post:
+      operationId: initialContractRequest
+      parameters:
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/request
+  /2024/1/negotiations/{id}:
+    get:
+      operationId: getNegotiation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2024/1/negotiations/{id}/agreement:
+    post:
+      operationId: createAgreement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}/agreement
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2024/1/negotiations/{id}/agreement/verification:
+    post:
+      operationId: verifyAgreement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}/agreement/verification
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2024/1/negotiations/{id}/events:
+    post:
+      operationId: createEvent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}/events
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2024/1/negotiations/{id}/offer:
+    post:
+      operationId: providerOffer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}/offer
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2024/1/negotiations/{id}/request:
+    post:
+      operationId: contractRequest
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}/request
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2024/1/negotiations/{id}/termination:
+    post:
+      operationId: terminateNegotiation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}/termination
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2024/1/transfers/request:
+    post:
+      operationId: initiateTransferProcess
+      parameters:
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/transfers/request
+  /2024/1/transfers/{id}:
+    get:
+      operationId: getTransferProcess
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/transfers/{id}
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2024/1/transfers/{id}/completion:
+    post:
+      operationId: transferProcessCompletion
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/transfers/{id}/completion
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2024/1/transfers/{id}/start:
+    post:
+      operationId: transferProcessStart
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/transfers/{id}/start
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2024/1/transfers/{id}/suspension:
+    post:
+      operationId: transferProcessSuspension
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/transfers/{id}/suspension
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2024/1/transfers/{id}/termination:
+    post:
+      operationId: transferProcessTermination
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/transfers/{id}/termination
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2025-1/catalog/datasets/{id}:
+    get:
+      operationId: getDataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/catalog/datasets/{id}
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2025-1/catalog/request:
+    post:
+      operationId: requestCatalog
+      parameters:
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: continuationToken
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/catalog/request
+  /2025-1/negotiations/offers:
+    post:
+      operationId: initialContractOffer
+      parameters:
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/offers
+  /2025-1/negotiations/request:
+    post:
+      operationId: initialContractRequest
+      parameters:
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/request
+  /2025-1/negotiations/{id}:
+    get:
+      operationId: getNegotiation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2025-1/negotiations/{id}/agreement:
+    post:
+      operationId: createAgreement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}/agreement
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2025-1/negotiations/{id}/agreement/verification:
+    post:
+      operationId: verifyAgreement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}/agreement/verification
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2025-1/negotiations/{id}/events:
+    post:
+      operationId: createEvent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}/events
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2025-1/negotiations/{id}/offers:
+    post:
+      operationId: providerOffer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}/offers
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2025-1/negotiations/{id}/request:
+    post:
+      operationId: contractRequest
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}/request
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2025-1/negotiations/{id}/termination:
+    post:
+      operationId: terminateNegotiation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}/termination
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2025-1/transfers/request:
+    post:
+      operationId: initiateTransferProcess
+      parameters:
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/transfers/request
+  /2025-1/transfers/{id}:
+    get:
+      operationId: getTransferProcess
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/transfers/{id}
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2025-1/transfers/{id}/completion:
+    post:
+      operationId: transferProcessCompletion
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/transfers/{id}/completion
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2025-1/transfers/{id}/start:
+    post:
+      operationId: transferProcessStart
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/transfers/{id}/start
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2025-1/transfers/{id}/suspension:
+    post:
+      operationId: transferProcessSuspension
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/transfers/{id}/suspension
+        requestParameters:
+          integration.request.path.id: method.request.path.id
+  /2025-1/transfers/{id}/termination:
+    post:
+      operationId: transferProcessTermination
+      parameters:
+        - name: id
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                empty:
+                  type: boolean
+                valueType:
+                  type: string
+                  enum:
+                    - ARRAY
+                    - OBJECT
+                    - STRING
+                    - NUMBER
+                    - "TRUE"
+                    - "FALSE"
+                    - "NULL"
+              additionalProperties:
+                type: object
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/transfers/{id}/termination
+        requestParameters:
+          integration.request.path.id: method.request.path.id
   /catalog/datasets/{id}:
     get:
       operationId: getDataset
@@ -22,13 +1603,13 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: GET
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/catalog/datasets/{id}
+        uri: http://${loadBalancerDnsName}/api/protocol/catalog/datasets/{id}
   /catalog/request:
     post:
       operationId: requestCatalog
@@ -47,7 +1628,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -67,11 +1648,11 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/catalog/request
+        uri: http://${loadBalancerDnsName}/api/protocol/catalog/request
   /negotiations/offer:
     post:
       operationId: initialContractOffer
@@ -86,7 +1667,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -106,11 +1687,11 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/negotiations/offer
+        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/offer
   /negotiations/request:
     post:
       operationId: initialContractRequest
@@ -125,7 +1706,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -145,11 +1726,11 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/negotiations/request
+        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/request
   /negotiations/{id}:
     get:
       operationId: getNegotiation
@@ -169,13 +1750,13 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: GET
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/negotiations/{id}
+        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}
   /negotiations/{id}/agreement:
     post:
       operationId: createAgreement
@@ -195,7 +1776,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -215,13 +1796,13 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/negotiations/{id}/agreement
+        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}/agreement
   /negotiations/{id}/agreement/verification:
     post:
       operationId: verifyAgreement
@@ -241,7 +1822,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -261,13 +1842,13 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/negotiations/{id}/agreement/verification
+        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}/agreement/verification
   /negotiations/{id}/events:
     post:
       operationId: createEvent
@@ -287,7 +1868,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -307,13 +1888,13 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/negotiations/{id}/events
+        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}/events
   /negotiations/{id}/offer:
     post:
       operationId: providerOffer
@@ -333,7 +1914,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -353,13 +1934,13 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/negotiations/{id}/offer
+        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}/offer
   /negotiations/{id}/request:
     post:
       operationId: contractRequest
@@ -379,7 +1960,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -399,13 +1980,13 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/negotiations/{id}/request
+        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}/request
   /negotiations/{id}/termination:
     post:
       operationId: terminateNegotiation
@@ -425,7 +2006,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -445,40 +2026,13 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/negotiations/{id}/termination
-  /.well-known/dspace-version:
-    get:
-      operationId: getProtocolVersions
-      parameters:
-        - in: header
-          name: Authorization
-          schema:
-            type: string
-      responses:
-        default:
-          content:
-            application/json: {}
-          description: default response
-      x-amazon-apigateway-integration:
-        type: mock
-        passthroughBehavior: never
-        requestTemplates:
-          "application/json": |
-            {"statusCode": 200}
-        responses:
-          "2\\d{2}":
-            statusCode: 200
-            responseTemplates:
-              "application/json": |
-                {
-                  "Success": true
-                }
+        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}/termination
   /transfers/request:
     post:
       operationId: initiateTransferProcess
@@ -493,7 +2047,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -513,11 +2067,11 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/transfers/request
+        uri: http://${loadBalancerDnsName}/api/protocol/transfers/request
   /transfers/{id}:
     get:
       operationId: getTransferProcess
@@ -537,13 +2091,13 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: GET
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/transfers/{id}
+        uri: http://${loadBalancerDnsName}/api/protocol/transfers/{id}
   /transfers/{id}/completion:
     post:
       operationId: transferProcessCompletion
@@ -563,7 +2117,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -583,13 +2137,13 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/transfers/{id}/completion
+        uri: http://${loadBalancerDnsName}/api/protocol/transfers/{id}/completion
   /transfers/{id}/start:
     post:
       operationId: transferProcessStart
@@ -609,7 +2163,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -629,13 +2183,13 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/transfers/{id}/start
+        uri: http://${loadBalancerDnsName}/api/protocol/transfers/{id}/start
   /transfers/{id}/suspension:
     post:
       operationId: transferProcessSuspension
@@ -655,7 +2209,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -675,13 +2229,13 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/transfers/{id}/suspension
+        uri: http://${loadBalancerDnsName}/api/protocol/transfers/{id}/suspension
   /transfers/{id}/termination:
     post:
       operationId: transferProcessTermination
@@ -701,7 +2255,7 @@ paths:
             schema:
               type: object
               additionalProperties:
-                $ref: "#/components/schemas/JsonValue"
+                type: object
               properties:
                 empty:
                   type: boolean
@@ -721,42 +2275,10 @@ paths:
             application/json: {}
           description: default response
       x-amazon-apigateway-integration:
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/v1/dsp/transfers/{id}/termination
-components:
-  schemas:
-    JsonObject:
-      type: object
-      additionalProperties:
-        $ref: "#/components/schemas/JsonValue"
-      properties:
-        empty:
-          type: boolean
-        valueType:
-          type: string
-          enum:
-            - ARRAY
-            - OBJECT
-            - STRING
-            - NUMBER
-            - "TRUE"
-            - "FALSE"
-            - "NULL"
-    JsonValue:
-      type: object
-      properties:
-        valueType:
-          type: string
-          enum:
-            - ARRAY
-            - OBJECT
-            - STRING
-            - NUMBER
-            - "TRUE"
-            - "FALSE"
-            - "NULL"
+        uri: http://${loadBalancerDnsName}/api/protocol/transfers/{id}/termination

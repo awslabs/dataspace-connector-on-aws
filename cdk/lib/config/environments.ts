@@ -17,6 +17,7 @@ export const EDC_IAM_ENVIRONMENT_VARIABLE_KEYS = {
   OAUTH_CLIENT_ID: "edc.iam.sts.oauth.client.id",
   OAUTH_TOKEN_URL: "edc.iam.sts.oauth.token.url",
   PARTICIPANT_ID: "edc.participant.id",
+  PARTICIPANT_BPN: "tractusx.edc.participant.bpn",
   TRUSTED_ISSUER_ID: "edc.iam.trusted-issuer.issuer-1.id",
 };
 
@@ -39,6 +40,7 @@ const edcIam = {
   [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.OAUTH_CLIENT_ID]: "",
   [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.OAUTH_TOKEN_URL]: "",
   [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.PARTICIPANT_ID]: "",
+  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.PARTICIPANT_BPN]: "",
   [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.TRUSTED_ISSUER_ID]: "",
 };
 

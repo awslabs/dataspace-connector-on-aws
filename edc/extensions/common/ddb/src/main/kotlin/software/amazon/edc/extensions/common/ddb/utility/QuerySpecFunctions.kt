@@ -91,11 +91,20 @@ fun <T> QuerySpec.getGenericPropertyComparator(): Comparator<T> =
 
 private fun <T> QuerySpec.getSortFieldValue(obj: T): Any? =
     try {
-        val field = obj!!::class.java.getDeclaredField(sortField)
-        field.isAccessible = true
-        field.get(obj)
+        var clazz: Class<*>? = obj!!::class.java
+        var field: java.lang.reflect.Field? = null
+        while (clazz != null && field == null) {
+            field =
+                try {
+                    clazz.getDeclaredField(sortField)
+                } catch (_: NoSuchFieldException) {
+                    null
+                }
+            clazz = clazz.superclass
+        }
+        field?.isAccessible = true
+        field?.get(obj) ?: throw NoSuchFieldException(sortField)
     } catch (e: Exception) {
-//    log().error("Unable to get field value for $sortField", e)
         throw IllegalArgumentException("$sortField is not a valid sort field!")
     }
 

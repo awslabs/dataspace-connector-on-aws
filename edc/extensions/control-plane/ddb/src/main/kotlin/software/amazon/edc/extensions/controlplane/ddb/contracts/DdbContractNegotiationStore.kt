@@ -113,6 +113,7 @@ class DdbContractNegotiationStore(
         }
     }
 
+    @Deprecated("Deprecated by interface")
     override fun findForCorrelationId(correlationId: String): EdcContractNegotiation? {
         val negotiation = getContractNegotiationByCorrelationId(correlationId)
         val agreement = negotiation?.agreementId?.let { getContractAgreement(it) }
@@ -161,14 +162,6 @@ class DdbContractNegotiationStore(
             .sortedWith(querySpec.getGenericPropertyComparator())
             .applyOffsetAndLimit(querySpec)
             .asStream()
-    }
-
-    @Deprecated("Deprecated in ContractNegotiationStore")
-    override fun findByCorrelationIdAndLease(correlationId: String): StoreResult<EdcContractNegotiation> {
-        val negotiation =
-            getContractNegotiationByCorrelationId(correlationId)
-                ?: return StoreResult.notFound("ContractNegotiation with correlation ID $correlationId not found!")
-        return findByIdAndLease(negotiation.id)
     }
 
     override fun getLeasableById(id: String): Leasable? = getContractNegotiation(id)

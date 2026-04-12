@@ -4,7 +4,7 @@
 package software.amazon.edc.extensions.controlplane.ddb.bpn
 
 import com.amazonaws.services.dynamodbv2.local.embedded.DynamoDBEmbedded
-import org.eclipse.tractusx.edc.validation.businesspartner.spi.BusinessPartnerStore
+import org.eclipse.tractusx.edc.validation.businesspartner.spi.store.BusinessPartnerStore
 import org.eclipse.tractusx.edc.validation.businesspartner.store.BusinessPartnerStoreTestBase
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema
