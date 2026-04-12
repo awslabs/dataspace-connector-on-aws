@@ -77,7 +77,7 @@ export class EdcDataPlane extends Construct {
       containerName: containerName,
       environment: {
         "edc.dataplane.api.public.baseurl": props.apiPublicUrl,
-        "edc.dpf.selector.url": `http://${props.nlbOutputs.dnsName}:${props.controlPlanePortMapping.control}/control/v1/dataplanes`,
+        "edc.dpf.selector.url": `http://${props.nlbOutputs.dnsName}:${props.controlPlanePortMapping.control}/api/control/v1/dataplanes`,
         "edc.hostname": props.nlbOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",
         "edc.iam.sts.oauth.client.secret.alias":
@@ -94,8 +94,8 @@ export class EdcDataPlane extends Construct {
 
         ...props.edcIamEnvVars,
 
-        "web.http.default.port": `${props.dataPlanePortMapping.default}`,
-        "web.http.default.path": "/api",
+        "web.http.port": `${props.dataPlanePortMapping.default}`,
+        "web.http.path": "/api",
         "web.http.public.port": `${props.dataPlanePortMapping.public}`,
         "web.http.public.path": "/api/public",
         "web.http.control.port": `${props.dataPlanePortMapping.control}`,
@@ -103,8 +103,6 @@ export class EdcDataPlane extends Construct {
 
         JDK_JAVA_OPTIONS: [
           "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-          "-Djava.util.logging.level=WARNING",
-          "-Dorg.eclipse.edc.level=INFO",
         ].join(" "),
       },
       image: props.image,

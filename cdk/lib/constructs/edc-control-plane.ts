@@ -73,7 +73,6 @@ export class EdcControlPlane extends Construct {
     taskDefinition.addContainer("ControlPlaneContainer", {
       containerName: containerName,
       environment: {
-        "edc.api.auth.key": props.apiAuthKey,
         "edc.dsp.callback.address": props.dspCallbackAddress,
         "edc.hostname": props.nlbOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",
@@ -92,22 +91,18 @@ export class EdcControlPlane extends Construct {
 
         ...props.edcIamEnvVars,
 
-        "web.http.default.port": `${props.portMapping.default}`,
-        "web.http.default.path": "/api",
+        "web.http.port": `${props.portMapping.default}`,
+        "web.http.path": "/api",
         "web.http.management.port": `${props.portMapping.management}`,
-        "web.http.management.path": "/management",
+        "web.http.management.path": "/api/management",
         "web.http.management.auth.key": props.apiAuthKey,
         "web.http.control.port": `${props.portMapping.control}`,
-        "web.http.control.path": "/control",
+        "web.http.control.path": "/api/control",
         "web.http.protocol.port": `${props.portMapping.protocol}`,
-        "web.http.protocol.path": "/api/v1/dsp",
-        "web.http.observability.port": `${props.portMapping.observability}`,
-        "web.http.observability.path": "/api/check",
+        "web.http.protocol.path": "/api/protocol",
 
         JDK_JAVA_OPTIONS: [
           "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-          "-Djava.util.logging.level=WARNING",
-          "-Dorg.eclipse.edc.level=INFO",
         ].join(" "),
       },
       image: props.image,

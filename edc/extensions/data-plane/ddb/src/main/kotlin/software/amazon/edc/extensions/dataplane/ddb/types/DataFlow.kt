@@ -5,6 +5,7 @@ package software.amazon.edc.extensions.dataplane.ddb.types
 
 import org.eclipse.edc.spi.types.domain.DataAddress
 import org.eclipse.edc.spi.types.domain.transfer.FlowType
+import org.eclipse.edc.spi.types.domain.transfer.TransferType
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttribute
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbConvertedBy
@@ -28,8 +29,12 @@ data class DataFlow(
     var destination: Map<String, Any>? = null,
     @get:DynamoDbAttribute(ERROR_DETAIL)
     var errorDetail: String? = null,
-    @get:DynamoDbAttribute(FLOW_TYPE)
-    var flowType: String? = null,
+    @get:DynamoDbAttribute(TRANSFER_TYPE_DESTINATION)
+    var transferTypeDestination: String? = null,
+    @get:DynamoDbAttribute(TRANSFER_TYPE_FLOW)
+    var transferTypeFlow: String? = null,
+    @get:DynamoDbAttribute(TRANSFER_TYPE_RESPONSE_CHANNEL)
+    var transferTypeResponseChannel: String? = null,
     @get:DynamoDbAttribute(LEASE_ID)
     override var leaseId: String? = null,
     @get:DynamoDbAttribute(PROPERTIES)
@@ -56,7 +61,11 @@ data class DataFlow(
             createdAt(createdAt)
             destination(destination?.let { DataAddress.Builder.newInstance().properties(it).build() })
             errorDetail(errorDetail)
-            flowType(flowType?.let { FlowType.valueOf(it) })
+            transferType(
+                transferTypeFlow?.let {
+                    TransferType(transferTypeDestination ?: "", FlowType.valueOf(it), transferTypeResponseChannel)
+                },
+            )
             properties(properties)
             source(source?.let { DataAddress.Builder.newInstance().properties(it).build() })
             state?.let { state(it) }
@@ -71,7 +80,9 @@ data class DataFlow(
         const val CREATED_AT = "createdAt"
         const val DESTINATION = "destination"
         const val ERROR_DETAIL = "errorDetail"
-        const val FLOW_TYPE = "flowType"
+        const val TRANSFER_TYPE_DESTINATION = "transferTypeDestination"
+        const val TRANSFER_TYPE_FLOW = "transferTypeFlow"
+        const val TRANSFER_TYPE_RESPONSE_CHANNEL = "transferTypeResponseChannel"
         const val LEASE_ID = "leaseId"
         const val ID = "id"
         const val PROPERTIES = "properties"
@@ -93,7 +104,9 @@ fun EdcDataFlow.toDdbDataFlow(leaseId: String? = null): DataFlow =
         createdAt = createdAt,
         destination = destination?.properties,
         errorDetail = errorDetail,
-        flowType = flowType?.toString(),
+        transferTypeDestination = transferType?.destinationType(),
+        transferTypeFlow = transferType?.flowType()?.toString(),
+        transferTypeResponseChannel = transferType?.responseChannelType(),
         leaseId = leaseId,
         properties = properties,
         source = source?.properties,

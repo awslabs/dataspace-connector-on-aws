@@ -105,14 +105,6 @@ class DdbTransferProcessStore(
             querySpec,
         )
 
-    @Deprecated("Deprecated in TransferProcessStore")
-    override fun findByCorrelationIdAndLease(correlationId: String): StoreResult<EdcTransferProcess> {
-        val transferProcess =
-            getTransferProcessByCorrelationId(correlationId)
-                ?: return StoreResult.notFound("TransferProcess with correlationId: $correlationId not found!")
-        return findByIdAndLease(transferProcess.id)
-    }
-
     override fun getLeasableById(id: String): Leasable? = getTransferProcess(id)
 
     override fun updateLeaseId(leasable: Leasable) {

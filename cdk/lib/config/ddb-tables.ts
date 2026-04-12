@@ -37,6 +37,10 @@ export const DDB_TABLES: EdcTableProps[] = [
     partitionKey: COMMON_PARTITION_KEY,
   },
   {
+    tableName: "BusinessPartnerGroups",
+    partitionKey: COMMON_PARTITION_KEY,
+  },
+  {
     tableName: "ContractAgreements",
     partitionKey: COMMON_PARTITION_KEY,
   },

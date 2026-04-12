@@ -20,7 +20,7 @@ import org.eclipse.edc.spi.query.CriterionOperatorRegistry
 import org.eclipse.edc.spi.system.ServiceExtension
 import org.eclipse.edc.spi.system.ServiceExtensionContext
 import org.eclipse.edc.spi.types.TypeManager
-import org.eclipse.tractusx.edc.validation.businesspartner.spi.BusinessPartnerStore
+import org.eclipse.tractusx.edc.validation.businesspartner.spi.store.BusinessPartnerStore
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema
