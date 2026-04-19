@@ -87,37 +87,51 @@ data class TransferProcess(
     var updatedAt: Long = 0,
 ) : Leasable {
     fun toEdcTransferProcess(objectMapper: ObjectMapper): EdcTransferProcess =
-        EdcTransferProcess.Builder.newInstance().apply {
-            id(id)
-            assetId(assetId)
-            callbackAddresses(callbackAddresses?.map { objectMapper.convertValue(it, CallbackAddress::class.java) })
-            contentDataAddress?.let {
-                contentDataAddress(DataAddress.Builder.newInstance().properties(contentDataAddress).build())
-            }
-            contractId(contractId)
-            correlationId(correlationId)
-            counterPartyAddress(counterPartyAddress)
-            createdAt(createdAt)
-            dataDestination?.let { dataDestination(DataAddress.Builder.newInstance().properties(dataDestination).build()) }
-            dataPlaneId(dataPlaneId)
-            deprovisionedResources(
-                deprovisionedResources?.map { objectMapper.convertValue(it, DeprovisionedResource::class.java) },
-            )
-            errorDetail(errorDetail)
-            pending(pending)
-            privateProperties(privateProperties)
-            protocol(protocol)
-            protocolMessages(objectMapper.convertValue(protocolMessages, ProtocolMessages::class.java))
-            provisionedResourceSet(objectMapper.convertValue(provisionedResourceSet, ProvisionedResourceSet::class.java))
-            resourceManifest(objectMapper.convertValue(resourceManifest, ResourceManifest::class.java))
-            state(state)
-            stateCount(stateCount)
-            stateTimestamp(stateTimestamp)
-            traceContext(traceContext)
-            transferType(transferType)
-            type(EdcTransferProcess.Type.valueOf(type))
-            updatedAt(updatedAt)
-        }.build()
+        EdcTransferProcess.Builder
+            .newInstance()
+            .apply {
+                id(id)
+                assetId(assetId)
+                callbackAddresses(callbackAddresses?.map { objectMapper.convertValue(it, CallbackAddress::class.java) })
+                contentDataAddress?.let {
+                    contentDataAddress(
+                        DataAddress.Builder
+                            .newInstance()
+                            .properties(contentDataAddress)
+                            .build(),
+                    )
+                }
+                contractId(contractId)
+                correlationId(correlationId)
+                counterPartyAddress(counterPartyAddress)
+                createdAt(createdAt)
+                dataDestination?.let {
+                    dataDestination(
+                        DataAddress.Builder
+                            .newInstance()
+                            .properties(dataDestination)
+                            .build(),
+                    )
+                }
+                dataPlaneId(dataPlaneId)
+                deprovisionedResources(
+                    deprovisionedResources?.map { objectMapper.convertValue(it, DeprovisionedResource::class.java) },
+                )
+                errorDetail(errorDetail)
+                pending(pending)
+                privateProperties(privateProperties)
+                protocol(protocol)
+                protocolMessages(objectMapper.convertValue(protocolMessages, ProtocolMessages::class.java))
+                provisionedResourceSet(objectMapper.convertValue(provisionedResourceSet, ProvisionedResourceSet::class.java))
+                resourceManifest(objectMapper.convertValue(resourceManifest, ResourceManifest::class.java))
+                state(state)
+                stateCount(stateCount)
+                stateTimestamp(stateTimestamp)
+                traceContext(traceContext)
+                transferType(transferType)
+                type(EdcTransferProcess.Type.valueOf(type))
+                updatedAt(updatedAt)
+            }.build()
 
     companion object {
         const val ASSET_ID = "assetId"

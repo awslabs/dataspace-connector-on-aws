@@ -17,14 +17,17 @@ import java.time.Duration
 
 class DdbTransferProcessStoreTest : TransferProcessStoreTestBase() {
     private val client =
-        DynamoDbEnhancedClient.builder()
+        DynamoDbEnhancedClient
+            .builder()
             .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
             .build()
     private val leaseTable =
-        client.table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
+        client
+            .table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
             .apply { createTable() }
     private val transferProcessTable =
-        client.table(TransferProcess.TABLE_NAME, TableSchema.fromBean(TransferProcess::class.java))
+        client
+            .table(TransferProcess.TABLE_NAME, TableSchema.fromBean(TransferProcess::class.java))
             .apply { createTable() }
 
     private val transferProcessStore =

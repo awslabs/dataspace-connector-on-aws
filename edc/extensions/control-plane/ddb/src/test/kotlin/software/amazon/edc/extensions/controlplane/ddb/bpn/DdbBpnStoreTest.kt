@@ -12,11 +12,13 @@ import software.amazon.edc.extensions.controlplane.ddb.types.BpnGroup
 
 class DdbBpnStoreTest : BusinessPartnerStoreTestBase() {
     private val client =
-        DynamoDbEnhancedClient.builder()
+        DynamoDbEnhancedClient
+            .builder()
             .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
             .build()
     private val table =
-        client.table(BpnGroup.TABLE_NAME, TableSchema.fromBean(BpnGroup::class.java))
+        client
+            .table(BpnGroup.TABLE_NAME, TableSchema.fromBean(BpnGroup::class.java))
             .apply { createTable() }
 
     private val bpnStore = DdbBpnStore(table)

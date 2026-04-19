@@ -47,21 +47,23 @@ data class DataPlaneInstance(
     var url: String? = null,
 ) : Leasable {
     fun toEdcDataPlaneInstance(): EdcDataPlaneInstance =
-        EdcDataPlaneInstance.Builder.newInstance().apply {
-            id(id)
-            allowedSourceTypes(allowedSourceTypes)
-            allowedTransferType(allowedTransferTypes)
-            createdAt(createdAt)
-            errorDetail(errorDetail)
-            lastActive(lastActive)
-            pending(pending)
-            properties(properties)
-            state(state)
-            stateCount(state)
-            stateTimestamp(stateTimestamp)
-            updatedAt(updatedAt)
-            url(url)
-        }.build()
+        EdcDataPlaneInstance.Builder
+            .newInstance()
+            .apply {
+                id(id)
+                allowedSourceTypes(allowedSourceTypes)
+                allowedTransferType(allowedTransferTypes)
+                createdAt(createdAt)
+                errorDetail(errorDetail)
+                lastActive(lastActive)
+                pending(pending)
+                properties(properties)
+                state(state)
+                stateCount(state)
+                stateTimestamp(stateTimestamp)
+                updatedAt(updatedAt)
+                url(url)
+            }.build()
 
     companion object {
         const val ALLOWED_SOURCE_TYPES = "allowedSourceTypes"

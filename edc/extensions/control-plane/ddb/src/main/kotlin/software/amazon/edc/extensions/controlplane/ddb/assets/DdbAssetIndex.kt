@@ -41,7 +41,8 @@ class DdbAssetIndex(
         val pages = table.scan()
         val predicate = querySpec.filterExpression.toPredicate<Any>(criterionOperatorRegistry)
 
-        return pages.items()
+        return pages
+            .items()
             .asSequence()
             .map { it.toEdcAsset() }
             .filter { predicate.test(it) }
@@ -73,10 +74,12 @@ class DdbAssetIndex(
 
     override fun countAssets(criteria: List<Criterion>): Long {
         val querySpec =
-            QuerySpec.Builder.newInstance().apply {
-                filter(criteria)
-                limit(Integer.MAX_VALUE)
-            }.build()
+            QuerySpec.Builder
+                .newInstance()
+                .apply {
+                    filter(criteria)
+                    limit(Integer.MAX_VALUE)
+                }.build()
         return queryAssets(querySpec).count()
     }
 

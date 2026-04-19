@@ -55,7 +55,8 @@ fun QuerySpec.toScanRequest(fieldNameReplacements: Map<String, String> = emptyMa
     val builder = ScanEnhancedRequest.builder()
     if (resultingFilterExpression.isNotEmpty()) {
         builder.filterExpression(
-            Expression.builder()
+            Expression
+                .builder()
                 .expression(resultingFilterExpression.toString())
                 .expressionNames(expressionNames)
                 .expressionValues(expressionValues)
@@ -121,9 +122,7 @@ private fun Criterion.getDdbOperator(): String =
         else -> throw IllegalArgumentException("Unsupported operator: $operator")
     }
 
-private fun Criterion.getSanitizedOperandRight(): String {
-    return operandRight.toString().replace("%", "")
-}
+private fun Criterion.getSanitizedOperandRight(): String = operandRight.toString().replace("%", "")
 
 private fun Any?.toAttributeValue(): AttributeValue {
     val builder = AttributeValue.builder()

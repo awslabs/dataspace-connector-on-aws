@@ -30,8 +30,14 @@ data class AccessToken(
     fun toEdcAccessTokenData(): AccessTokenData =
         AccessTokenData(
             id,
-            ClaimToken.Builder.newInstance().claims(claimToken).build(),
-            DataAddress.Builder.newInstance().properties(dataAddress).build(),
+            ClaimToken.Builder
+                .newInstance()
+                .claims(claimToken)
+                .build(),
+            DataAddress.Builder
+                .newInstance()
+                .properties(dataAddress)
+                .build(),
             additionalProperties,
         )
 

@@ -16,7 +16,9 @@ import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyCompa
 import software.amazon.edc.extensions.common.ddb.utility.keyFromId
 import software.amazon.edc.extensions.common.ddb.utility.toScanRequest
 
-class DdbEdrEntryIndex(private val table: DynamoDbTable<EdrEntry>) : EndpointDataReferenceEntryIndex {
+class DdbEdrEntryIndex(
+    private val table: DynamoDbTable<EdrEntry>,
+) : EndpointDataReferenceEntryIndex {
     override fun findById(id: String): EndpointDataReferenceEntry? = table.getItem(keyFromId(id))?.toEdcType()
 
     override fun query(querySpec: QuerySpec): StoreResult<MutableList<EndpointDataReferenceEntry>> {
@@ -24,7 +26,10 @@ class DdbEdrEntryIndex(private val table: DynamoDbTable<EdrEntry>) : EndpointDat
         val result = table.scan(scanRequest)
 
         return StoreResult.success(
-            result.items().asSequence().map { it.toEdcType() }
+            result
+                .items()
+                .asSequence()
+                .map { it.toEdcType() }
                 .sortedWith(querySpec.getGenericPropertyComparator())
                 .applyOffsetAndLimit(querySpec)
                 .toMutableList(),

@@ -26,11 +26,12 @@ class DdbDataPlaneStore(
     leaseHolder: String,
     leaseTable: DynamoDbTable<Lease>,
     private val table: DynamoDbTable<DataFlow>,
-) : DataPlaneStore, AbstractLeasableEntityDao(
+) : AbstractLeasableEntityDao(
         clock = clock,
         leaseHolder = leaseHolder,
         leaseTable = leaseTable,
-    ) {
+    ),
+    DataPlaneStore {
     override fun findById(id: String): EdcDataFlow? = getDataFlow(id)?.toEdcDataFlow()
 
     override fun nextNotLeased(
@@ -38,22 +39,24 @@ class DdbDataPlaneStore(
         vararg criteria: Criterion,
     ): MutableList<EdcDataFlow> {
         val querySpec =
-            QuerySpec.Builder.newInstance()
+            QuerySpec.Builder
+                .newInstance()
                 .filter(criteria.toList())
                 .sortField(DataFlow.STATE_TIMESTAMP)
                 .sortOrder(SortOrder.ASC)
                 .limit(max)
                 .build()
         val request = querySpec.toScanRequest()
-        return table.scan(request).items()
+        return table
+            .scan(request)
+            .items()
             .asSequence()
             .filterNot { hasLease(it.id) }
             .sortedWith(querySpec.getGenericPropertyComparator())
             .map {
                 acquireLease(it)
                 it.toEdcDataFlow()
-            }
-            .applyOffsetAndLimit(querySpec)
+            }.applyOffsetAndLimit(querySpec)
             .toMutableList()
     }
 

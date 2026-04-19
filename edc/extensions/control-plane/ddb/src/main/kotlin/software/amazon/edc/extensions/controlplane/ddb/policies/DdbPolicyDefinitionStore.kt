@@ -31,7 +31,12 @@ class DdbPolicyDefinitionStore(
 
     override fun findAll(querySpec: QuerySpec): Stream<EdcPolicyDefinition> =
         queryResolver.query(
-            table.scan().items().asSequence().map { it.toEdcPolicyDefinition(objectMapper) }.asStream(),
+            table
+                .scan()
+                .items()
+                .asSequence()
+                .map { it.toEdcPolicyDefinition(objectMapper) }
+                .asStream(),
             querySpec,
         )
 

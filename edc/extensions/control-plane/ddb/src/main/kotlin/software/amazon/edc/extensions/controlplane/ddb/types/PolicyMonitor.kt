@@ -34,17 +34,19 @@ data class PolicyMonitor(
     var updatedAt: Long = 0L,
 ) : Leasable {
     fun toEdcPolicyMonitor(): PolicyMonitorEntry =
-        PolicyMonitorEntry.Builder.newInstance().apply {
-            id(id)
-            contractId(contractId)
-            createdAt(createdAt)
-            errorDetail(errorDetail)
-            state(state)
-            stateCount(stateCount)
-            stateTimestamp(stateTimestamp)
-            traceContext(traceContext)
-            updatedAt(updatedAt)
-        }.build()
+        PolicyMonitorEntry.Builder
+            .newInstance()
+            .apply {
+                id(id)
+                contractId(contractId)
+                createdAt(createdAt)
+                errorDetail(errorDetail)
+                state(state)
+                stateCount(stateCount)
+                stateTimestamp(stateTimestamp)
+                traceContext(traceContext)
+                updatedAt(updatedAt)
+            }.build()
 
     companion object {
         const val CONTRACT_ID = "contractId"

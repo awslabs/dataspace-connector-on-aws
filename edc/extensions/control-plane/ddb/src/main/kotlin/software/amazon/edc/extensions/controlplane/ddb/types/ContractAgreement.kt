@@ -37,14 +37,16 @@ data class ContractAgreement(
     var startDate: Long? = null,
 ) {
     fun toEdcContractAgreement(objectMapper: ObjectMapper): EdcContractAgreement =
-        EdcContractAgreement.Builder.newInstance().apply {
-            id(id)
-            contractSigningDate(signingDate)
-            assetId(assetId)
-            consumerId(consumerAgentId)
-            policy(objectMapper.convertValue(policy, Policy::class.java))
-            providerId(providerAgentId)
-        }.build()
+        EdcContractAgreement.Builder
+            .newInstance()
+            .apply {
+                id(id)
+                contractSigningDate(signingDate)
+                assetId(assetId)
+                consumerId(consumerAgentId)
+                policy(objectMapper.convertValue(policy, Policy::class.java))
+                providerId(providerAgentId)
+            }.build()
 
     companion object {
         const val ASSET_ID = "assetId"

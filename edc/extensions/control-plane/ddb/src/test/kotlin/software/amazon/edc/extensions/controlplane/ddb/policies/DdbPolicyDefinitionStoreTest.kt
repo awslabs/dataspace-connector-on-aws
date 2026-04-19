@@ -14,11 +14,13 @@ import software.amazon.edc.extensions.controlplane.ddb.types.PolicyDefinition
 
 class DdbPolicyDefinitionStoreTest : PolicyDefinitionStoreTestBase() {
     private val client =
-        DynamoDbEnhancedClient.builder()
+        DynamoDbEnhancedClient
+            .builder()
             .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
             .build()
     private val table =
-        client.table(PolicyDefinition.TABLE_NAME, TableSchema.fromBean(PolicyDefinition::class.java))
+        client
+            .table(PolicyDefinition.TABLE_NAME, TableSchema.fromBean(PolicyDefinition::class.java))
             .apply { createTable() }
 
     private val policyDefinitionStore =

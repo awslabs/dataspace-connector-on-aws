@@ -20,7 +20,9 @@ class DdbBpnStore(
 
     override fun resolveForBpnGroup(businessPartnerGroup: String): StoreResult<List<String>> {
         val allBpns =
-            table.scan().items()
+            table
+                .scan()
+                .items()
                 .filter { it.groups?.contains(businessPartnerGroup) == true }
                 .map { it.bpn }
         return StoreResult.success(allBpns)
@@ -28,7 +30,9 @@ class DdbBpnStore(
 
     override fun resolveForBpnGroups(): StoreResult<List<String>> {
         val allGroups =
-            table.scan().items()
+            table
+                .scan()
+                .items()
                 .flatMap { it.groups ?: emptyList() }
                 .distinct()
         return StoreResult.success(allGroups)
@@ -37,8 +41,8 @@ class DdbBpnStore(
     override fun save(
         businessPartnerNumber: String,
         groups: List<String>?,
-    ): StoreResult<Void> {
-        return if (getBpnGroup(businessPartnerNumber) == null) {
+    ): StoreResult<Void> =
+        if (getBpnGroup(businessPartnerNumber) == null) {
             val bpnGroup =
                 BpnGroup(
                     bpn = businessPartnerNumber,
@@ -49,7 +53,6 @@ class DdbBpnStore(
         } else {
             StoreResult.alreadyExists(ALREADY_EXISTS_TEMPLATE.format(businessPartnerNumber))
         }
-    }
 
     override fun delete(businessPartnerNumber: String): StoreResult<Void> {
         val bpnGroup = getBpnGroup(businessPartnerNumber) ?: return StoreResult.notFound(NOT_FOUND_TEMPLATE.format(businessPartnerNumber))

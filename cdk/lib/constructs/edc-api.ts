@@ -170,7 +170,7 @@ export class EdcApi extends Construct {
     });
 
     const dspAddress = `${props.loadBalancerAddress}:${props.controlPlanePortMapping.protocol}`;
-    const dspApiPath = "dsp";
+    const dspApiPath = "protocol";
     const dspApiSpec = "./api/dsp-api.yaml";
     const dspApi = new SpecRestApi(this, "DspApi", {
       apiDefinition: getApiDefinitionTransform(

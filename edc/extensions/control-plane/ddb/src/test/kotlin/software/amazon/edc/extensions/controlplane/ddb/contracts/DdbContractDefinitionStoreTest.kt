@@ -14,7 +14,8 @@ import software.amazon.edc.extensions.controlplane.ddb.types.ContractDefinition
 
 class DdbContractDefinitionStoreTest : ContractDefinitionStoreTestBase() {
     private val client =
-        DynamoDbEnhancedClient.builder()
+        DynamoDbEnhancedClient
+            .builder()
             .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
             .build()
     private val contractDefinitionStore =
@@ -22,7 +23,8 @@ class DdbContractDefinitionStoreTest : ContractDefinitionStoreTestBase() {
             criterionOperatorRegistry = CriterionOperatorRegistryImpl.ofDefaults(),
             objectMapper = ObjectMapper(),
             table =
-                client.table(ContractDefinition.TABLE_NAME, TableSchema.fromBean(ContractDefinition::class.java))
+                client
+                    .table(ContractDefinition.TABLE_NAME, TableSchema.fromBean(ContractDefinition::class.java))
                     .apply { createTable() },
         )
 

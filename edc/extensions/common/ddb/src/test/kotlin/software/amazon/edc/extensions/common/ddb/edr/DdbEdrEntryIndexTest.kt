@@ -12,7 +12,8 @@ import software.amazon.edc.extensions.common.ddb.types.EdrEntry
 
 class DdbEdrEntryIndexTest : EndpointDataReferenceEntryIndexTestBase() {
     private val client =
-        DynamoDbEnhancedClient.builder()
+        DynamoDbEnhancedClient
+            .builder()
             .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
             .build()
     private val table =

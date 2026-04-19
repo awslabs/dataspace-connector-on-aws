@@ -18,14 +18,16 @@ import software.amazon.edc.extensions.controlplane.ddb.types.toDdbAsset
 
 class DdbAssetIndexTest : AssetIndexTestBase() {
     private val client =
-        DynamoDbEnhancedClient.builder()
+        DynamoDbEnhancedClient
+            .builder()
             .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
             .build()
     private val table = client.table(Asset.TABLE_NAME, TableSchema.fromBean(Asset::class.java)).apply { createTable() }
     private val assetIndex =
         DdbAssetIndex(
             criterionOperatorRegistry =
-                CriterionOperatorRegistryImpl.ofDefaults()
+                CriterionOperatorRegistryImpl
+                    .ofDefaults()
                     .apply { registerPropertyLookup(AssetPropertyLookup()) },
             table = table,
         )

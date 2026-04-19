@@ -25,14 +25,16 @@ data class EdrEntry(
     var providerId: String = "",
 ) {
     fun toEdcType(): EndpointDataReferenceEntry =
-        EndpointDataReferenceEntry.Builder.newInstance().apply {
-            transferProcessId(transferProcessId)
-            agreementId(agreementId)
-            assetId(assetId)
-            contractNegotiationId(contractNegotiationId)
-            createdAt(createdAt)
-            providerId(providerId)
-        }.build()
+        EndpointDataReferenceEntry.Builder
+            .newInstance()
+            .apply {
+                transferProcessId(transferProcessId)
+                agreementId(agreementId)
+                assetId(assetId)
+                contractNegotiationId(contractNegotiationId)
+                createdAt(createdAt)
+                providerId(providerId)
+            }.build()
 
     companion object {
         const val AGREEMENT_ID = "agreementId"

@@ -26,11 +26,12 @@ class DdbPolicyMonitorStore(
     leaseHolder: String,
     leaseTable: DynamoDbTable<Lease>,
     private val table: DynamoDbTable<PolicyMonitor>,
-) : PolicyMonitorStore, AbstractLeasableEntityDao(
+) : AbstractLeasableEntityDao(
         clock = clock,
         leaseHolder = leaseHolder,
         leaseTable = leaseTable,
-    ) {
+    ),
+    PolicyMonitorStore {
     override fun findById(id: String): PolicyMonitorEntry? = getPolicyMonitor(id)?.toEdcPolicyMonitor()
 
     override fun nextNotLeased(
@@ -38,21 +39,23 @@ class DdbPolicyMonitorStore(
         vararg criteria: Criterion,
     ): MutableList<PolicyMonitorEntry> {
         val querySpec =
-            QuerySpec.Builder.newInstance()
+            QuerySpec.Builder
+                .newInstance()
                 .filter(criteria.toList())
                 .sortField(PolicyMonitor.STATE_TIMESTAMP)
                 .sortOrder(SortOrder.ASC)
                 .limit(max)
                 .build()
-        return table.scan(querySpec.toScanRequest()).items()
+        return table
+            .scan(querySpec.toScanRequest())
+            .items()
             .asSequence()
             .filterNot { hasLease(it.id) }
             .sortedWith(querySpec.getGenericPropertyComparator())
             .map {
                 acquireLease(it)
                 it.toEdcPolicyMonitor()
-            }
-            .applyOffsetAndLimit(querySpec)
+            }.applyOffsetAndLimit(querySpec)
             .toMutableList()
     }
 

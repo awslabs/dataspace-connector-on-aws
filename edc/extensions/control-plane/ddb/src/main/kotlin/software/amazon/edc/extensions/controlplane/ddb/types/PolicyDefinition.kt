@@ -52,24 +52,28 @@ data class PolicyDefinition(
     var target: String? = null,
 ) {
     fun toEdcPolicyDefinition(objectMapper: ObjectMapper): EdcPolicyDefinition =
-        EdcPolicyDefinition.Builder.newInstance().apply {
-            id(id)
-            createdAt(createdAt)
-            policy(
-                Policy.Builder.newInstance().apply {
-                    assignee(assignee)
-                    assigner(assigner)
-                    duties(duties?.map { objectMapper.convertValue(it, Duty::class.java) })
-                    extensibleProperties(extensibleProperties)
-                    inheritsFrom(inheritsFrom)
-                    permissions(permissions?.map { objectMapper.convertValue(it, Permission::class.java) })
-                    type(PolicyType.valueOf(policyType))
-                    prohibitions(prohibitions?.map { objectMapper.convertValue(it, Prohibition::class.java) })
-                    target(target)
-                }.build(),
-            )
-            privateProperties(privateProperties)
-        }.build()
+        EdcPolicyDefinition.Builder
+            .newInstance()
+            .apply {
+                id(id)
+                createdAt(createdAt)
+                policy(
+                    Policy.Builder
+                        .newInstance()
+                        .apply {
+                            assignee(assignee)
+                            assigner(assigner)
+                            duties(duties?.map { objectMapper.convertValue(it, Duty::class.java) })
+                            extensibleProperties(extensibleProperties)
+                            inheritsFrom(inheritsFrom)
+                            permissions(permissions?.map { objectMapper.convertValue(it, Permission::class.java) })
+                            type(PolicyType.valueOf(policyType))
+                            prohibitions(prohibitions?.map { objectMapper.convertValue(it, Prohibition::class.java) })
+                            target(target)
+                        }.build(),
+                )
+                privateProperties(privateProperties)
+            }.build()
 
     companion object {
         const val ASSIGNEE = "assignee"

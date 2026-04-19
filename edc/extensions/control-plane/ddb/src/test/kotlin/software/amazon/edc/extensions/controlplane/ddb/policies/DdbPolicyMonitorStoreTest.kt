@@ -15,11 +15,13 @@ import java.time.Duration
 
 class DdbPolicyMonitorStoreTest : PolicyMonitorStoreTestBase() {
     private val client =
-        DynamoDbEnhancedClient.builder()
+        DynamoDbEnhancedClient
+            .builder()
             .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
             .build()
     private val leaseTable =
-        client.table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
+        client
+            .table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
             .apply { createTable() }
     private val policyMonitorTable =
         client.table(PolicyMonitor.TABLE_NAME, TableSchema.fromBean(PolicyMonitor::class.java)).apply { createTable() }

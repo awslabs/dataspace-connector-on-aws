@@ -84,7 +84,7 @@ export class EdcDataPlane extends Construct {
           EDC_SECRETS_MANAGER_ALIASES.OAUTH_CLIENT_SECRET,
         "edc.runtime.id": id,
         "edc.vault.aws.region": Stack.of(this).region,
-        "tx.edc.dataplane.token.refresh.endpoint": props.apiPublicUrl,
+        "tx.edc.dataplane.token.refresh.endpoint": `${props.apiPublicUrl}token`,
 
         // This declares the aliases to use in AWS Secrets Manager for consumer pull scenarios
         "edc.transfer.proxy.token.signer.privatekey.alias":

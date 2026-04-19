@@ -55,25 +55,41 @@ data class DataFlow(
     var updatedAt: Long = 0L,
 ) : Leasable {
     fun toEdcDataFlow(): EdcDataFlow =
-        EdcDataFlow.Builder.newInstance().apply {
-            id(id)
-            callbackAddress(callbackAddress?.let { URI.create(it) })
-            createdAt(createdAt)
-            destination(destination?.let { DataAddress.Builder.newInstance().properties(it).build() })
-            errorDetail(errorDetail)
-            transferType(
-                transferTypeFlow?.let {
-                    TransferType(transferTypeDestination ?: "", FlowType.valueOf(it), transferTypeResponseChannel)
-                },
-            )
-            properties(properties)
-            source(source?.let { DataAddress.Builder.newInstance().properties(it).build() })
-            state?.let { state(it) }
-            stateCount(stateCount)
-            stateTimestamp(stateTimestamp)
-            traceContext(traceContext)
-            updatedAt(updatedAt)
-        }.build()
+        EdcDataFlow.Builder
+            .newInstance()
+            .apply {
+                id(id)
+                callbackAddress(callbackAddress?.let { URI.create(it) })
+                createdAt(createdAt)
+                destination(
+                    destination?.let {
+                        DataAddress.Builder
+                            .newInstance()
+                            .properties(it)
+                            .build()
+                    },
+                )
+                errorDetail(errorDetail)
+                transferType(
+                    transferTypeFlow?.let {
+                        TransferType(transferTypeDestination ?: "", FlowType.valueOf(it), transferTypeResponseChannel)
+                    },
+                )
+                properties(properties)
+                source(
+                    source?.let {
+                        DataAddress.Builder
+                            .newInstance()
+                            .properties(it)
+                            .build()
+                    },
+                )
+                state?.let { state(it) }
+                stateCount(stateCount)
+                stateTimestamp(stateTimestamp)
+                traceContext(traceContext)
+                updatedAt(updatedAt)
+            }.build()
 
     companion object {
         const val CALLBACK_ADDRESS = "callbackAddress"

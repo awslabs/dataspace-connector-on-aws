@@ -15,11 +15,13 @@ class MapStringAnyConverterTest {
     fun unsupportedTypes() {
         assertThrows<IllegalArgumentException> { converter.transformFrom(mapOf("key" to Pair("first", "second"))) }
         assertThrows<IllegalArgumentException> {
-            converter.transformTo(
-                AttributeValue.builder()
-                    .m(mapOf("data" to AttributeValue.fromB(SdkBytes.fromUtf8String("some binary data"))))
-                    .build(),
-            ).also { println("Result: $it") }
+            converter
+                .transformTo(
+                    AttributeValue
+                        .builder()
+                        .m(mapOf("data" to AttributeValue.fromB(SdkBytes.fromUtf8String("some binary data"))))
+                        .build(),
+                ).also { println("Result: $it") }
         }
     }
 }
