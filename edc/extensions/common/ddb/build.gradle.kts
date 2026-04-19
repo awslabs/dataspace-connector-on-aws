@@ -7,8 +7,8 @@ import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
 plugins {
     `java-library`
-    id("org.jetbrains.kotlin.jvm") version "2.0.+"
-    id("org.jlleitschuh.gradle.ktlint") version "12.1.+"
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.ktlint)
 }
 
 repositories {

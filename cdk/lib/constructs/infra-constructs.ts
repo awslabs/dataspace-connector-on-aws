@@ -95,24 +95,24 @@ export class InfraConstructs extends Construct {
     const nlb = new EdcNlb(scope, "EdcNlb", {
       controlPlaneHealthCheck: {
         healthyThresholdCount: 3,
-        interval: Duration.seconds(5),
+        interval: Duration.seconds(10),
         path: "/api/check/health",
         port: `${props.controlPlanePortMapping.default}`,
         protocol: Protocol.HTTP,
-        timeout: Duration.seconds(2),
-        unhealthyThresholdCount: 2,
+        timeout: Duration.seconds(5),
+        unhealthyThresholdCount: 5,
       },
       controlPlanePorts: new Set<number>(
         Object.values(props.controlPlanePortMapping),
       ),
       dataPlaneHealthCheck: {
         healthyThresholdCount: 3,
-        interval: Duration.seconds(5),
+        interval: Duration.seconds(10),
         path: "/api/check/health",
         port: `${props.dataPlanePortMapping.default}`,
         protocol: Protocol.HTTP,
-        timeout: Duration.seconds(2),
-        unhealthyThresholdCount: 2,
+        timeout: Duration.seconds(5),
+        unhealthyThresholdCount: 5,
       },
       dataPlanePorts: new Set<number>(
         Object.values(props.dataPlanePortMapping),

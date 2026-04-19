@@ -4,7 +4,7 @@
 plugins {
     `java-library`
     application
-    id("com.github.johnrengelman.shadow") version "8.1.1"
+    alias(libs.plugins.shadow)
 }
 
 dependencies {
@@ -23,8 +23,15 @@ application {
     mainClass.set("org.eclipse.edc.boot.system.runtime.BaseRuntime")
 }
 
-tasks.shadowJar {
-    mergeServiceFiles()
-    archiveFileName.set("control-plane.jar")
-    isZip64 = true
+tasks {
+    shadowJar {
+        mergeServiceFiles()
+        archiveFileName.set("control-plane.jar")
+        isZip64 = true
+    }
+
+    distTar { dependsOn(shadowJar) }
+    distZip { dependsOn(shadowJar) }
+    startScripts { dependsOn(shadowJar) }
+    named("startShadowScripts") { dependsOn(jar) }
 }
