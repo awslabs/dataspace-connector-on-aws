@@ -31,11 +31,12 @@ class DdbTransferProcessStore(
     private val criterionOperatorRegistry: CriterionOperatorRegistry,
     private val objectMapper: ObjectMapper,
     private val table: DynamoDbTable<TransferProcess>,
-) : TransferProcessStore, AbstractLeasableEntityDao(
+) : AbstractLeasableEntityDao(
         clock = clock,
         leaseHolder = leaseHolder,
         leaseTable = leaseTable,
-    ) {
+    ),
+    TransferProcessStore {
     private val correlationIdIndex = table.index(TransferProcess.INDEX_CORRELATION_ID)
     private val queryResolver = ReflectionBasedQueryResolver(EdcTransferProcess::class.java, criterionOperatorRegistry)
 
@@ -46,7 +47,9 @@ class DdbTransferProcessStore(
         vararg criteria: Criterion,
     ): MutableList<EdcTransferProcess> {
         val predicate = criteria.toList().toPredicate<Any>(criterionOperatorRegistry)
-        return table.scan().items()
+        return table
+            .scan()
+            .items()
             .asSequence()
             .filterNot { hasLease(it.id) }
             .map { it.toEdcTransferProcess(objectMapper) }
@@ -98,20 +101,15 @@ class DdbTransferProcessStore(
 
     override fun findAll(querySpec: QuerySpec): Stream<EdcTransferProcess> =
         queryResolver.query(
-            table.scan().items()
+            table
+                .scan()
+                .items()
                 .asSequence()
                 .sortedBy { it.id } // Tests assume a specific order
-                .map { it.toEdcTransferProcess(objectMapper) }.asStream(),
+                .map { it.toEdcTransferProcess(objectMapper) }
+                .asStream(),
             querySpec,
         )
-
-    @Deprecated("Deprecated in TransferProcessStore")
-    override fun findByCorrelationIdAndLease(correlationId: String): StoreResult<EdcTransferProcess> {
-        val transferProcess =
-            getTransferProcessByCorrelationId(correlationId)
-                ?: return StoreResult.notFound("TransferProcess with correlationId: $correlationId not found!")
-        return findByIdAndLease(transferProcess.id)
-    }
 
     override fun getLeasableById(id: String): Leasable? = getTransferProcess(id)
 
@@ -122,5 +120,9 @@ class DdbTransferProcessStore(
     private fun getTransferProcess(id: String): TransferProcess? = table.getItem(keyFromId(id))
 
     private fun getTransferProcessByCorrelationId(correlationId: String): TransferProcess? =
-        correlationIdIndex.query(queryRequestFromId(correlationId)).toList().flatMap { it.items() }.firstOrNull()
+        correlationIdIndex
+            .query(queryRequestFromId(correlationId))
+            .toList()
+            .flatMap { it.items() }
+            .firstOrNull()
 }

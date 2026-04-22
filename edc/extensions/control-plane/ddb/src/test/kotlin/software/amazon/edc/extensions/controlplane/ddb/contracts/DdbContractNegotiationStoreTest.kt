@@ -17,21 +17,25 @@ import java.time.Duration
 
 class DdbContractNegotiationStoreTest : ContractNegotiationStoreTestBase() {
     private val client =
-        DynamoDbEnhancedClient.builder()
+        DynamoDbEnhancedClient
+            .builder()
             .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
             .build()
     private val contractAgreementTable =
-        client.table(
-            ContractAgreement.TABLE_NAME,
-            TableSchema.fromBean(ContractAgreement::class.java),
-        ).apply { createTable() }
+        client
+            .table(
+                ContractAgreement.TABLE_NAME,
+                TableSchema.fromBean(ContractAgreement::class.java),
+            ).apply { createTable() }
     private val contractNegotiationTable =
-        client.table(
-            ContractNegotiation.TABLE_NAME,
-            TableSchema.fromBean(ContractNegotiation::class.java),
-        ).apply { createTable() }
+        client
+            .table(
+                ContractNegotiation.TABLE_NAME,
+                TableSchema.fromBean(ContractNegotiation::class.java),
+            ).apply { createTable() }
     private val leaseTable =
-        client.table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
+        client
+            .table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
             .apply { createTable() }
 
     private val contractNegotiationStore =

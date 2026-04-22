@@ -26,7 +26,7 @@ aws logs describe-log-groups --region <region> --output json \
     --query 'logGroups[?contains(logGroupName, `ControlPlaneLogGroup`) || contains(logGroupName, `DataPlaneLogGroup`)].logGroupName'
 ```
 
-Store both log group names — they are needed for diagnosing any issues in Phase 7.
+Store both log group names — they are needed for diagnosing any issues in Phase 8.
 
 ---
 
@@ -52,28 +52,63 @@ Otherwise, proceed to the relevant phase based on their answer.
 
 Walk the user through creating a complete data offering. Ask for details or use sensible defaults.
 
-### Step 3.1: Define a Policy
+### Step 3.1: Define Policies
 
-Ask the user:
+Tractus-X EDC requires separate access and usage policies with Catena-X-compliant constraints. Ask the user:
 > "What access policy should govern your data? Common options:
-> - **Open access** — Anyone can use the data (good for testing)
+> - **Open access** — Any Catena-X member can see and use the data (good for testing)
 > - **BPN-restricted** — Only specific business partners can access it
 >
 > For validation, open access is simplest. Want to go with that?"
 
-For open access:
+For open access, create two policies — one for access (who can see the offer) and one for usage (who can negotiate a contract):
+
+**Access policy** (controls catalog visibility):
 ```python
 create_policy_definition(
-    policy_id="<user-chosen-id-or-default>",
+    policy_id="<user-chosen-id-or-default>-access",
     policy={
-        "@context": "http://www.w3.org/ns/odrl.jsonld",
         "@type": "Set",
-        "permission": [{"action": "use"}]
+        "permission": [{
+            "action": "access",
+            "constraint": {
+                "leftOperand": "Membership",
+                "operator": "eq",
+                "rightOperand": "active"
+            }
+        }]
     }
 )
 ```
 
-For BPN-restricted access, ask for the allowed BPNLs and construct an appropriate ODRL constraint.
+**Usage/contract policy** (controls negotiation — requires FrameworkAgreement + UsagePurpose):
+```python
+create_policy_definition(
+    policy_id="<user-chosen-id-or-default>-usage",
+    policy={
+        "@type": "Set",
+        "permission": [{
+            "action": "use",
+            "constraint": [{
+                "and": [
+                    {
+                        "leftOperand": "FrameworkAgreement",
+                        "operator": "eq",
+                        "rightOperand": "DataExchangeGovernance:1.0"
+                    },
+                    {
+                        "leftOperand": "UsagePurpose",
+                        "operator": "isAnyOf",
+                        "rightOperand": "cx.core.industrycore:1"
+                    }
+                ]
+            }]
+        }]
+    }
+)
+```
+
+For BPN-restricted access, replace the access policy's `Membership` constraint with a `BusinessPartnerNumber` constraint targeting the allowed BPNL.
 
 ### Step 3.2: Create an Asset
 
@@ -97,7 +132,7 @@ create_asset(
         "type": "AmazonS3",
         "region": "<aws-region>",
         "bucketName": "<bucket-name>",
-        "keyName": "<object-key>"
+        "objectName": "<object-key>"
     }
 )
 ```
@@ -128,13 +163,13 @@ create_asset(
 
 ### Step 3.3: Create a Contract Definition
 
-Link the asset to the policy:
+Link the asset to both policies:
 
 ```python
 create_contract_definition(
     contract_definition_id="<user-chosen-id>",
-    access_policy_id="<policy-id-from-step-3.1>",
-    contract_policy_id="<policy-id-from-step-3.1>",
+    access_policy_id="<access-policy-id-from-step-3.1>",
+    contract_policy_id="<usage-policy-id-from-step-3.1>",
     assets_selector=[{
         "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id",
         "operator": "=",
@@ -153,7 +188,7 @@ After creation, confirm:
 ### Step 4.1: Browse the Catalog
 
 Ask the user:
-> "What's the DSP endpoint of the provider connector you want to browse? (e.g., `https://<api-id>.execute-api.<region>.amazonaws.com/dsp`)
+> "What's the DSP endpoint of the provider connector you want to browse? (e.g., `https://<api-id>.execute-api.<region>.amazonaws.com/protocol`)
 > And what's their participant ID (BPNL)?"
 
 ```python
@@ -167,6 +202,8 @@ Help the user interpret the catalog response:
 - Each `dcat:dataset` entry is an available asset
 - The `odrl:hasPolicy` contains the offer details needed for negotiation
 - Point out the offer ID (`@id` of the policy), asset ID, and the permission/prohibition/obligation arrays
+
+NOTE: For a simpler flow, `initiate_edr_negotiation` can replace the separate negotiation + transfer steps (Steps 4.2–4.5) with a single call. However, the step-by-step flow below gives more control and visibility.
 
 ### Step 4.2: Negotiate a Contract
 
@@ -190,26 +227,16 @@ IMPORTANT: The `permission`, `prohibition`, and `obligation` must be passed thro
 
 Poll the negotiation state:
 ```python
-get_negotiation_state(negotiation_id="<negotiation-id>")
+get_contract_negotiation(negotiation_id="<negotiation-id>")
 ```
 
 Expected state progression: `REQUESTED` → `AGREED` → `VERIFIED` → `FINALIZED`
 
-If the state is `TERMINATED`, check the error. Common causes:
+If the state is `TERMINATED`, check the `errorDetail` field in the response. Common causes:
 - Policy mismatch (didn't pass full policy from catalog)
 - Provider-side policy evaluation failure (BPN not allowed)
 
-Once `FINALIZED`, retrieve the full negotiation details to get the `contractAgreementId`. The `get_negotiation_state` call only returns the state — you need to query the negotiation to get the agreement ID:
-
-```python
-query_contract_negotiations(filter_expression=[{
-    "operandLeft": "id",
-    "operator": "=",
-    "operandRight": "<negotiation-id>"
-}])
-```
-
-Extract the `contractAgreementId` field from the response.
+Once `FINALIZED`, extract the `contractAgreementId` directly from the `get_contract_negotiation` response — it returns the full negotiation object.
 
 ### Step 4.4: Retrieve the Agreement
 
@@ -233,7 +260,7 @@ For `HttpData-PULL`, the MCP server automatically sets the data destination to `
 
 Poll until the transfer reaches `STARTED`:
 ```python
-get_transfer_state(transfer_process_id="<transfer-id>")
+get_transfer_process(transfer_process_id="<transfer-id>")
 ```
 
 If the transfer state is `TERMINATED` instead of progressing to `STARTED`, do NOT retry blindly. Follow the troubleshooting procedure in Phase 8 to diagnose the root cause.
@@ -274,11 +301,12 @@ aws cloudformation describe-stacks --stack-name DataspaceConnectorStack --region
     --query 'Stacks[0].Outputs' --output json
 ```
 
-Extract:
-- `EdcDataPlaneBucketName` → S3 bucket name
-- `EdcApiDspApiEndpoint` → DSP endpoint URL
+Extract (the output keys have CDK-generated hash suffixes — match by prefix):
+- Key starting with `EdcDataPlaneBucketName` → S3 bucket name
+- Key starting with `EdcApiDspApiEndpoint` → DSP endpoint URL
+- Key starting with `EdcApiManagementApiEndpoint` → Management API URL (for reference)
 
-Read the `PARTICIPANT_ID` from `cdk/lib/config/environments.ts` (the `edc.participant.id` field in the `edcIam` object) for the BPNL.
+Read the `PARTICIPANT_BPN` from `cdk/lib/config/environments.ts` (the `tractusx.edc.participant.bpn` field in the `edcIam` object) for the connector's BPNL. Use this as the `counter_party_id` for catalog requests and as the `assigner` for contract negotiations.
 
 If the user already has these values from a prior deployment, use them directly.
 
@@ -301,16 +329,49 @@ aws s3 ls "s3://<bucket-name>/test/sample-data.json" --region <region> --profile
 
 ### Step 5.3: Create the S3 Test Offering
 
-Create a policy, asset, and contract definition for the test data:
+Create an access policy, usage policy, asset, and contract definition for the test data:
 
-**Policy:**
+**Access policy** (Membership check):
 ```python
 create_policy_definition(
-    policy_id="test-s3-policy",
+    policy_id="test-s3-access-policy",
     policy={
-        "@context": "http://www.w3.org/ns/odrl.jsonld",
         "@type": "Set",
-        "permission": [{"action": "use"}]
+        "permission": [{
+            "action": "access",
+            "constraint": {
+                "leftOperand": "Membership",
+                "operator": "eq",
+                "rightOperand": "active"
+            }
+        }]
+    }
+)
+```
+
+**Usage policy** (FrameworkAgreement + UsagePurpose):
+```python
+create_policy_definition(
+    policy_id="test-s3-usage-policy",
+    policy={
+        "@type": "Set",
+        "permission": [{
+            "action": "use",
+            "constraint": [{
+                "and": [
+                    {
+                        "leftOperand": "FrameworkAgreement",
+                        "operator": "eq",
+                        "rightOperand": "DataExchangeGovernance:1.0"
+                    },
+                    {
+                        "leftOperand": "UsagePurpose",
+                        "operator": "isAnyOf",
+                        "rightOperand": "cx.core.industrycore:1"
+                    }
+                ]
+            }]
+        }]
     }
 )
 ```
@@ -328,17 +389,17 @@ create_asset(
         "type": "AmazonS3",
         "region": "<region>",
         "bucketName": "<bucket-name>",
-        "keyName": "test/sample-data.json"
+        "objectName": "test/sample-data.json"
     }
 )
 ```
 
-**Contract definition:**
+**Contract definition** (links asset to both policies):
 ```python
 create_contract_definition(
     contract_definition_id="test-s3-contract-def",
-    access_policy_id="test-s3-policy",
-    contract_policy_id="test-s3-policy",
+    access_policy_id="test-s3-access-policy",
+    contract_policy_id="test-s3-usage-policy",
     assets_selector=[{
         "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id",
         "operator": "=",
@@ -356,7 +417,7 @@ request_catalog(
 )
 ```
 
-Locate the `test-s3-asset` entry in the catalog response and extract the offer details.
+Locate the `test-s3-asset` entry in the catalog response and extract the offer details. Note that the `dspace:participantId` in the catalog response is the BPNL, and the `assigner` in the offer also uses the BPNL — use this value for `counter_party_id` and `assigner` in subsequent steps.
 
 ### Step 5.5: Complete the Consumer Flow
 
@@ -429,17 +490,13 @@ When any EDC operation reaches an unexpected state (e.g., transfer `TERMINATED` 
 
 ### Step 8.1: Query the Failed Process for Error Details
 
-For a failed transfer, query the provider-side transfer process. The consumer transfer has a `correlationId` that maps to the provider's transfer process ID:
+For a failed transfer, first get the full transfer process object which includes `errorDetail` and `correlationId`:
 
 ```python
-query_transfer_processes(filter_expression=[{
-    "operandLeft": "id",
-    "operator": "=",
-    "operandRight": "<consumer-transfer-id>"
-}])
+get_transfer_process(transfer_process_id="<consumer-transfer-id>")
 ```
 
-Extract the `correlationId`, then query the provider side:
+Extract the `correlationId` from the response, then query the provider-side transfer process:
 
 ```python
 query_transfer_processes(filter_expression=[{
@@ -451,14 +508,12 @@ query_transfer_processes(filter_expression=[{
 
 The provider-side response contains the `errorDetail` field with the actual error message. The consumer side typically does not include error details.
 
-For a failed negotiation, query similarly:
+For a failed negotiation, get the full negotiation object directly:
 ```python
-query_contract_negotiations(filter_expression=[{
-    "operandLeft": "id",
-    "operator": "=",
-    "operandRight": "<negotiation-id>"
-}])
+get_contract_negotiation(negotiation_id="<negotiation-id>")
 ```
+
+The response includes the `errorDetail` field when the negotiation is `TERMINATED`.
 
 ### Step 8.2: Discover CloudWatch Log Groups
 

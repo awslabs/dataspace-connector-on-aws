@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server for interacting with the Eclipse Dataspace
 
 ## Features
 
-This MCP server provides 14 tools covering the full EDC Management API workflow:
+This MCP server provides 15 tools covering the full EDC Management API workflow:
 
 ### Provider-side tools
 - **create_asset** - Create a new asset with data address
@@ -14,11 +14,12 @@ This MCP server provides 14 tools covering the full EDC Management API workflow:
 ### Consumer-side tools
 - **request_catalog** - Request the catalog from another EDC connector to discover available datasets
 - **initiate_contract_negotiation** - Start a contract negotiation with a provider (passes full policy from catalog)
-- **get_negotiation_state** - Poll the state of a contract negotiation
+- **get_contract_negotiation** - Get the full contract negotiation object including state and agreement ID
 - **get_contract_agreement** - Retrieve a finalized contract agreement
 - **initiate_transfer** - Start a data transfer using a contract agreement
-- **get_transfer_state** - Poll the state of a transfer process
+- **get_transfer_process** - Get the full transfer process object including state and error details
 - **get_edr_data_address** - Get the endpoint data reference (EDR) for an active transfer
+- **initiate_edr_negotiation** - Combined negotiation + transfer in one call (shortcut for the full consumer flow)
 
 ### Query tools
 - **query_assets** - List/search assets with filtering and pagination
@@ -126,7 +127,7 @@ Add to your `.kiro/settings/mcp.json`:
 ```python
 # 1. Discover available datasets from a provider
 catalog = request_catalog(
-    counter_party_address="https://provider.example.com/dsp",
+    counter_party_address="https://provider.example.com/protocol",
     counter_party_id="BPNL000000000001"
 )
 
@@ -134,7 +135,7 @@ catalog = request_catalog(
 # The permission/prohibition/obligation must be passed through exactly from the catalog offer
 offer = catalog["dcat:dataset"][0]["odrl:hasPolicy"]
 negotiation = initiate_contract_negotiation(
-    counter_party_address="https://provider.example.com/dsp",
+    counter_party_address="https://provider.example.com/protocol",
     offer_id=offer["@id"],
     asset_id="dataset-id",
     assigner="BPNL000000000001",
@@ -144,20 +145,20 @@ negotiation = initiate_contract_negotiation(
 )
 
 # 3. Poll until negotiation is finalized
-state = get_negotiation_state(negotiation_id=negotiation["@id"])
+state = get_contract_negotiation(negotiation_id=negotiation["@id"])
 
 # 4. Retrieve the contract agreement (get agreement ID from negotiation query)
 agreement = get_contract_agreement(agreement_id="<agreement-id>")
 
 # 5. Initiate a data transfer
 transfer = initiate_transfer(
-    counter_party_address="https://provider.example.com/dsp",
+    counter_party_address="https://provider.example.com/protocol",
     contract_id=agreement["@id"],
     transfer_type="HttpData-PULL"
 )
 
 # 6. Poll until transfer is started
-state = get_transfer_state(transfer_process_id=transfer["@id"])
+state = get_transfer_process(transfer_process_id=transfer["@id"])
 
 # 7. Get the endpoint data reference with access token
 edr = get_edr_data_address(transfer_process_id=transfer["@id"])
@@ -166,17 +167,40 @@ edr = get_edr_data_address(transfer_process_id=transfer["@id"])
 ### Create a data offering (provider side)
 
 ```python
-# 1. Create a policy
+# 1. Create an access policy (controls catalog visibility)
 create_policy_definition(
-    policy_id="allow-all",
+    policy_id="my-access-policy",
     policy={
-        "@context": "http://www.w3.org/ns/odrl.jsonld",
         "@type": "Set",
-        "permission": [{"action": "use"}]
+        "permission": [{
+            "action": "access",
+            "constraint": {
+                "leftOperand": "Membership",
+                "operator": "eq",
+                "rightOperand": "active"
+            }
+        }]
     }
 )
 
-# 2. Create an asset
+# 2. Create a usage policy (controls contract negotiation)
+create_policy_definition(
+    policy_id="my-usage-policy",
+    policy={
+        "@type": "Set",
+        "permission": [{
+            "action": "use",
+            "constraint": [{
+                "and": [
+                    {"leftOperand": "FrameworkAgreement", "operator": "eq", "rightOperand": "DataExchangeGovernance:1.0"},
+                    {"leftOperand": "UsagePurpose", "operator": "isAnyOf", "rightOperand": "cx.core.industrycore:1"}
+                ]
+            }]
+        }]
+    }
+)
+
+# 3. Create an asset
 create_asset(
     asset_id="my-dataset",
     properties={
@@ -190,11 +214,11 @@ create_asset(
     }
 )
 
-# 3. Create contract definition linking asset to policy
+# 4. Create contract definition linking asset to both policies
 create_contract_definition(
     contract_definition_id="my-contract-def",
-    access_policy_id="allow-all",
-    contract_policy_id="allow-all",
+    access_policy_id="my-access-policy",
+    contract_policy_id="my-usage-policy",
     assets_selector=[{
         "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id",
         "operator": "=",

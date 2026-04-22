@@ -10,7 +10,7 @@ author: "AWS"
 
 ## Overview
 
-This power helps you deploy and operate a production-ready Dataspace Connector for Catena-X on AWS. It combines an AWS CDK deployment blueprint with 14 MCP tools for interacting with the Eclipse Dataspace Components (EDC) Management API.
+This power helps you deploy and operate a production-ready Dataspace Connector for Catena-X on AWS. It combines an AWS CDK deployment blueprint with 15 MCP tools for interacting with the Eclipse Dataspace Components (EDC) Management API.
 
 The connector uses Tractus-X EDC with AWS-native integrations: Amazon DynamoDB for control plane persistence, AWS Secrets Manager for credentials, Amazon S3 for data transfer, and Amazon API Gateway with IAM authorization for secure API access.
 
@@ -23,7 +23,7 @@ With this power, you can go from zero to a fully deployed connector with validat
 
 ## Available MCP Tools
 
-This power provides 14 tools covering the full EDC Management API workflow:
+This power provides 15 tools covering the full EDC Management API workflow:
 
 ### Provider-side tools (create data offerings)
 - `create_asset` — Create a new asset with data address
@@ -33,11 +33,12 @@ This power provides 14 tools covering the full EDC Management API workflow:
 ### Consumer-side tools (discover and consume data)
 - `request_catalog` — Request the catalog from another connector to discover available datasets
 - `initiate_contract_negotiation` — Start a contract negotiation (passes full policy from catalog)
-- `get_negotiation_state` — Poll the state of a contract negotiation
+- `get_contract_negotiation` — Get the full contract negotiation object including state, contractAgreementId, and errorDetail
 - `get_contract_agreement` — Retrieve a finalized contract agreement
 - `initiate_transfer` — Start a data transfer using a contract agreement
-- `get_transfer_state` — Poll the state of a transfer process
+- `get_transfer_process` — Get the full transfer process object including state, correlationId, and errorDetail
 - `get_edr_data_address` — Get the endpoint data reference (EDR) for an active transfer
+- `initiate_edr_negotiation` — Combined negotiation + transfer in one call (shortcut for the full consumer flow)
 
 ### Query tools
 - `query_assets` — List/search assets with filtering and pagination
@@ -86,7 +87,7 @@ Once deployed, activate the **validate-data-exchange** steering file to validate
 ### Discover datasets from another connector
 ```python
 request_catalog(
-    counter_party_address="https://provider.example.com/dsp",
+    counter_party_address="https://provider.example.com/protocol",
     counter_party_id="BPNL000000000001"
 )
 ```
@@ -95,7 +96,7 @@ request_catalog(
 ```python
 # 1. Negotiate a contract (pass full policy from catalog offer)
 initiate_contract_negotiation(
-    counter_party_address="https://provider.example.com/dsp",
+    counter_party_address="https://provider.example.com/protocol",
     offer_id="<offer-id-from-catalog>",
     asset_id="<asset-id>",
     assigner="BPNL000000000001",
@@ -104,15 +105,15 @@ initiate_contract_negotiation(
     obligation=[]
 )
 
-# 2. Poll until FINALIZED
-get_negotiation_state(negotiation_id="<negotiation-id>")
+# 2. Poll until FINALIZED — returns full object with contractAgreementId
+get_contract_negotiation(negotiation_id="<negotiation-id>")
 
-# 3. Retrieve agreement
+# 3. Extract contractAgreementId from the response above, then retrieve agreement
 get_contract_agreement(agreement_id="<agreement-id>")
 
 # 4. Start transfer
 initiate_transfer(
-    counter_party_address="https://provider.example.com/dsp",
+    counter_party_address="https://provider.example.com/protocol",
     contract_id="<agreement-id>",
     transfer_type="HttpData-PULL"
 )
@@ -121,30 +122,80 @@ initiate_transfer(
 get_edr_data_address(transfer_process_id="<transfer-id>")
 ```
 
+### Alternative: Combined negotiation + transfer (shortcut)
+```python
+# Single call that handles negotiation and transfer automatically
+initiate_edr_negotiation(
+    counter_party_address="https://provider.example.com/protocol",
+    offer_id="<offer-id-from-catalog>",
+    asset_id="<asset-id>",
+    assigner="BPNL000000000001",
+    permission=[{"odrl:action": {"@id": "odrl:use"}}],
+    prohibition=[],
+    obligation=[]
+)
+
+# Poll negotiation until FINALIZED to get the contractAgreementId
+negotiation = get_contract_negotiation(negotiation_id="<negotiation-id>")
+
+# Find the transfer process created by the EDR negotiation
+transfers = query_transfer_processes(filter_expression=[{
+    "operandLeft": "contractId",
+    "operator": "=",
+    "operandRight": "<contractAgreementId-from-negotiation>"
+}])
+
+# Once the transfer reaches STARTED, get the EDR
+get_edr_data_address(transfer_process_id="<transfer-id-from-query>")
+```
+
 ### Create a data offering (provider side)
 ```python
-# 1. Policy
+# 1. Access policy (controls catalog visibility)
 create_policy_definition(
-    policy_id="allow-all",
+    policy_id="my-access-policy",
     policy={
-        "@context": "http://www.w3.org/ns/odrl.jsonld",
         "@type": "Set",
-        "permission": [{"action": "use"}]
+        "permission": [{
+            "action": "access",
+            "constraint": {
+                "leftOperand": "Membership",
+                "operator": "eq",
+                "rightOperand": "active"
+            }
+        }]
     }
 )
 
-# 2. Asset
+# 2. Usage policy (controls contract negotiation — requires FrameworkAgreement + UsagePurpose)
+create_policy_definition(
+    policy_id="my-usage-policy",
+    policy={
+        "@type": "Set",
+        "permission": [{
+            "action": "use",
+            "constraint": [{
+                "and": [
+                    {"leftOperand": "FrameworkAgreement", "operator": "eq", "rightOperand": "DataExchangeGovernance:1.0"},
+                    {"leftOperand": "UsagePurpose", "operator": "isAnyOf", "rightOperand": "cx.core.industrycore:1"}
+                ]
+            }]
+        }]
+    }
+)
+
+# 3. Asset
 create_asset(
     asset_id="my-dataset",
     properties={"name": "Sample Dataset", "contentType": "application/json"},
     data_address={"type": "HttpData", "baseUrl": "https://example.com/api/data"}
 )
 
-# 3. Contract definition
+# 4. Contract definition (links asset to both policies)
 create_contract_definition(
     contract_definition_id="my-contract-def",
-    access_policy_id="allow-all",
-    contract_policy_id="allow-all",
+    access_policy_id="my-access-policy",
+    contract_policy_id="my-usage-policy",
     assets_selector=[{
         "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id",
         "operator": "=",
@@ -181,7 +232,8 @@ The MCP server refreshes AWS credentials on every request, so temporary credenti
 | `IATP_ID` | Your organization's DID |
 | `OAUTH_CLIENT_ID` | Technical user OAuth client ID |
 | `OAUTH_TOKEN_URL` | OAuth token endpoint URL |
-| `PARTICIPANT_ID` | Your BPNL number |
+| `PARTICIPANT_ID` | Your organization's DID (same as `IATP_ID`) |
+| `PARTICIPANT_BPN` | Your BPNL number |
 | `TRUSTED_ISSUER_ID` | Trusted issuer DID (Cofinity-X) |
 
 ### environments.ts — AWS Resource Settings

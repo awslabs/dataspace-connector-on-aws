@@ -69,26 +69,28 @@ data class ContractNegotiation(
         objectMapper: ObjectMapper,
         contractAgreement: ContractAgreement? = null,
     ): EdcContractNegotiation =
-        EdcContractNegotiation.Builder.newInstance().apply {
-            id(id)
-            createdAt(createdAt)
-            contractAgreement?.let { contractAgreement(it.toEdcContractAgreement(objectMapper)) }
-            callbackAddresses(callbackAddresses?.map { objectMapper.convertValue(it, CallbackAddress::class.java) })
-            contractOffers(contractOffers?.map { objectMapper.convertValue(it, ContractOffer::class.java) })
-            correlationId(correlationId)
-            counterPartyAddress(counterPartyAddress)
-            counterPartyId(counterPartyId)
-            errorDetail(errorDetail)
-            pending(pending)
-            protocol(protocol)
-            protocolMessages(objectMapper.convertValue(protocolMessages, ProtocolMessages::class.java))
-            state(state)
-            stateCount(stateCount)
-            stateTimestamp?.let { stateTimestamp(it) }
-            traceContext?.let { traceContext(it) }
-            type(EdcContractNegotiation.Type.valueOf(type))
-            updatedAt(updatedAt)
-        }.build()
+        EdcContractNegotiation.Builder
+            .newInstance()
+            .apply {
+                id(id)
+                createdAt(createdAt)
+                contractAgreement?.let { contractAgreement(it.toEdcContractAgreement(objectMapper)) }
+                callbackAddresses(callbackAddresses?.map { objectMapper.convertValue(it, CallbackAddress::class.java) })
+                contractOffers(contractOffers?.map { objectMapper.convertValue(it, ContractOffer::class.java) })
+                correlationId(correlationId)
+                counterPartyAddress(counterPartyAddress)
+                counterPartyId(counterPartyId)
+                errorDetail(errorDetail)
+                pending(pending)
+                protocol(protocol)
+                protocolMessages(objectMapper.convertValue(protocolMessages, ProtocolMessages::class.java))
+                state(state)
+                stateCount(stateCount)
+                stateTimestamp?.let { stateTimestamp(it) }
+                traceContext?.let { traceContext(it) }
+                type(EdcContractNegotiation.Type.valueOf(type))
+                updatedAt(updatedAt)
+            }.build()
 
     companion object {
         const val AGREEMENT_ID = "agreementId"

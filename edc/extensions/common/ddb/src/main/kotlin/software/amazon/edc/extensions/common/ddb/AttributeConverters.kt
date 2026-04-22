@@ -37,10 +37,13 @@ class ListOfMapsConverter : AttributeConverter<List<Map<String, Any?>>> {
 }
 
 private fun Map<String, Any?>.toMapAttributeValue(): AttributeValue =
-    AttributeValue.builder().m(
-        mapNotNull { it.value?.let { value -> it.key to value } }.toMap()
-            .mapValues { (_, value) -> value.toAttributeValue() },
-    ).build()
+    AttributeValue
+        .builder()
+        .m(
+            mapNotNull { it.value?.let { value -> it.key to value } }
+                .toMap()
+                .mapValues { (_, value) -> value.toAttributeValue() },
+        ).build()
 
 @Suppress("UNCHECKED_CAST")
 private fun Any?.toAttributeValue(): AttributeValue =
@@ -55,7 +58,8 @@ private fun Any?.toAttributeValue(): AttributeValue =
     }
 
 private fun AttributeValue.toMap(): Map<String, Any?> =
-    m()?.filter { it.value.type() != AttributeValue.Type.NUL }
+    m()
+        ?.filter { it.value.type() != AttributeValue.Type.NUL }
         ?.mapValues { (_, attributeValue) -> attributeValue.toValue() } ?: emptyMap()
 
 private fun AttributeValue.toValue(): Any? =

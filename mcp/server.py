@@ -13,11 +13,12 @@ Provider-side tools:
 Consumer-side tools:
 - request_catalog: Request EDC connector catalog from a counterparty
 - initiate_contract_negotiation: Start a contract negotiation with a provider
-- get_negotiation_state: Poll the state of a contract negotiation
+- get_contract_negotiation: Get the full contract negotiation object
 - get_contract_agreement: Retrieve a finalized contract agreement
 - initiate_transfer: Start a data transfer using a contract agreement
-- get_transfer_state: Poll the state of a transfer process
+- get_transfer_process: Get the full transfer process object
 - get_edr_data_address: Get the endpoint data reference for an active transfer
+- initiate_edr_negotiation: Combined negotiation + transfer in one call
 
 Query tools:
 - query_assets: List/search assets
@@ -39,7 +40,7 @@ from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("dataspace-connector")
 
 # Configuration
-EDC_MANAGEMENT_URL = os.getenv("EDC_MANAGEMENT_URL", "http://localhost:8080/management")
+EDC_MANAGEMENT_URL = os.getenv("EDC_MANAGEMENT_URL", "http://localhost:8080/management").rstrip("/")
 EDC_API_KEY = os.getenv("EDC_API_KEY", "")
 USE_AWS_IAM = os.getenv("EDC_USE_AWS_IAM", "false").lower() == "true"
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
@@ -138,12 +139,15 @@ async def create_asset(
         )
     """
     payload = {
-        "@context": {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
+        "@context": {
+            "@vocab": "https://w3id.org/edc/v0.0.1/ns/",
+            "dct": "http://purl.org/dc/terms/",
+        },
         "@id": asset_id,
-        "@type": "https://w3id.org/edc/v0.0.1/ns/Asset",
+        "@type": "Asset",
         "properties": properties,
         "dataAddress": {
-            "@type": "https://w3id.org/edc/v0.0.1/ns/DataAddress",
+            "@type": "DataAddress",
             **data_address,
         },
     }
@@ -173,21 +177,29 @@ async def create_policy_definition(
 
     Example:
         create_policy_definition(
-            policy_id="allow-all-policy",
+            policy_id="usage-policy",
             policy={
-                "@context": "http://www.w3.org/ns/odrl.jsonld",
                 "@type": "Set",
                 "permission": [{
                     "action": "use",
-                    "target": "my-dataset-1"
+                    "constraint": [{
+                        "and": [
+                            {"leftOperand": "FrameworkAgreement", "operator": "eq", "rightOperand": "DataExchangeGovernance:1.0"},
+                            {"leftOperand": "UsagePurpose", "operator": "isAnyOf", "rightOperand": "cx.core.industrycore:1"}
+                        ]
+                    }]
                 }]
             }
         )
     """
     payload = {
-        "@context": {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
+        "@context": [
+            "https://w3id.org/dspace/2025/1/odrl-profile.jsonld",
+            "https://w3id.org/catenax/2025/9/policy/context.jsonld",
+            {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
+        ],
         "@id": policy_id,
-        "@type": "https://w3id.org/edc/v0.0.1/ns/PolicyDefinition",
+        "@type": "PolicyDefinition",
         "policy": policy,
     }
     return await _api_request("POST", "/v3/policydefinitions", payload)
@@ -230,7 +242,7 @@ async def create_contract_definition(
     payload = {
         "@context": {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
         "@id": contract_definition_id,
-        "@type": "https://w3id.org/edc/v0.0.1/ns/ContractDefinition",
+        "@type": "ContractDefinition",
         "accessPolicyId": access_policy_id,
         "contractPolicyId": contract_policy_id,
         "assetsSelector": assets_selector,
@@ -267,8 +279,8 @@ async def request_catalog(
         )
     """
     payload = {
-        "@context": {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
-        "@type": "https://w3id.org/edc/v0.0.1/ns/CatalogRequest",
+        "@context": [{"@vocab": "https://w3id.org/edc/v0.0.1/ns/"}],
+        "@type": "CatalogRequest",
         "counterPartyAddress": counter_party_address,
         "counterPartyId": counter_party_id,
         "protocol": protocol,
@@ -298,7 +310,7 @@ async def initiate_contract_negotiation(
     Initiate a contract negotiation with a provider connector.
 
     Starts an asynchronous negotiation for a specific offer obtained from the catalog.
-    Poll get_negotiation_state to track progress.
+    Poll get_contract_negotiation to track progress.
 
     Args:
         counter_party_address: The DSP endpoint URL of the provider connector
@@ -326,7 +338,6 @@ async def initiate_contract_negotiation(
         )
     """
     policy: dict[str, Any] = {
-        "@context": "http://www.w3.org/ns/odrl.jsonld",
         "@type": "odrl:Offer",
         "@id": offer_id,
         "assigner": assigner,
@@ -340,8 +351,12 @@ async def initiate_contract_negotiation(
         policy["odrl:obligation"] = obligation
 
     payload: dict[str, Any] = {
-        "@context": {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
-        "@type": "https://w3id.org/edc/v0.0.1/ns/ContractRequest",
+        "@context": [
+            "https://w3id.org/dspace/2025/1/odrl-profile.jsonld",
+            "https://w3id.org/catenax/2025/9/policy/context.jsonld",
+            {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
+        ],
+        "@type": "ContractRequest",
         "counterPartyAddress": counter_party_address,
         "protocol": protocol,
         "policy": policy,
@@ -353,25 +368,27 @@ async def initiate_contract_negotiation(
 
 
 @mcp.tool()
-async def get_negotiation_state(
+async def get_contract_negotiation(
     negotiation_id: str,
 ) -> dict[str, Any]:
     """
     Get the state of a contract negotiation.
 
     Use this to poll the progress of an asynchronous contract negotiation.
+    Returns the full negotiation object including state, contractAgreementId,
+    and errorDetail (if terminated).
     Common states: REQUESTED, AGREED, VERIFIED, FINALIZED, TERMINATED.
 
     Args:
         negotiation_id: The ID returned by initiate_contract_negotiation
 
     Returns:
-        The current negotiation state
+        The full contract negotiation object including state and agreement ID
 
     Example:
-        get_negotiation_state(negotiation_id="negotiation-id")
+        get_contract_negotiation(negotiation_id="negotiation-id")
     """
-    return await _api_request("GET", f"/v3/contractnegotiations/{negotiation_id}/state")
+    return await _api_request("GET", f"/v3/contractnegotiations/{negotiation_id}")
 
 
 @mcp.tool()
@@ -411,7 +428,7 @@ async def initiate_transfer(
     """
     Initiate a data transfer using a contract agreement.
 
-    Starts an asynchronous transfer process. Poll get_transfer_state to track progress.
+    Starts an asynchronous transfer process. Poll get_transfer_process to track progress.
     For HTTP pull transfers, use transfer_type="HttpData-PULL" and no data_destination.
     After the transfer reaches STARTED state, use get_edr_data_address to get the access token.
 
@@ -435,7 +452,7 @@ async def initiate_transfer(
     """
     payload: dict[str, Any] = {
         "@context": {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
-        "@type": "https://w3id.org/edc/v0.0.1/ns/TransferRequest",
+        "@type": "TransferRequest",
         "counterPartyAddress": counter_party_address,
         "contractId": contract_id,
         "transferType": transfer_type,
@@ -446,7 +463,7 @@ async def initiate_transfer(
     else:
         # EDC requires a dataDestination even for PULL transfers to avoid NPE
         # in resource definition generators. HttpProxy signals a client-pull.
-        payload["dataDestination"] = {"@type": "https://w3id.org/edc/v0.0.1/ns/DataAddress", "type": "HttpProxy"}
+        payload["dataDestination"] = {"@type": "DataAddress", "type": "HttpProxy"}
     if callback_addresses:
         payload["callbackAddresses"] = callback_addresses
 
@@ -454,25 +471,27 @@ async def initiate_transfer(
 
 
 @mcp.tool()
-async def get_transfer_state(
+async def get_transfer_process(
     transfer_process_id: str,
 ) -> dict[str, Any]:
     """
     Get the state of a transfer process.
 
     Use this to poll the progress of an asynchronous data transfer.
+    Returns the full transfer process object including state, correlationId,
+    and errorDetail (if terminated).
     Common states: REQUESTED, STARTED, COMPLETED, TERMINATED, SUSPENDED.
 
     Args:
         transfer_process_id: The ID returned by initiate_transfer
 
     Returns:
-        The current transfer process state
+        The full transfer process object including state and error details
 
     Example:
-        get_transfer_state(transfer_process_id="transfer-id")
+        get_transfer_process(transfer_process_id="transfer-id")
     """
-    return await _api_request("GET", f"/v3/transferprocesses/{transfer_process_id}/state")
+    return await _api_request("GET", f"/v3/transferprocesses/{transfer_process_id}")
 
 
 # --- EDR Cache ---
@@ -498,7 +517,83 @@ async def get_edr_data_address(
     Example:
         get_edr_data_address(transfer_process_id="transfer-id")
     """
-    return await _api_request("GET", f"/v2/edrs/{transfer_process_id}/dataaddress")
+    return await _api_request("GET", f"/v3/edrs/{transfer_process_id}/dataaddress")
+
+
+@mcp.tool()
+async def initiate_edr_negotiation(
+    counter_party_address: str,
+    offer_id: str,
+    asset_id: str,
+    assigner: str,
+    protocol: str = "dataspace-protocol-http",
+    permission: Optional[list[dict[str, Any]]] = None,
+    prohibition: Optional[list[dict[str, Any]]] = None,
+    obligation: Optional[list[dict[str, Any]]] = None,
+    callback_addresses: Optional[list[dict[str, Any]]] = None,
+) -> dict[str, Any]:
+    """
+    Initiate an EDR negotiation that combines contract negotiation and transfer in one call.
+
+    This is a convenience shortcut that handles the full flow: contract negotiation,
+    followed by an automatic HttpData-PULL transfer. Once the negotiation finalizes
+    and the transfer starts, the EDR becomes available via get_edr_data_address.
+
+    Poll get_contract_negotiation with the returned negotiation ID to track progress.
+
+    Args:
+        counter_party_address: The DSP endpoint URL of the provider connector
+        offer_id: The offer/policy ID from the catalog (the "@id" of the odrl:hasPolicy)
+        asset_id: The target asset ID from the catalog offer
+        assigner: The provider participant ID (assigner of the offer)
+        protocol: Protocol to use (default: "dataspace-protocol-http")
+        permission: The permission array from the catalog offer's odrl:hasPolicy (pass it through exactly)
+        prohibition: The prohibition array from the catalog offer's odrl:hasPolicy (pass it through exactly)
+        obligation: The obligation array from the catalog offer's odrl:hasPolicy (pass it through exactly)
+        callback_addresses: Optional webhook addresses for negotiation events
+
+    Returns:
+        Response with negotiation ID and created timestamp
+
+    Example:
+        initiate_edr_negotiation(
+            counter_party_address="https://provider.example.com/dsp",
+            offer_id="offer-id-from-catalog",
+            asset_id="asset-id",
+            assigner="provider-participant-id",
+            permission=[{"action": "use"}],
+            prohibition=[],
+            obligation=[]
+        )
+    """
+    policy: dict[str, Any] = {
+        "@type": "odrl:Offer",
+        "@id": offer_id,
+        "assigner": assigner,
+        "target": asset_id,
+    }
+    if permission is not None:
+        policy["odrl:permission"] = permission
+    if prohibition is not None:
+        policy["odrl:prohibition"] = prohibition
+    if obligation is not None:
+        policy["odrl:obligation"] = obligation
+
+    payload: dict[str, Any] = {
+        "@context": [
+            "https://w3id.org/dspace/2025/1/odrl-profile.jsonld",
+            "https://w3id.org/catenax/2025/9/policy/context.jsonld",
+            {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
+        ],
+        "@type": "ContractRequest",
+        "counterPartyAddress": counter_party_address,
+        "protocol": protocol,
+        "policy": policy,
+    }
+    if callback_addresses:
+        payload["callbackAddresses"] = callback_addresses
+
+    return await _api_request("POST", "/v3/edrs", payload)
 
 
 # --- Query Tools ---
@@ -514,7 +609,7 @@ def _build_query_spec(
     """Build a QuerySpec payload."""
     spec: dict[str, Any] = {
         "@context": {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
-        "@type": "https://w3id.org/edc/v0.0.1/ns/QuerySpec",
+        "@type": "QuerySpec",
         "offset": offset,
         "limit": limit,
         "sortOrder": sort_order,

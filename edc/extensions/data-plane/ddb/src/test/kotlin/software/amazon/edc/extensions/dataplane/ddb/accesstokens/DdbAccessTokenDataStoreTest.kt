@@ -13,11 +13,13 @@ import software.amazon.edc.extensions.dataplane.ddb.types.AccessToken
 
 class DdbAccessTokenDataStoreTest : AccessTokenDataTestBase() {
     private val client =
-        DynamoDbEnhancedClient.builder()
+        DynamoDbEnhancedClient
+            .builder()
             .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
             .build()
     private val table =
-        client.table(AccessToken.TABLE_NAME, TableSchema.fromBean(AccessToken::class.java))
+        client
+            .table(AccessToken.TABLE_NAME, TableSchema.fromBean(AccessToken::class.java))
             .apply { createTable() }
 
     private val accessTokenIndex =

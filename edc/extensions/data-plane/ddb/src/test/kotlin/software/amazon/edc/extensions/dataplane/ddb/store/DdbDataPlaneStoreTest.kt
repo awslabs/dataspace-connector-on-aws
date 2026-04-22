@@ -15,14 +15,17 @@ import java.time.Duration
 
 class DdbDataPlaneStoreTest : DataPlaneStoreTestBase() {
     private val client =
-        DynamoDbEnhancedClient.builder()
+        DynamoDbEnhancedClient
+            .builder()
             .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
             .build()
     private val dataFlowTable =
-        client.table(DataFlow.TABLE_NAME, TableSchema.fromBean(DataFlow::class.java))
+        client
+            .table(DataFlow.TABLE_NAME, TableSchema.fromBean(DataFlow::class.java))
             .apply { createTable() }
     private val leaseTable =
-        client.table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
+        client
+            .table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
             .apply { createTable() }
 
     private val dataPlaneStore =

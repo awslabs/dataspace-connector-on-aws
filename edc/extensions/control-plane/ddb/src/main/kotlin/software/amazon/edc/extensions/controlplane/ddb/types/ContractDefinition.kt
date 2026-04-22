@@ -33,14 +33,16 @@ data class ContractDefinition(
     var privateProperties: Map<String, Any>? = null,
 ) {
     fun toEdcContractDefinition(objectMapper: ObjectMapper): EdcContractDefinition =
-        EdcContractDefinition.Builder.newInstance().apply {
-            id(id)
-            createdAt(createdAt)
-            accessPolicyId(accessPolicyId)
-            assetsSelector(assetsSelector.map { objectMapper.convertValue(it, Criterion::class.java) })
-            contractPolicyId(contractPolicyId)
-            privateProperties(privateProperties)
-        }.build()
+        EdcContractDefinition.Builder
+            .newInstance()
+            .apply {
+                id(id)
+                createdAt(createdAt)
+                accessPolicyId(accessPolicyId)
+                assetsSelector(assetsSelector.map { objectMapper.convertValue(it, Criterion::class.java) })
+                contractPolicyId(contractPolicyId)
+                privateProperties(privateProperties)
+            }.build()
 
     companion object {
         const val ACCESS_POLICY_ID = "accessPolicyId"

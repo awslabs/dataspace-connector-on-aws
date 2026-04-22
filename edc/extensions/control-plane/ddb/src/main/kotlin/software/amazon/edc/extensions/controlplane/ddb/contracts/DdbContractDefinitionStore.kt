@@ -30,7 +30,11 @@ class DdbContractDefinitionStore(
     override fun findAll(querySpec: QuerySpec): Stream<EdcContractDefinition> {
 //        log().info("findAll: $querySpec")
         return queryResolver.query(
-            table.scan().items().stream().map { it.toEdcContractDefinition(objectMapper) },
+            table
+                .scan()
+                .items()
+                .stream()
+                .map { it.toEdcContractDefinition(objectMapper) },
             querySpec,
         )
     }

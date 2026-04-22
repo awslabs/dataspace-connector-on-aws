@@ -55,7 +55,8 @@ fun QuerySpec.toScanRequest(fieldNameReplacements: Map<String, String> = emptyMa
     val builder = ScanEnhancedRequest.builder()
     if (resultingFilterExpression.isNotEmpty()) {
         builder.filterExpression(
-            Expression.builder()
+            Expression
+                .builder()
                 .expression(resultingFilterExpression.toString())
                 .expressionNames(expressionNames)
                 .expressionValues(expressionValues)
@@ -91,11 +92,20 @@ fun <T> QuerySpec.getGenericPropertyComparator(): Comparator<T> =
 
 private fun <T> QuerySpec.getSortFieldValue(obj: T): Any? =
     try {
-        val field = obj!!::class.java.getDeclaredField(sortField)
-        field.isAccessible = true
-        field.get(obj)
+        var clazz: Class<*>? = obj!!::class.java
+        var field: java.lang.reflect.Field? = null
+        while (clazz != null && field == null) {
+            field =
+                try {
+                    clazz.getDeclaredField(sortField)
+                } catch (_: NoSuchFieldException) {
+                    null
+                }
+            clazz = clazz.superclass
+        }
+        field?.isAccessible = true
+        field?.get(obj) ?: throw NoSuchFieldException(sortField)
     } catch (e: Exception) {
-//    log().error("Unable to get field value for $sortField", e)
         throw IllegalArgumentException("$sortField is not a valid sort field!")
     }
 
@@ -112,9 +122,7 @@ private fun Criterion.getDdbOperator(): String =
         else -> throw IllegalArgumentException("Unsupported operator: $operator")
     }
 
-private fun Criterion.getSanitizedOperandRight(): String {
-    return operandRight.toString().replace("%", "")
-}
+private fun Criterion.getSanitizedOperandRight(): String = operandRight.toString().replace("%", "")
 
 private fun Any?.toAttributeValue(): AttributeValue {
     val builder = AttributeValue.builder()

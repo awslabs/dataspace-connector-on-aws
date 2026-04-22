@@ -28,11 +28,12 @@ class DdbDataPlaneInstanceStore(
     leaseHolder: String,
     leaseTable: DynamoDbTable<Lease>,
     private val table: DynamoDbTable<DataPlaneInstance>,
-) : DataPlaneInstanceStore, AbstractLeasableEntityDao(
+) : AbstractLeasableEntityDao(
         clock = clock,
         leaseHolder = leaseHolder,
         leaseTable = leaseTable,
-    ) {
+    ),
+    DataPlaneInstanceStore {
     override fun findById(id: String): EdcDataPlaneInstance? = getDataPlaneInstance(id)?.toEdcDataPlaneInstance()
 
     override fun nextNotLeased(
@@ -40,13 +41,16 @@ class DdbDataPlaneInstanceStore(
         vararg criteria: Criterion,
     ): MutableList<EdcDataPlaneInstance> {
         val querySpec =
-            QuerySpec.Builder.newInstance()
+            QuerySpec.Builder
+                .newInstance()
                 .filter(criteria.asList())
                 .sortField("stateTimestamp")
                 .sortOrder(SortOrder.ASC)
                 .limit(max)
                 .build()
-        return table.scan(querySpec.toScanRequest()).items()
+        return table
+            .scan(querySpec.toScanRequest())
+            .items()
             .asSequence()
             .filterNot { hasLease(it.id) }
             .sortedWith(querySpec.getGenericPropertyComparator())
@@ -90,7 +94,13 @@ class DdbDataPlaneInstanceStore(
         table.deleteItem(keyFromId(id))?.let { StoreResult.success(it.toEdcDataPlaneInstance()) }
             ?: StoreResult.notFound("DataPlaneInstance $id not found!")
 
-    override fun getAll(): Stream<EdcDataPlaneInstance> = table.scan().items().asSequence().map { it.toEdcDataPlaneInstance() }.asStream()
+    override fun getAll(): Stream<EdcDataPlaneInstance> =
+        table
+            .scan()
+            .items()
+            .asSequence()
+            .map { it.toEdcDataPlaneInstance() }
+            .asStream()
 
     override fun getLeasableById(id: String): Leasable? = getDataPlaneInstance(id)
 

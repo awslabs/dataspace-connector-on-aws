@@ -77,14 +77,14 @@ export class EdcDataPlane extends Construct {
       containerName: containerName,
       environment: {
         "edc.dataplane.api.public.baseurl": props.apiPublicUrl,
-        "edc.dpf.selector.url": `http://${props.nlbOutputs.dnsName}:${props.controlPlanePortMapping.control}/control/v1/dataplanes`,
+        "edc.dpf.selector.url": `http://${props.nlbOutputs.dnsName}:${props.controlPlanePortMapping.control}/api/control/v1/dataplanes`,
         "edc.hostname": props.nlbOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",
         "edc.iam.sts.oauth.client.secret.alias":
           EDC_SECRETS_MANAGER_ALIASES.OAUTH_CLIENT_SECRET,
         "edc.runtime.id": id,
         "edc.vault.aws.region": Stack.of(this).region,
-        "tx.edc.dataplane.token.refresh.endpoint": props.apiPublicUrl,
+        "tx.edc.dataplane.token.refresh.endpoint": `${props.apiPublicUrl}token`,
 
         // This declares the aliases to use in AWS Secrets Manager for consumer pull scenarios
         "edc.transfer.proxy.token.signer.privatekey.alias":
@@ -94,8 +94,8 @@ export class EdcDataPlane extends Construct {
 
         ...props.edcIamEnvVars,
 
-        "web.http.default.port": `${props.dataPlanePortMapping.default}`,
-        "web.http.default.path": "/api",
+        "web.http.port": `${props.dataPlanePortMapping.default}`,
+        "web.http.path": "/api",
         "web.http.public.port": `${props.dataPlanePortMapping.public}`,
         "web.http.public.path": "/api/public",
         "web.http.control.port": `${props.dataPlanePortMapping.control}`,
@@ -103,8 +103,6 @@ export class EdcDataPlane extends Construct {
 
         JDK_JAVA_OPTIONS: [
           "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-          "-Djava.util.logging.level=WARNING",
-          "-Dorg.eclipse.edc.level=INFO",
         ].join(" "),
       },
       image: props.image,

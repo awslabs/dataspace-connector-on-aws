@@ -53,7 +53,8 @@ class DdbAccessTokenDataStore(
         val predicate = querySpec.filterExpression.toPredicate<Any>(criterionOperatorRegistry)
         val comparator = querySpec.getGenericPropertyComparator<Any>()
 
-        return pages.items()
+        return pages
+            .items()
             .asSequence()
             .map { it.toEdcAccessTokenData() }
             .filter { predicate.test(it) }

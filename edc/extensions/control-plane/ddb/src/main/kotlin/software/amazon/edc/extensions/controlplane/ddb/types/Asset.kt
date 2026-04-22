@@ -29,13 +29,20 @@ data class Asset(
     var properties: Map<String, Any> = emptyMap(),
 ) {
     fun toEdcAsset(): EdcAsset =
-        EdcAsset.Builder.newInstance().apply {
-            id(assetId)
-            createdAt(createdAt)
-            dataAddress(DataAddress.Builder.newInstance().properties(dataAddress).build())
-            privateProperties(privateProperties)
-            properties(properties)
-        }.build()
+        EdcAsset.Builder
+            .newInstance()
+            .apply {
+                id(assetId)
+                createdAt(createdAt)
+                dataAddress(
+                    DataAddress.Builder
+                        .newInstance()
+                        .properties(dataAddress)
+                        .build(),
+                )
+                privateProperties(privateProperties)
+                properties(properties)
+            }.build()
 
     companion object {
         const val ID = "id"
