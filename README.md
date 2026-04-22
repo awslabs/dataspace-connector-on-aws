@@ -25,7 +25,7 @@ Adjust the EDC and CDK configuration in [`environments.ts`](https://github.com/a
 ...
 Outputs:
 DataspaceConnectorStack.EdcApiDataPlaneApiEndpoint     = https://<api-id>.execute-api.<aws-region>.amazonaws.com/data/
-DataspaceConnectorStack.EdcApiDspApiEndpoint           = https://<api-id>.execute-api.<aws-region>.amazonaws.com/dsp/
+DataspaceConnectorStack.EdcApiDspApiEndpoint           = https://<api-id>.execute-api.<aws-region>.amazonaws.com/protocol/
 DataspaceConnectorStack.EdcApiManagementApiEndpoint    = https://<api-id>.execute-api.<aws-region>.amazonaws.com/management/
 DataspaceConnectorStack.EdcApiObservabilityApiEndpoint = https://<api-id>.execute-api.<aws-region>.amazonaws.com/status/
 DataspaceConnectorStack.EdcOauthClientSecretArn        = arn:aws:secretsmanager:<aws-region>:<account-id>:secret:edc.iam.sts.oauth.client.secret
@@ -34,6 +34,14 @@ DataspaceConnectorStack.EdcOauthClientSecretArn        = arn:aws:secretsmanager:
 After deployment, navigate to the [AWS Secrets Manager console](https://console.aws.amazon.com/secretsmanager/listsecrets) and update `EdcOauthClientSecretArn`'s value with your OAuth client secret obtained from the Cofinity-X Portal.
 
 ✨ That's it! You can now interact with your EDC's management API to start creating contract offers or browse a data space participant's catalog. 
+
+## AI-Assisted Connector Management
+
+This project includes tooling for AI-assisted deployment and operation of your connector:
+
+* **[MCP Server](mcp/)** — A Model Context Protocol server with 15 tools for interacting with the EDC Management API. Create assets, negotiate contracts, transfer data, and troubleshoot issues — all through natural language in any MCP-compatible AI assistant.
+
+* **[Kiro Power](kiro-power/)** — Guided workflows for [Kiro](https://kiro.dev) that walk you through deploying your connector from scratch and validating end-to-end data exchange. Includes step-by-step steering files for deployment configuration, MCP setup, and S3 loopback testing.
 
 ## Architecture
 
@@ -50,7 +58,7 @@ After deployment, navigate to the [AWS Secrets Manager console](https://console.
 
 ### Custom Domain (Optional)
 
-By default, the EDC APIs are exposed via auto-generated API Gateway URLs (e.g. `https://<api-id>.execute-api.<region>.amazonaws.com/dsp/`). To use your own domain instead, you need:
+By default, the EDC APIs are exposed via auto-generated API Gateway URLs (e.g. `https://<api-id>.execute-api.<region>.amazonaws.com/protocol/`). To use your own domain instead, you need:
 
 1. A [Route 53 hosted zone](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/CreatingHostedZone.html) for your domain
 2. An [ACM certificate](https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-public.html) in `us-east-1` (required for edge-optimized API Gateway endpoints, regardless of your stack's deployment region)
@@ -67,7 +75,7 @@ All three values are required when enabling a custom domain. This will:
 - Create an API Gateway custom domain with TLS 1.2
 - Create a Route 53 A record pointing to the API Gateway
 - Disable the default `execute-api` endpoints
-- Map all EDC APIs as base paths: `/status`, `/management`, `/dsp`, `/data`
+- Map all EDC APIs as base paths: `/status`, `/management`, `/protocol`, `/data`
 - Automatically configure the EDC's DSP callback and data plane public URLs to use your domain
 
 ### Management API Authentication
@@ -123,7 +131,6 @@ Stores credentials needed to access data sources and destinations during transfe
 
 ## Backlog / Ideas 💡
 
-* Upgrade to Tractus-X EDC 0.11.x (Saturn)
 * Configurable switch between DynamoDB and Aurora PostgreSQL for control plane persistance
 * Include examples for EDC assets, such as OAuth 2.0 and S3
 * Configurable control and data plane auto-scaling on ECS Service level

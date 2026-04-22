@@ -22,7 +22,7 @@ If the container runtime is Finch (not Docker), perform these additional checks:
 echo $CDK_DOCKER
 ```
 
-- If it's already set to `finch`, no action needed.
+- If it's already set and contains `finch` (e.g., `finch` or `/path/to/finch`), no action needed.
 - If it's empty, uncomment `export CDK_DOCKER=finch` in `deploy.sh`.
 
 2. Check whether the Finch VM is running:
@@ -70,8 +70,8 @@ Use the ARN from THIS output (not the earlier unqualified check) for IAM princip
 Ask the user:
 > "Which AWS region would you like to deploy to? The default is `eu-central-1`."
 
-If the user picks a different region, update `deploy.sh`:
-- Change `export AWS_REGION=eu-central-1` to their chosen region
+If the user picks a different region, they will need to set `AWS_REGION` before running `deploy.sh`:
+- The script defaults to `eu-central-1` but respects the `AWS_REGION` environment variable if set
 
 Store the chosen region — it will be needed for MCP configuration later.
 
@@ -86,7 +86,7 @@ First, check whether the `edcIam` object already has values populated (i.e., fie
 
 If the user wants to keep existing values, skip to Phase 4.
 
-In a fresh clone, the `edcIam` object has 7 fields all set to empty strings (`""`). These must be populated with values from the Cofinity-X Portal:
+In a fresh clone, the `edcIam` object has 8 fields all set to empty strings (`""`). These must be populated with values from the Cofinity-X Portal:
 
 | Field | What to ask the user |
 |-------|---------------------|
@@ -95,7 +95,8 @@ In a fresh clone, the `edcIam` object has 7 fields all set to empty strings (`""
 | `IATP_ID` | "What is your organization's DID?" (starts with `did:web:`) |
 | `OAUTH_CLIENT_ID` | "What is your technical user's OAuth client ID?" |
 | `OAUTH_TOKEN_URL` | "What is your OAuth token endpoint URL?" |
-| `PARTICIPANT_ID` | "What is your BPNL number?" (e.g., `BPNL000000000001`) |
+| `PARTICIPANT_ID` | "What is your organization's DID?" (same value as `IATP_ID` — used as the DSP protocol identity) |
+| `PARTICIPANT_BPN` | "What is your BPNL number?" (e.g., `BPNL000000000001`) |
 | `TRUSTED_ISSUER_ID` | "What is the trusted issuer DID?" (starts with `did:web:`) |
 
 Collect all values from the user, then update the `edcIam` object in `cdk/lib/config/environments.ts` with the provided values.
@@ -159,13 +160,18 @@ Only modify if the user explicitly asks.
 Tell the user:
 > "Configuration is complete. I'll now run the deployment. This will build the EDC Java artifacts, install CDK dependencies, bootstrap your AWS account (if needed), and deploy the CloudFormation stack. This typically takes 10-15 minutes."
 
-IMPORTANT: `deploy.sh` is a long-running process (10-15+ minutes). Start it as a background process so you can monitor progress without blocking. If a specific AWS profile is needed, prepend it to the command:
+IMPORTANT: `deploy.sh` is a long-running process (10-15+ minutes). Start it as a background process so you can monitor progress without blocking. The script reads `AWS_PROFILE` and `AWS_REGION` from the environment (with `eu-central-1` as the default region). Set the profile before running:
 
 ```bash
-AWS_PROFILE=<deployment-profile> ./deploy.sh
+export AWS_PROFILE=<deployment-profile>
+./deploy.sh
 ```
 
-If `$AWS_PROFILE` is already exported in the user's shell, you can run `./deploy.sh` directly.
+If a different region was chosen in Phase 2, also set it:
+
+```bash
+export AWS_REGION=<chosen-region>
+```
 
 Poll the process output at 30-second intervals to monitor progress. Do NOT poll more frequently — rapid polling generates excessive tool calls and can cause the agent to stall or hit context limits on long deployments. The deployment has these major phases:
 1. Gradle build (~30s) — look for `BUILD SUCCESSFUL`
@@ -179,10 +185,10 @@ This script:
 3. Bootstraps the AWS account (`cdk bootstrap`)
 4. Deploys the stack (`cdk deploy`)
 
-After deployment succeeds, the CDK output will contain the API endpoints. Extract and store these values:
-- `EdcApiManagementApiEndpoint` — needed for MCP configuration
-- `EdcApiDspApiEndpoint` — the DSP endpoint for catalog requests
-- `EdcApiDataPlaneApiEndpoint` — data plane endpoint
+After deployment succeeds, the CDK output will contain the API endpoints. Extract and store these values (output keys have CDK-generated hash suffixes — match by prefix):
+- Key starting with `EdcApiManagementApiEndpoint` — needed for MCP configuration
+- Key starting with `EdcApiDspApiEndpoint` — the DSP endpoint for catalog requests
+- Key starting with `EdcApiDataPlaneApiEndpoint` — data plane endpoint
 - `EdcOauthClientSecretArn` — Secrets Manager ARN for the OAuth secret
 
 ---
@@ -262,12 +268,12 @@ Then validate the DSP endpoint by requesting the connector's own catalog:
 ```
 request_catalog(
     counter_party_address="<EdcApiDspApiEndpoint from CDK output>",
-    counter_party_id="<PARTICIPANT_ID from Phase 3>"
+    counter_party_id="<PARTICIPANT_BPN from Phase 3>"
 )
 ```
 
 If both calls succeed, tell the user:
-> "Your Dataspace Connector is deployed and the MCP tools are connected. You can now create data offerings, browse catalogs, negotiate contracts, and transfer data using the 14 available tools."
+> "Your Dataspace Connector is deployed and the MCP tools are connected. You can now create data offerings, browse catalogs, negotiate contracts, and transfer data using the 15 available tools."
 
 If either call fails, check:
 - AWS credentials are valid and not expired
