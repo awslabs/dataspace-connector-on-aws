@@ -23,7 +23,7 @@ With this power, you can go from zero to a fully deployed connector with validat
 
 ## Available MCP Tools
 
-This power provides 15 tools covering the full EDC Management API workflow:
+This power provides 18 tools covering the full EDC Management API workflow:
 
 ### Provider-side tools (create data offerings)
 - `create_asset` — Create a new asset with data address
@@ -38,10 +38,13 @@ This power provides 15 tools covering the full EDC Management API workflow:
 - `initiate_transfer` — Start a data transfer using a contract agreement
 - `get_transfer_process` — Get the full transfer process object including state, correlationId, and errorDetail
 - `get_edr_data_address` — Get the endpoint data reference (EDR) for an active transfer
+- `fetch_data_with_edr` — Fetch actual data from the provider's data plane using an EDR (handles token refresh transparently)
 - `initiate_edr_negotiation` — Combined negotiation + transfer in one call (shortcut for the full consumer flow)
 
 ### Query tools
 - `query_assets` — List/search assets with filtering and pagination
+- `query_policy_definitions` — List/search policy definitions
+- `query_contract_definitions` — List/search contract definitions
 - `query_contract_negotiations` — List/search contract negotiations
 - `query_transfer_processes` — List/search transfer processes
 - `query_contract_agreements` — List/search contract agreements
@@ -120,6 +123,16 @@ initiate_transfer(
 
 # 5. Poll until STARTED, then get EDR
 get_edr_data_address(transfer_process_id="<transfer-id>")
+
+# 6. Fetch the actual data from the provider's data plane
+fetch_data_with_edr(transfer_process_id="<transfer-id>")
+
+# Fetch with sub-path and query params
+fetch_data_with_edr(
+    transfer_process_id="<transfer-id>",
+    path="/items",
+    query_params={"limit": "10"}
+)
 ```
 
 ### Alternative: Combined negotiation + transfer (shortcut)
@@ -147,6 +160,9 @@ transfers = query_transfer_processes(filter_expression=[{
 
 # Once the transfer reaches STARTED, get the EDR
 get_edr_data_address(transfer_process_id="<transfer-id-from-query>")
+
+# Fetch the actual data
+fetch_data_with_edr(transfer_process_id="<transfer-id-from-query>")
 ```
 
 ### Create a data offering (provider side)

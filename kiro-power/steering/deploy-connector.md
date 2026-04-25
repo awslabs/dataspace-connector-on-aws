@@ -273,7 +273,7 @@ request_catalog(
 ```
 
 If both calls succeed, tell the user:
-> "Your Dataspace Connector is deployed and the MCP tools are connected. You can now create data offerings, browse catalogs, negotiate contracts, and transfer data using the 15 available tools."
+> "Your Dataspace Connector is deployed and the MCP tools are connected. You can now create data offerings, browse catalogs, negotiate contracts, and transfer data using the 18 available tools."
 
 If either call fails, check:
 - AWS credentials are valid and not expired

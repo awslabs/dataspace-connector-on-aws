@@ -274,17 +274,30 @@ The EDR contains:
 - `endpoint` — URL to fetch the data from
 - `authorization` — Bearer token for authentication
 
-Explain to the user how to use these to fetch the actual data (e.g., via `curl` or any HTTP client).
+Now fetch the actual data using the `fetch_data_with_edr` tool, which resolves the EDR and makes the HTTP request to the provider's data plane in one step:
 
-IMPORTANT: The `endpoint` URL from the EDR is the base URL of the data plane public API. When fetching data, append `public/` to the endpoint path. For example:
-
-```bash
-curl -H "Authorization: <authorization-token-from-edr>" "<endpoint>public/"
+```python
+fetch_data_with_edr(transfer_process_id="<transfer-id>")
 ```
 
-The data plane acts as a proxy — it forwards the request to the provider's actual data source (the `baseUrl` or S3 object configured in the asset's data address) and returns the response. The `Authorization` header contains the EDR token, not AWS credentials — the data plane API does not require IAM auth.
+This tool handles token refresh transparently — Tractus-X auto-refreshes expired EDR tokens when resolving the data address, so the agent can call this repeatedly over time without worrying about token expiry.
 
-After explaining the curl command, execute it to verify the data is actually flowing. If the response contains the expected data from the asset's data source, the end-to-end flow is validated.
+The data plane acts as a proxy — it forwards the request to the provider's actual data source (the `baseUrl` or S3 object configured in the asset's data address) and returns the response.
+
+If the response contains the expected data from the asset's data source, the end-to-end flow is validated.
+
+For advanced use cases (sub-paths, query parameters, POST bodies), `fetch_data_with_edr` supports additional parameters:
+
+```python
+fetch_data_with_edr(
+    transfer_process_id="<transfer-id>",
+    method="GET",
+    path="/public/items",
+    query_params={"limit": "10"}
+)
+```
+
+For debugging or inspecting the raw EDR (endpoint URL, token expiry, refresh endpoint), use `get_edr_data_address` directly.
 
 ---
 
@@ -425,7 +438,7 @@ Follow Phase 4 steps 4.2 through 4.6 using the user's own connector as both prov
 
 ### Step 5.6: Verify the Payload
 
-After the curl returns the data, verify it matches the document uploaded in Step 5.2. The response should be:
+After `fetch_data_with_edr` returns the data, verify it matches the document uploaded in Step 5.2. The response body should be:
 ```json
 {"id":"test-001","name":"Sample Record","description":"Test data for validating the dataspace connector S3 data exchange.","value":42,"timestamp":"2025-01-01T00:00:00Z"}
 ```
@@ -475,6 +488,8 @@ After testing, help the user review what was created:
 
 ```python
 query_assets(limit=50)
+query_policy_definitions(limit=50)
+query_contract_definitions(limit=50)
 query_contract_negotiations(limit=50)
 query_contract_agreements(limit=50)
 query_transfer_processes(limit=50)

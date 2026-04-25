@@ -19,9 +19,12 @@ Consumer-side tools:
 - get_transfer_process: Get the full transfer process object
 - get_edr_data_address: Get the endpoint data reference for an active transfer
 - initiate_edr_negotiation: Combined negotiation + transfer in one call
+- fetch_data_with_edr: Fetch actual data from the provider using an EDR
 
 Query tools:
 - query_assets: List/search assets
+- query_policy_definitions: List/search policy definitions
+- query_contract_definitions: List/search contract definitions
 - query_contract_negotiations: List/search contract negotiations
 - query_transfer_processes: List/search transfer processes
 - query_contract_agreements: List/search contract agreements
@@ -105,7 +108,21 @@ async def _api_request(method: str, path: str, payload: dict | None = None) -> d
             headers=signed_headers,
             timeout=30.0,
         )
-        response.raise_for_status()
+
+        if not response.is_success:
+            # Return structured error so the agent sees status code and body
+            try:
+                error_body = response.json()
+            except Exception:
+                error_body = response.text
+            return {
+                "error": True,
+                "status": response.status_code,
+                "message": error_body,
+                "path": path,
+                "method": method,
+            }
+
         return response.json()
 
 
@@ -521,6 +538,128 @@ async def get_edr_data_address(
 
 
 @mcp.tool()
+async def fetch_data_with_edr(
+    transfer_process_id: str,
+    method: str = "GET",
+    path: Optional[str] = None,
+    query_params: Optional[dict[str, str]] = None,
+    body: Optional[dict[str, Any]] = None,
+    media_type: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Fetch data from the provider's data plane using an EDR (Endpoint Data Reference).
+
+    This is the final step in the consumer PULL flow. It resolves the EDR for the given
+    transfer process (with automatic token refresh handled by Tractus-X), then makes an
+    HTTP request to the provider's data plane public API using the EDR's endpoint and
+    authorization token.
+
+    The provider's data plane acts as a proxy — the request is forwarded to the actual
+    backend data source. All HTTP methods, path suffixes, query parameters, and request
+    bodies are supported and forwarded transparently.
+
+    Prerequisites: The transfer process must be in STARTED state with a valid EDR.
+
+    Args:
+        transfer_process_id: The transfer process ID (must have an active EDR)
+        method: HTTP method to use (default: "GET"). Supports GET, POST, PUT, PATCH, DELETE.
+        path: Optional sub-path to append to the EDR endpoint URL (default: "public/", which is
+              where the data plane serves content. Override for sub-resources, e.g., "/public/items")
+        query_params: Optional query parameters to include in the request
+        body: Optional JSON request body (for POST, PUT, PATCH)
+        media_type: Optional media type for the request body (default: "application/json")
+
+    Returns:
+        Dictionary with "status" (HTTP status code), "headers" (response headers),
+        and "body" (response body — parsed as JSON if possible, otherwise raw text)
+
+    Example:
+        # Simple GET
+        fetch_data_with_edr(transfer_process_id="transfer-id")
+
+        # GET with sub-path and query params
+        fetch_data_with_edr(
+            transfer_process_id="transfer-id",
+            path="/items",
+            query_params={"limit": "10", "offset": "0"}
+        )
+
+        # POST with body
+        fetch_data_with_edr(
+            transfer_process_id="transfer-id",
+            method="POST",
+            body={"query": "SELECT * FROM data"}
+        )
+    """
+    # Step 1: Resolve the EDR (Tractus-X auto-refreshes expired tokens transparently)
+    edr = await _api_request("GET", f"/v3/edrs/{transfer_process_id}/dataaddress")
+
+    # Step 2: Extract endpoint and authorization from the EDR response.
+    # The EDR is a JSON-LD DataAddress. The endpoint and authorization fields
+    # may appear with or without the EDC namespace prefix depending on context expansion.
+    endpoint = (
+        edr.get("endpoint")
+        or edr.get("https://w3id.org/edc/v0.0.1/ns/endpoint")
+    )
+    authorization = (
+        edr.get("authorization")
+        or edr.get("https://w3id.org/edc/v0.0.1/ns/authorization")
+    )
+
+    if not endpoint:
+        return {"error": "EDR does not contain an endpoint URL", "edr": edr}
+    if not authorization:
+        return {"error": "EDR does not contain an authorization token", "edr": edr}
+
+    # Step 3: Build the target URL.
+    # The EDR endpoint is the data plane base URL. The data plane public API serves
+    # content under the "public/" path, so we default to that when no path is given.
+    target_url = endpoint.rstrip("/")
+    sub_path = path if path is not None else "public/"
+    target_url = f"{target_url}/{sub_path.lstrip('/')}"
+
+    # Step 4: Build headers with the EDR authorization token.
+    # The token is sent as-is (not prefixed with "Bearer") because the EDC data plane
+    # expects the raw token, and API Gateway would reject a "Bearer ..." value.
+    headers: dict[str, str] = {"Authorization": authorization}
+
+    if body is not None:
+        headers["Content-Type"] = media_type or "application/json"
+
+    # Step 5: Make the request to the provider's data plane
+    request_body = json.dumps(body).encode("utf-8") if body is not None else None
+
+    async with httpx.AsyncClient() as client:
+        response = await client.request(
+            method.upper(),
+            target_url,
+            content=request_body,
+            headers=headers,
+            params=query_params,
+            timeout=60.0,
+        )
+
+    # Step 6: Build the response
+    response_headers = dict(response.headers)
+    content_type = response.headers.get("content-type", "")
+
+    # Try to parse as JSON, fall back to text
+    if "json" in content_type:
+        try:
+            response_body = response.json()
+        except Exception:
+            response_body = response.text
+    else:
+        response_body = response.text
+
+    return {
+        "status": response.status_code,
+        "headers": response_headers,
+        "body": response_body,
+    }
+
+
+@mcp.tool()
 async def initiate_edr_negotiation(
     counter_party_address: str,
     offer_id: str,
@@ -619,6 +758,72 @@ def _build_query_spec(
     if filter_expression:
         spec["filterExpression"] = filter_expression
     return spec
+
+
+@mcp.tool()
+async def query_policy_definitions(
+    offset: int = 0,
+    limit: int = 50,
+    filter_expression: Optional[list[dict[str, Any]]] = None,
+    sort_field: Optional[str] = None,
+    sort_order: str = "ASC",
+) -> list[dict[str, Any]]:
+    """
+    Query policy definitions in the EDC connector.
+
+    Args:
+        offset: Pagination offset (default: 0)
+        limit: Maximum results to return (default: 50)
+        filter_expression: Optional filter criteria as list of Criterion objects
+        sort_field: Optional field name to sort by
+        sort_order: Sort direction, "ASC" or "DESC" (default: "ASC")
+
+    Returns:
+        List of policy definitions matching the query
+
+    Example:
+        query_policy_definitions(limit=10)
+        query_policy_definitions(filter_expression=[{
+            "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id",
+            "operator": "=",
+            "operandRight": "my-policy-id"
+        }])
+    """
+    payload = _build_query_spec(offset, limit, filter_expression, sort_field, sort_order)
+    return await _api_request("POST", "/v3/policydefinitions/request", payload)
+
+
+@mcp.tool()
+async def query_contract_definitions(
+    offset: int = 0,
+    limit: int = 50,
+    filter_expression: Optional[list[dict[str, Any]]] = None,
+    sort_field: Optional[str] = None,
+    sort_order: str = "ASC",
+) -> list[dict[str, Any]]:
+    """
+    Query contract definitions in the EDC connector.
+
+    Args:
+        offset: Pagination offset (default: 0)
+        limit: Maximum results to return (default: 50)
+        filter_expression: Optional filter criteria as list of Criterion objects
+        sort_field: Optional field name to sort by
+        sort_order: Sort direction, "ASC" or "DESC" (default: "ASC")
+
+    Returns:
+        List of contract definitions matching the query
+
+    Example:
+        query_contract_definitions(limit=10)
+        query_contract_definitions(filter_expression=[{
+            "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id",
+            "operator": "=",
+            "operandRight": "my-contract-def-id"
+        }])
+    """
+    payload = _build_query_spec(offset, limit, filter_expression, sort_field, sort_order)
+    return await _api_request("POST", "/v3/contractdefinitions/request", payload)
 
 
 @mcp.tool()

@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server for interacting with the Eclipse Dataspace
 
 ## Features
 
-This MCP server provides 15 tools covering the full EDC Management API workflow:
+This MCP server provides 18 tools covering the full EDC Management API workflow:
 
 ### Provider-side tools
 - **create_asset** - Create a new asset with data address
@@ -19,10 +19,13 @@ This MCP server provides 15 tools covering the full EDC Management API workflow:
 - **initiate_transfer** - Start a data transfer using a contract agreement
 - **get_transfer_process** - Get the full transfer process object including state and error details
 - **get_edr_data_address** - Get the endpoint data reference (EDR) for an active transfer
+- **fetch_data_with_edr** - Fetch actual data from the provider's data plane using an EDR (handles token refresh transparently)
 - **initiate_edr_negotiation** - Combined negotiation + transfer in one call (shortcut for the full consumer flow)
 
 ### Query tools
 - **query_assets** - List/search assets with filtering and pagination
+- **query_policy_definitions** - List/search policy definitions
+- **query_contract_definitions** - List/search contract definitions
 - **query_contract_negotiations** - List/search contract negotiations
 - **query_transfer_processes** - List/search transfer processes
 - **query_contract_agreements** - List/search contract agreements
@@ -162,6 +165,9 @@ state = get_transfer_process(transfer_process_id=transfer["@id"])
 
 # 7. Get the endpoint data reference with access token
 edr = get_edr_data_address(transfer_process_id=transfer["@id"])
+
+# 8. Fetch the actual data from the provider's data plane
+data = fetch_data_with_edr(transfer_process_id=transfer["@id"])
 ```
 
 ### Create a data offering (provider side)
@@ -232,6 +238,12 @@ create_contract_definition(
 ```python
 # List all assets
 query_assets(limit=10)
+
+# List all policy definitions
+query_policy_definitions(limit=10)
+
+# List all contract definitions
+query_contract_definitions(limit=10)
 
 # Find finalized negotiations
 query_contract_negotiations(filter_expression=[{
