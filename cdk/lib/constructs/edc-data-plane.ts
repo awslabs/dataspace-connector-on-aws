@@ -4,7 +4,7 @@
 import { Construct } from "constructs";
 import { Stack } from "aws-cdk-lib";
 import { IRole, PolicyStatement } from "aws-cdk-lib/aws-iam";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 
 import { IVpc, Peer, Port, SecurityGroup } from "aws-cdk-lib/aws-ec2";
 
@@ -25,6 +25,7 @@ import {
 import { EdcNlbOutputs } from "./edc-nlb";
 import { EDC_SECRETS_MANAGER_ALIASES } from "../config/environments";
 import { EdcFargateService } from "./edc-fargate-service";
+import { DeploymentProfile } from "../config/environments";
 
 export interface EdcDataPlaneProps {
   readonly apiPublicUrl: string;
@@ -36,6 +37,7 @@ export interface EdcDataPlaneProps {
   readonly image: ContainerImage;
   readonly memoryLimitMiB: number;
   readonly nlbOutputs: EdcNlbOutputs;
+  readonly profile: DeploymentProfile;
   readonly taskRolePolicyStatements: PolicyStatement[];
   readonly vpc: IVpc;
 }
@@ -107,7 +109,12 @@ export class EdcDataPlane extends Construct {
       },
       image: props.image,
       logging: LogDriver.awsLogs({
-        logGroup: new LogGroup(this, "LogGroup"),
+        logGroup: new LogGroup(this, "LogGroup", {
+          retention:
+            props.profile === "production"
+              ? RetentionDays.ONE_MONTH
+              : RetentionDays.ONE_WEEK,
+        }),
         mode: AwsLogDriverMode.NON_BLOCKING,
         streamPrefix: "EdcDataPlane",
       }),
@@ -123,6 +130,7 @@ export class EdcDataPlane extends Construct {
     new EdcFargateService(this, "DataPlaneFargateService", {
       cluster: props.cluster,
       containerName: containerName,
+      profile: props.profile,
       securityGroups: [securityGroup],
       targetGroups: props.nlbOutputs.dataPlaneTargetGroups,
       taskDefinition: taskDefinition,

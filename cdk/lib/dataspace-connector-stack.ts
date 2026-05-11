@@ -16,6 +16,8 @@ import {
 import { InfraConstructs } from "./constructs/infra-constructs";
 import { ServiceConstructs } from "./constructs/service-constructs";
 
+import { DeploymentProfile } from "./config/environments";
+
 export interface DataspaceConnectorStackProps extends StackProps {
   readonly certificateArn?: string;
   readonly controlPlaneCpu: number;
@@ -32,6 +34,7 @@ export interface DataspaceConnectorStackProps extends StackProps {
   readonly managementApiAuthKey: string;
   readonly managementApiPrincipals: IPrincipal[];
   readonly observabilityApiPrincipals: IPrincipal[];
+  readonly profile: DeploymentProfile;
   readonly vpcIpAddresses: string;
 }
 
@@ -72,6 +75,7 @@ export class DataspaceConnectorStack extends Stack {
       hostedZone: hostedZone,
       managementApiPrincipals: props.managementApiPrincipals,
       observabilityApiPrincipals: props.observabilityApiPrincipals,
+      profile: props.profile,
       vpcIpAddresses: props.vpcIpAddresses,
     });
 
@@ -88,6 +92,7 @@ export class DataspaceConnectorStack extends Stack {
       ddbTables: infraConstructs.ddbTables,
       edcIamEnvVars: props.edcIam,
       infraConstructs: infraConstructs,
+      profile: props.profile,
     });
   }
 }

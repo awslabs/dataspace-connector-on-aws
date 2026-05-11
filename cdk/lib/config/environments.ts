@@ -5,6 +5,8 @@ import { RemovalPolicy } from "aws-cdk-lib";
 import { ArnPrincipal } from "aws-cdk-lib/aws-iam";
 import { DataspaceConnectorStackProps } from "../dataspace-connector-stack";
 
+export type DeploymentProfile = "development" | "production";
+
 import {
   CONTROL_PLANE_PORT_MAPPING_DEFAULT,
   DATA_PLANE_PORT_MAPPING_DEFAULT,
@@ -71,5 +73,6 @@ export const DataspaceConnectorStackConfig: DataspaceConnectorStackProps = {
   observabilityApiPrincipals: [
     // new ArnPrincipal("arn:aws:iam::<account-id>:role/<role-name>"),
   ],
+  profile: "development",
   vpcIpAddresses: "10.0.10.0/24",
 };

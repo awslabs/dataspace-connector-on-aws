@@ -43,6 +43,36 @@ This project includes tooling for AI-assisted deployment and operation of your c
 
 * **[Kiro Power](kiro-power/)** — Guided workflows for [Kiro](https://kiro.dev) that walk you through deploying your connector from scratch and validating end-to-end data exchange. Includes step-by-step steering files for deployment configuration, MCP setup, and S3 loopback testing.
 
+## Deployment Profiles
+
+The stack supports two deployment profiles via the `profile` setting in [`environments.ts`](cdk/lib/config/environments.ts):
+
+```typescript
+profile: "development",  // or "production"
+```
+
+| Setting | `development` | `production` |
+|---------|--------------|--------------|
+| VPC Availability Zones | 1 (single NAT Gateway, single EIP) | 2 (HA with 2 NAT Gateways, 2 EIPs) |
+| Fargate capacity | Spot (70% cheaper, 2-min interruption warning) | On-Demand |
+| Container Insights | Disabled | Enabled |
+| Log retention | 7 days | 30 days |
+
+### Estimated Monthly Cost (eu-central-1, idle connector)
+
+| Resource | `production` | `development` |
+|----------|-------------|---------------|
+| Fargate (Control + Data Plane) | ~$23 | ~$7 (Spot) |
+| NAT Gateway | ~$76 (×2) | ~$38 (×1) |
+| Elastic IP | ~$7 (×2) | ~$4 (×1) |
+| Network Load Balancer | ~$19 | ~$19 |
+| Other (DynamoDB, API GW, S3, Secrets, Logs) | ~$1 | ~$1 |
+| **Total** | **~$125/month** | **~$68/month** |
+
+These are rough estimates for a single idle connector in eu-central-1. Actual costs depend on data transfer volume, API request frequency, and Spot pricing fluctuations. See [AWS Pricing Calculator](https://calculator.aws/) for detailed estimates.
+
+The `development` profile is recommended for testing, development, and non-critical workloads. Use `production` for connectors that serve data to third-party consumers and require high availability.
+
 ## Architecture
 
 ![architecture diagram](img/dataspace-connector-on-aws-architecture.png)
@@ -134,7 +164,8 @@ Stores credentials needed to access data sources and destinations during transfe
 * Configurable switch between DynamoDB and Aurora PostgreSQL for control plane persistance
 * Include examples for EDC assets, such as OAuth 2.0 and S3
 * Configurable control and data plane auto-scaling on ECS Service level
-* Configurable prod/non-prod switch with 1/ 1 NAT GW, 2/ disabled "edc.policy.monitor.state-machine.iteration-wait-millis", 3/ minimal resources, 4/ DynamoDB only, 5/ Fargate Spot
+* Graviton/ARM64 support for ~20% additional compute savings (requires build validation)
+* Scale-to-zero for consumer-only connectors (auto-scale ECS desired count to 0 when idle)
 * Create data plane extension to serve DynamoDB data as EDC asset
 * Allow for deployment of entire [Tractus-X Hausanschluss](https://github.com/eclipse-tractusx/tractus-x-umbrella/blob/main/docs/user/common/guides/hausanschluss-bundles.md) bundles, instead of Tractus-X EDC only
 

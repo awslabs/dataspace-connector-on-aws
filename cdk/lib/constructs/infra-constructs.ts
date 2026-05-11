@@ -6,7 +6,7 @@ import { resolve } from "path";
 import { Construct } from "constructs";
 import { IPrincipal } from "aws-cdk-lib/aws-iam";
 import { CfnOutput, Duration, RemovalPolicy } from "aws-cdk-lib";
-import { IpAddresses, IVpc, Vpc } from "aws-cdk-lib/aws-ec2";
+import { GatewayVpcEndpointAwsService, IpAddresses, IVpc, Vpc } from "aws-cdk-lib/aws-ec2";
 import { Cluster, ContainerInsights, ICluster } from "aws-cdk-lib/aws-ecs";
 import { Protocol } from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { Bucket, IBucket } from "aws-cdk-lib/aws-s3";
@@ -28,6 +28,8 @@ import { EdcDdb } from "./edc-ddb";
 import { EdcNlb, EdcNlbOutputs } from "./edc-nlb";
 import { EdcTokenKeyPair } from "./edc-token-key-pair";
 
+import { DeploymentProfile } from "../config/environments";
+
 export interface InfraConstructsProps {
   readonly certificate?: ICertificate;
   readonly controlPlanePortMapping: ControlPlanePortMapping;
@@ -36,6 +38,7 @@ export interface InfraConstructsProps {
   readonly hostedZone?: IHostedZone;
   readonly managementApiPrincipals: IPrincipal[];
   readonly observabilityApiPrincipals: IPrincipal[];
+  readonly profile: DeploymentProfile;
   readonly vpcIpAddresses: string;
 }
 
@@ -85,10 +88,22 @@ export class InfraConstructs extends Construct {
 
     this.vpc = new Vpc(scope, "Vpc", {
       ipAddresses: IpAddresses.cidr(props.vpcIpAddresses),
+      maxAzs: props.profile === "development" ? 1 : 2,
+    });
+
+    this.vpc.addGatewayEndpoint("S3Endpoint", {
+      service: GatewayVpcEndpointAwsService.S3,
+    });
+
+    this.vpc.addGatewayEndpoint("DynamoDbEndpoint", {
+      service: GatewayVpcEndpointAwsService.DYNAMODB,
     });
 
     this.ecsCluster = new Cluster(scope, "EcsCluster", {
-      containerInsightsV2: ContainerInsights.ENABLED,
+      containerInsightsV2:
+        props.profile === "production"
+          ? ContainerInsights.ENABLED
+          : ContainerInsights.DISABLED,
       vpc: this.vpc,
     });
 
@@ -131,6 +146,7 @@ export class InfraConstructs extends Construct {
       loadBalancerAddress: nlb.loadBalancerDnsName,
       managementApiPrincipals: props.managementApiPrincipals,
       observabilityApiPrincipals: props.observabilityApiPrincipals,
+      profile: props.profile,
       vpcLinkId: this.nlbOutputs.vpcLinkId,
     });
 

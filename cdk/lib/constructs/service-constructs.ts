@@ -11,6 +11,7 @@ import {
   DataPlanePortMapping,
 } from "../config/port-mappings";
 
+import { DeploymentProfile } from "../config/environments";
 import { InfraConstructs } from "./infra-constructs";
 import { EdcControlPlane } from "./edc-control-plane";
 import { EdcDataPlane } from "./edc-data-plane";
@@ -27,6 +28,7 @@ export interface ServiceConstructsProps {
   readonly ddbTables?: TableV2[];
   readonly edcIamEnvVars: { [key: string]: string };
   readonly infraConstructs: InfraConstructs;
+  readonly profile: DeploymentProfile;
 }
 
 export class ServiceConstructs extends Construct {
@@ -119,6 +121,7 @@ export class ServiceConstructs extends Construct {
       nlbOutputs: props.infraConstructs.nlbOutputs,
       policyMonitorIteration: props.controlPlanePolicyMonitorIteration,
       portMapping: props.controlPlanePortMapping,
+      profile: props.profile,
       taskRolePolicyStatements: policyStatements,
       vpc: props.infraConstructs.vpc,
     });
@@ -135,6 +138,7 @@ export class ServiceConstructs extends Construct {
       ),
       memoryLimitMiB: props.dataPlaneMemoryLimitMiB,
       nlbOutputs: props.infraConstructs.nlbOutputs,
+      profile: props.profile,
       taskRolePolicyStatements: policyStatements,
       vpc: props.infraConstructs.vpc,
     });

@@ -5,7 +5,7 @@ import { Construct } from "constructs";
 import { ApiGatewayDomain } from "aws-cdk-lib/aws-route53-targets";
 import { ARecord, IHostedZone, RecordTarget } from "aws-cdk-lib/aws-route53";
 import { ICertificate } from "aws-cdk-lib/aws-certificatemanager";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 
 import {
   Effect,
@@ -34,6 +34,8 @@ import {
   DataPlanePortMapping,
 } from "../config/port-mappings";
 
+import { DeploymentProfile } from "../config/environments";
+
 export interface EdcApiProps {
   readonly certificate?: ICertificate;
   readonly controlPlanePortMapping: ControlPlanePortMapping;
@@ -42,6 +44,7 @@ export interface EdcApiProps {
   readonly loadBalancerAddress: string;
   readonly managementApiPrincipals: IPrincipal[];
   readonly observabilityApiPrincipals: IPrincipal[];
+  readonly profile: DeploymentProfile;
   readonly vpcLinkId: string;
 }
 
@@ -55,6 +58,11 @@ export class EdcApi extends Construct {
 
   constructor(scope: Construct, id: string, props: EdcApiProps) {
     super(scope, id);
+
+    const logRetention =
+      props.profile === "production"
+        ? RetentionDays.ONE_MONTH
+        : RetentionDays.ONE_WEEK;
 
     let managementApiPolicy;
     if (props.managementApiPrincipals.length > 0) {
@@ -129,7 +137,9 @@ export class EdcApi extends Construct {
       deployOptions: {
         ...commonDeployOptions,
         accessLogDestination: new LogGroupLogDestination(
-          new LogGroup(this, "ObservabilityApiLogGroup"),
+          new LogGroup(this, "ObservabilityApiLogGroup", {
+            retention: logRetention,
+          }),
         ),
         stageName: observabilityApiPath,
       },
@@ -155,7 +165,9 @@ export class EdcApi extends Construct {
       deployOptions: {
         ...commonDeployOptions,
         accessLogDestination: new LogGroupLogDestination(
-          new LogGroup(this, "ManagementApiLogGroup"),
+          new LogGroup(this, "ManagementApiLogGroup", {
+            retention: logRetention,
+          }),
         ),
         stageName: managementApiPath,
       },
@@ -181,7 +193,9 @@ export class EdcApi extends Construct {
       deployOptions: {
         ...commonDeployOptions,
         accessLogDestination: new LogGroupLogDestination(
-          new LogGroup(this, "DspApiLogGroup"),
+          new LogGroup(this, "DspApiLogGroup", {
+            retention: logRetention,
+          }),
         ),
         stageName: dspApiPath,
       },
@@ -206,7 +220,9 @@ export class EdcApi extends Construct {
       deployOptions: {
         ...commonDeployOptions,
         accessLogDestination: new LogGroupLogDestination(
-          new LogGroup(this, "DataPlaneApiLogGroup"),
+          new LogGroup(this, "DataPlaneApiLogGroup", {
+            retention: logRetention,
+          }),
         ),
         stageName: dataPlaneApiPath,
       },

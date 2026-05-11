@@ -12,11 +12,14 @@ import {
   TaskDefinition,
 } from "aws-cdk-lib/aws-ecs";
 
+import { DeploymentProfile } from "../config/environments";
+
 export interface EdcFargateServiceProps {
   readonly cluster: ICluster;
   readonly containerName: string;
   readonly maxHealthyPercent?: number;
   readonly minHealthyPercent?: number;
+  readonly profile: DeploymentProfile;
   readonly securityGroups: ISecurityGroup[];
   readonly targetGroups: Map<number, INetworkTargetGroup>;
   readonly taskDefinition: TaskDefinition;
@@ -25,6 +28,10 @@ export interface EdcFargateServiceProps {
 export class EdcFargateService extends FargateService {
   constructor(scope: Construct, id: string, props: EdcFargateServiceProps) {
     super(scope, id, {
+      capacityProviderStrategies:
+        props.profile === "development"
+          ? [{ capacityProvider: "FARGATE_SPOT" }]
+          : undefined,
       circuitBreaker: { enable: true },
       cluster: props.cluster,
       maxHealthyPercent: props.maxHealthyPercent || 200,

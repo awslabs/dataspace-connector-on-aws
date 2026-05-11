@@ -4,7 +4,7 @@
 import { Construct } from "constructs";
 import { Stack } from "aws-cdk-lib";
 import { IRole, PolicyStatement } from "aws-cdk-lib/aws-iam";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 
 import { IVpc, Peer, Port, SecurityGroup } from "aws-cdk-lib/aws-ec2";
 
@@ -21,6 +21,7 @@ import { EdcNlbOutputs } from "./edc-nlb";
 import { EDC_SECRETS_MANAGER_ALIASES } from "../config/environments";
 import { EdcFargateService } from "./edc-fargate-service";
 import { ControlPlanePortMapping } from "../config/port-mappings";
+import { DeploymentProfile } from "../config/environments";
 
 export interface EdcControlPlaneProps {
   readonly apiAuthKey: string;
@@ -33,6 +34,7 @@ export interface EdcControlPlaneProps {
   readonly nlbOutputs: EdcNlbOutputs;
   readonly policyMonitorIteration: string;
   readonly portMapping: ControlPlanePortMapping;
+  readonly profile: DeploymentProfile;
   readonly taskRolePolicyStatements: PolicyStatement[];
   readonly vpc: IVpc;
 }
@@ -107,7 +109,12 @@ export class EdcControlPlane extends Construct {
       },
       image: props.image,
       logging: LogDriver.awsLogs({
-        logGroup: new LogGroup(this, "LogGroup"),
+        logGroup: new LogGroup(this, "LogGroup", {
+          retention:
+            props.profile === "production"
+              ? RetentionDays.ONE_MONTH
+              : RetentionDays.ONE_WEEK,
+        }),
         mode: AwsLogDriverMode.NON_BLOCKING,
         streamPrefix: "EdcControlPlane",
       }),
@@ -123,6 +130,7 @@ export class EdcControlPlane extends Construct {
     new EdcFargateService(this, "ControlPlaneFargateService", {
       cluster: props.cluster,
       containerName: containerName,
+      profile: props.profile,
       securityGroups: [securityGroup],
       targetGroups: props.nlbOutputs.controlPlaneTargetGroups,
       taskDefinition: taskDefinition,
