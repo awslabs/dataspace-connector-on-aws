@@ -16,9 +16,10 @@ import {
 import { InfraConstructs } from "./constructs/infra-constructs";
 import { ServiceConstructs } from "./constructs/service-constructs";
 
-import { DeploymentProfile } from "./config/environments";
+import { DeploymentProfile, Architecture } from "./config/environments";
 
 export interface DataspaceConnectorStackProps extends StackProps {
+  readonly architecture?: Architecture;
   readonly certificateArn?: string;
   readonly controlPlaneCpu: number;
   readonly controlPlaneMemoryLimitMiB: number;
@@ -68,6 +69,7 @@ export class DataspaceConnectorStack extends Stack {
     }
 
     const infraConstructs = new InfraConstructs(this, "Infra", {
+      architecture: props.architecture,
       certificate: certificate,
       controlPlanePortMapping: props.controlPlanePortMapping,
       dataPlanePortMapping: props.dataPlanePortMapping,
@@ -81,6 +83,7 @@ export class DataspaceConnectorStack extends Stack {
 
     new ServiceConstructs(this, "Service", {
       apiAuthKey: props.managementApiAuthKey,
+      architecture: props.architecture,
       controlPlaneCpu: props.controlPlaneCpu,
       controlPlaneMemoryLimitMiB: props.controlPlaneMemoryLimitMiB,
       controlPlanePolicyMonitorIteration:

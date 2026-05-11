@@ -14,7 +14,7 @@ The goal is to provide easy access to production-ready connector deployments wit
 
 **Prerequisites:** `corretto@17`, `docker`, `cdk`, `npm` and `node@24`
 
-Adjust the EDC and CDK configuration in [`environments.ts`](https://github.com/awslabs/dataspace-connector-on-aws/blob/main/cdk/lib/config/environments.ts) as needed. Provide your Catena-X membership information and technical user as outlined in the Cofinity-X Portal.
+Configure your deployment in [`cdk/lib/config/environments.ts`](cdk/lib/config/environments.ts) — see [Configuration](#configuration) for all available options.
 
 > [!IMPORTANT]
 > To use this open-source project, your company or organization must be onboarded to the Catena-X data space. Instructions on how to get started with your Catena-X journey [can be found here](https://catena-x.net/ecosystem/onboarding/).
@@ -47,10 +47,6 @@ This project includes tooling for AI-assisted deployment and operation of your c
 
 The stack supports two deployment profiles via the `profile` setting in [`environments.ts`](cdk/lib/config/environments.ts):
 
-```typescript
-profile: "development",  // or "production"
-```
-
 | Setting | `development` | `production` |
 |---------|--------------|--------------|
 | VPC Availability Zones | 1 (single NAT Gateway, single EIP) | 2 (HA with 2 NAT Gateways, 2 EIPs) |
@@ -73,6 +69,8 @@ These are rough estimates for a single idle connector in eu-central-1. Actual co
 
 The `development` profile is recommended for testing, development, and non-critical workloads. Use `production` for connectors that serve data to third-party consumers and require high availability.
 
+Setting `architecture: "arm64"` additionally reduces Fargate compute cost by ~20% (Graviton processors). This is independent of profile and stacks with Spot.
+
 ## Architecture
 
 ![architecture diagram](img/dataspace-connector-on-aws-architecture.png)
@@ -86,41 +84,52 @@ The `development` profile is recommended for testing, development, and non-criti
 
 ## Configuration
 
-### Custom Domain (Optional)
+All configuration is in [`cdk/lib/config/environments.ts`](cdk/lib/config/environments.ts). The file exports two objects: `edcIam` (Catena-X identity) and `DataspaceConnectorStackConfig` (AWS infrastructure).
 
-By default, the EDC APIs are exposed via auto-generated API Gateway URLs (e.g. `https://<api-id>.execute-api.<region>.amazonaws.com/protocol/`). To use your own domain instead, you need:
+### EDC Identity Configuration (`edcIam`)
 
-1. A [Route 53 hosted zone](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/CreatingHostedZone.html) for your domain
-2. An [ACM certificate](https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-public.html) in `us-east-1` (required for edge-optimized API Gateway endpoints, regardless of your stack's deployment region)
+These values are obtained from the [Cofinity-X Portal](https://portal.beta.cofinity-x.com/) after onboarding your organization to the Catena-X data space.
 
-Add these three values to your configuration in [`environments.ts`](cdk/lib/config/environments.ts):
+| Field | Description |
+|-------|-------------|
+| `tx.edc.iam.iatp.bdrs.server.url` | BPN/DID Resolution Service (BDRS) URL for resolving participant identities |
+| `tx.edc.iam.sts.dim.url` | Decentralized Identity Management (DIM) URL for IATP credential issuance |
+| `edc.iam.issuer.id` | Your connector's DID (Decentralized Identifier), issued by the Catena-X Portal |
+| `edc.iam.sts.oauth.client.id` | OAuth client ID for the DIM technical user |
+| `edc.iam.sts.oauth.token.url` | OAuth token endpoint for the DIM technical user |
+| `edc.participant.id` | Your connector's DID (same as `edc.iam.issuer.id` for Catena-X) |
+| `tractusx.edc.participant.bpn` | Your organization's Business Partner Number (BPN) |
+| `edc.iam.trusted-issuer.issuer-1.id` | DID of the trusted credential issuer (typically the Catena-X operator) |
 
-```typescript
-certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id>",
-domainName: "edc.example.com",
-hostedZoneId: "Z0123456789ABCDEFGHIJ",
-```
+> [!NOTE]
+> The OAuth client secret is stored separately in AWS Secrets Manager (not in code). After deployment, update the secret `edc.iam.sts.oauth.client.secret` via the AWS console.
 
-All three values are required when enabling a custom domain. This will:
-- Create an API Gateway custom domain with TLS 1.2
-- Create a Route 53 A record pointing to the API Gateway
-- Disable the default `execute-api` endpoints
-- Map all EDC APIs as base paths: `/status`, `/management`, `/protocol`, `/data`
-- Automatically configure the EDC's DSP callback and data plane public URLs to use your domain
+### Infrastructure Configuration (`DataspaceConnectorStackConfig`)
 
-### Management API Authentication
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `profile` | Yes | — | Deployment profile: `"development"` (single AZ, Spot, lower cost) or `"production"` (multi-AZ, On-Demand, HA). See [Deployment Profiles](#deployment-profiles). |
+| `architecture` | No | `"x86_64"` | CPU architecture: `"x86_64"` or `"arm64"` (Graviton, ~20% cheaper). |
+| `controlPlaneCpu` | Yes | — | CPU units for the Control Plane task (256 = 0.25 vCPU) |
+| `controlPlaneMemoryLimitMiB` | Yes | — | Memory in MiB for the Control Plane task (1024 recommended) |
+| `controlPlanePolicyMonitorIteration` | Yes | — | Policy monitor polling interval in milliseconds. Set to `"600000"` (10 min) to minimize DynamoDB read costs. EDC default is `"1000"` (1 sec). |
+| `controlPlanePortMapping` | Yes | — | Port mapping for the Control Plane. Use `CONTROL_PLANE_PORT_MAPPING_DEFAULT`. |
+| `dataPlaneCpu` | Yes | — | CPU units for the Data Plane task (256 = 0.25 vCPU) |
+| `dataPlaneMemoryLimitMiB` | Yes | — | Memory in MiB for the Data Plane task (512 recommended) |
+| `dataPlanePortMapping` | Yes | — | Port mapping for the Data Plane. Use `DATA_PLANE_PORT_MAPPING_DEFAULT`. |
+| `edcIam` | Yes | — | EDC identity configuration object (see table above) |
+| `edcStateRemovalPolicy` | Yes | — | CloudFormation removal policy for DynamoDB tables and S3. Use `RemovalPolicy.DESTROY` for dev, `RemovalPolicy.RETAIN` for prod. |
+| `managementApiAuthKey` | Yes | — | EDC-level API key for the Management API. Set to `""` if relying on IAM auth alone. |
+| `managementApiPrincipals` | Yes | — | IAM principals allowed to call the Management API (array of `ArnPrincipal`). |
+| `observabilityApiPrincipals` | Yes | — | IAM principals allowed to call the Observability/Health API. |
+| `vpcIpAddresses` | Yes | — | CIDR block for the VPC (e.g., `"10.0.10.0/24"`). |
+| `certificateArn` | No | — | ACM certificate ARN in `us-east-1` for custom domain. Requires `domainName` and `hostedZoneId`. |
+| `domainName` | No | — | Custom domain for EDC APIs (e.g., `"edc.example.com"`). |
+| `hostedZoneId` | No | — | Route 53 hosted zone ID for the custom domain. |
 
-This project uses a dual-layer security model for the EDC's Management API:
+### Custom Domain
 
-1. **API Gateway IAM Authorization** - All Management API endpoints require AWS SigV4 signed requests with valid IAM credentials. This is configured via `AWS_IAM` authorization in the API Gateway OpenAPI specification and controlled by the `managementApiPrincipals` setting in `environments.ts`.
-
-2. **EDC API Key** (Optional) - The `managementApiAuthKey` configuration can add an additional `x-api-key` header requirement at the EDC level. By default, this is set to an empty string (`""`) since API Gateway IAM authorization already provides strong authentication.
-
-### Policy Monitor State Machine
-
-The `controlPlanePolicyMonitorIteration` configuration controls how frequently the EDC policy monitor checks for state transitions in contract negotiations, policy evaluations, and transfer processes. Each polling cycle generates read requests against DynamoDB tables (ContractNegotiation, ContractAgreement, Policy, TransferProcess). With DynamoDB's pay-per-request pricing model, the polling frequency therefore directly affects operational costs.
-
-This project sets `controlPlanePolicyMonitorIteration` to 10 minutes (600000ms) by default, to minimize DynamoDB read costs in typical usage scenarios. This is longer than EDC's default of 1 second, trading faster state transition detection for lower operational costs.
+When all three optional fields (`certificateArn`, `domainName`, `hostedZoneId`) are provided, the stack creates an API Gateway custom domain with TLS 1.2, a Route 53 A record, and maps EDC APIs as base paths (`/status`, `/management`, `/protocol`, `/data`). The default `execute-api` endpoints are disabled. The ACM certificate must be in `us-east-1` regardless of stack region (API Gateway requirement for edge-optimized endpoints).
 
 ## Considerations
 
@@ -164,7 +173,6 @@ Stores credentials needed to access data sources and destinations during transfe
 * Configurable switch between DynamoDB and Aurora PostgreSQL for control plane persistance
 * Include examples for EDC assets, such as OAuth 2.0 and S3
 * Configurable control and data plane auto-scaling on ECS Service level
-* Graviton/ARM64 support for ~20% additional compute savings (requires build validation)
 * Scale-to-zero for consumer-only connectors (auto-scale ECS desired count to 0 when idle)
 * Create data plane extension to serve DynamoDB data as EDC asset
 * Allow for deployment of entire [Tractus-X Hausanschluss](https://github.com/eclipse-tractusx/tractus-x-umbrella/blob/main/docs/user/common/guides/hausanschluss-bundles.md) bundles, instead of Tractus-X EDC only

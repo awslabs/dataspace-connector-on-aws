@@ -11,13 +11,14 @@ import {
   DataPlanePortMapping,
 } from "../config/port-mappings";
 
-import { DeploymentProfile } from "../config/environments";
+import { DeploymentProfile, Architecture } from "../config/environments";
 import { InfraConstructs } from "./infra-constructs";
 import { EdcControlPlane } from "./edc-control-plane";
 import { EdcDataPlane } from "./edc-data-plane";
 
 export interface ServiceConstructsProps {
   readonly apiAuthKey: string;
+  readonly architecture?: Architecture;
   readonly controlPlaneCpu: number;
   readonly controlPlaneMemoryLimitMiB: number;
   readonly controlPlanePolicyMonitorIteration: string;
@@ -110,6 +111,7 @@ export class ServiceConstructs extends Construct {
 
     const controlPlane = new EdcControlPlane(scope, "ControlPlane", {
       apiAuthKey: props.apiAuthKey,
+      architecture: props.architecture,
       cluster: props.infraConstructs.ecsCluster,
       cpu: props.controlPlaneCpu,
       dspCallbackAddress: props.infraConstructs.api.outputs.dspUrl,
@@ -128,6 +130,7 @@ export class ServiceConstructs extends Construct {
 
     const dataPlane = new EdcDataPlane(scope, "DataPlane", {
       apiPublicUrl: props.infraConstructs.api.outputs.dataPlaneUrl,
+      architecture: props.architecture,
       cluster: props.infraConstructs.ecsCluster,
       controlPlanePortMapping: props.controlPlanePortMapping,
       cpu: props.dataPlaneCpu,

@@ -6,7 +6,12 @@ import { resolve } from "path";
 import { Construct } from "constructs";
 import { IPrincipal } from "aws-cdk-lib/aws-iam";
 import { CfnOutput, Duration, RemovalPolicy } from "aws-cdk-lib";
-import { GatewayVpcEndpointAwsService, IpAddresses, IVpc, Vpc } from "aws-cdk-lib/aws-ec2";
+import {
+  GatewayVpcEndpointAwsService,
+  IpAddresses,
+  IVpc,
+  Vpc,
+} from "aws-cdk-lib/aws-ec2";
 import { Cluster, ContainerInsights, ICluster } from "aws-cdk-lib/aws-ecs";
 import { Protocol } from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { Bucket, IBucket } from "aws-cdk-lib/aws-s3";
@@ -28,9 +33,10 @@ import { EdcDdb } from "./edc-ddb";
 import { EdcNlb, EdcNlbOutputs } from "./edc-nlb";
 import { EdcTokenKeyPair } from "./edc-token-key-pair";
 
-import { DeploymentProfile } from "../config/environments";
+import { DeploymentProfile, Architecture } from "../config/environments";
 
 export interface InfraConstructsProps {
+  readonly architecture?: Architecture;
   readonly certificate?: ICertificate;
   readonly controlPlanePortMapping: ControlPlanePortMapping;
   readonly dataPlanePortMapping: DataPlanePortMapping;
@@ -57,16 +63,21 @@ export class InfraConstructs extends Construct {
 
     // Build and push EDC container images
 
+    const imagePlatform =
+      props.architecture === "arm64"
+        ? Platform.LINUX_ARM64
+        : Platform.LINUX_AMD64;
+
     const controlPlaneDir = resolve(__dirname, "../../../edc/control-plane");
     this.controlPlaneImage = new DockerImageAsset(scope, "ControlPlaneImage", {
       directory: controlPlaneDir,
-      platform: Platform.LINUX_AMD64,
+      platform: imagePlatform,
     });
 
     const dataPlaneDir = resolve(__dirname, "../../../edc/data-plane");
     this.dataPlaneImage = new DockerImageAsset(scope, "DataPlaneImage", {
       directory: dataPlaneDir,
-      platform: Platform.LINUX_AMD64,
+      platform: imagePlatform,
     });
 
     // Create DynamoDB tables for EDC

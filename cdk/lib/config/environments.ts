@@ -6,6 +6,7 @@ import { ArnPrincipal } from "aws-cdk-lib/aws-iam";
 import { DataspaceConnectorStackProps } from "../dataspace-connector-stack";
 
 export type DeploymentProfile = "development" | "production";
+export type Architecture = "x86_64" | "arm64";
 
 import {
   CONTROL_PLANE_PORT_MAPPING_DEFAULT,
@@ -57,6 +58,7 @@ export const DataspaceConnectorStackConfig: DataspaceConnectorStackProps = {
   // certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id>",
   // domainName: "edc.example.com",
   // hostedZoneId: "Z0123456789ABCDEFGHIJ",
+  architecture: "arm64",
   controlPlaneCpu: 256,
   controlPlaneMemoryLimitMiB: 1024,
   controlPlanePolicyMonitorIteration: "600000", // Run every 10 minutes
