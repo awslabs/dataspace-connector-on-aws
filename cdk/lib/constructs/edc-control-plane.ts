@@ -83,7 +83,7 @@ export class EdcControlPlane extends Construct {
         "edc.hostname": props.nlbOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",
         "edc.iam.sts.oauth.client.secret.alias":
-          EDC_SECRETS_MANAGER_ALIASES.OAUTH_CLIENT_SECRET,
+          EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS,
         "edc.policy.monitor.state-machine.iteration-wait-millis":
           props.policyMonitorIteration,
         "edc.runtime.id": id,
@@ -96,6 +96,7 @@ export class EdcControlPlane extends Construct {
           EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY,
 
         ...props.edcIamEnvVars,
+        "edc.participant.id": props.edcIamEnvVars["edc.iam.issuer.id"],
 
         "web.http.port": `${props.portMapping.default}`,
         "web.http.path": "/api",

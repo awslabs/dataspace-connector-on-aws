@@ -14,37 +14,36 @@ import {
 } from "./port-mappings";
 
 export const EDC_IAM_ENVIRONMENT_VARIABLE_KEYS = {
+  TRUSTED_ISSUER: "edc.iam.trusted-issuer.issuer-1.id",
+  DCP_STS_OAUTH_TOKEN_URL: "edc.iam.sts.oauth.token.url",
+  DCP_STS_OAUTH_CLIENT_ID: "edc.iam.sts.oauth.client.id",
+  DCP_STS_DIM_URL: "tx.edc.iam.sts.dim.url",
+  PARTICIPANT_ID: "tractusx.edc.participant.bpn",
+  DCP_ID: "edc.iam.issuer.id",
   DID_RESOLVER: "tx.edc.iam.iatp.bdrs.server.url",
-  DIM_URL: "tx.edc.iam.sts.dim.url",
-  IATP_ID: "edc.iam.issuer.id",
-  OAUTH_CLIENT_ID: "edc.iam.sts.oauth.client.id",
-  OAUTH_TOKEN_URL: "edc.iam.sts.oauth.token.url",
-  PARTICIPANT_ID: "edc.participant.id",
-  PARTICIPANT_BPN: "tractusx.edc.participant.bpn",
-  TRUSTED_ISSUER_ID: "edc.iam.trusted-issuer.issuer-1.id",
 };
 
 export const EDC_SECRETS_MANAGER_ALIASES = {
-  OAUTH_CLIENT_SECRET: "edc.iam.sts.oauth.client.secret",
+  DCP_STS_OAUTH_CLIENT_SECRET_ALIAS: "edc.iam.sts.oauth.client.secret",
   TOKEN_SIGNER_PRIVATE_KEY: "edc.transfer.proxy.token.signer.privatekey",
   TOKEN_VERIFIER_PUBLIC_KEY: "edc.transfer.proxy.token.verifier.publickey",
 };
 
 /**
- * Enter EDC configuration values obtained from Cofinity-X Portal below.
+ * Enter EDC configuration values obtained from the Cofinity-X Portal below.
  *
- * This includes the client ID of the technical user the deployed EDC should use.
+ * The keys match the labels shown in the portal's "Configure Your Connector" dialog under https://portal.beta.cofinity-x.com/connectorManagement.
+ * Copy-paste the values directly from the portal into this configuration.
  */
 
 const edcIam = {
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DID_RESOLVER]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DIM_URL]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.IATP_ID]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.OAUTH_CLIENT_ID]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.OAUTH_TOKEN_URL]: "",
+  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.TRUSTED_ISSUER]: "",
+  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_OAUTH_TOKEN_URL]: "",
+  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_OAUTH_CLIENT_ID]: "",
+  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_DIM_URL]: "",
   [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.PARTICIPANT_ID]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.PARTICIPANT_BPN]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.TRUSTED_ISSUER_ID]: "",
+  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_ID]: "",
+  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DID_RESOLVER]: "",
 };
 
 /**

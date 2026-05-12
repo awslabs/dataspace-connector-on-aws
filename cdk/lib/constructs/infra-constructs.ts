@@ -164,7 +164,7 @@ export class InfraConstructs extends Construct {
     // Create empty EDC OAuth client secret
 
     const oauthClientSecret = new Secret(scope, "EdcOauthClientSecret", {
-      secretName: EDC_SECRETS_MANAGER_ALIASES.OAUTH_CLIENT_SECRET,
+      secretName: EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS,
       description: "EDC OAuth client secret from Cofinity-X Portal",
     });
 

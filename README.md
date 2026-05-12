@@ -88,21 +88,20 @@ All configuration is in [`cdk/lib/config/environments.ts`](cdk/lib/config/enviro
 
 ### EDC Identity Configuration (`edcIam`)
 
-These values are obtained from the [Cofinity-X Portal](https://portal.beta.cofinity-x.com/) after onboarding your organization to the Catena-X data space.
+These values are obtained from the [Cofinity-X Portal](https://portal.beta.cofinity-x.com/) after onboarding your organization to the Catena-X data space. The field names match the portal's "Configure Your Connector" dialog — copy-paste values directly.
 
-| Field | Description |
-|-------|-------------|
-| `tx.edc.iam.iatp.bdrs.server.url` | BPN/DID Resolution Service (BDRS) URL for resolving participant identities |
-| `tx.edc.iam.sts.dim.url` | Decentralized Identity Management (DIM) URL for IATP credential issuance |
-| `edc.iam.issuer.id` | Your connector's DID (Decentralized Identifier), issued by the Catena-X Portal |
-| `edc.iam.sts.oauth.client.id` | OAuth client ID for the DIM technical user |
-| `edc.iam.sts.oauth.token.url` | OAuth token endpoint for the DIM technical user |
-| `edc.participant.id` | Your connector's DID (same as `edc.iam.issuer.id` for Catena-X) |
-| `tractusx.edc.participant.bpn` | Your organization's Business Partner Number (BPN) |
-| `edc.iam.trusted-issuer.issuer-1.id` | DID of the trusted credential issuer (typically the Catena-X operator) |
+| Field | Portal Label | Description |
+|-------|-------------|-------------|
+| `TRUSTED_ISSUER` | trusted_issuer | DID of the trusted credential issuer (the Catena-X operator) |
+| `DCP_STS_OAUTH_TOKEN_URL` | dcp.sts.oauth.token_url | Token endpoint of the Decentralized Identity Management (DIM) instance |
+| `DCP_STS_OAUTH_CLIENT_ID` | dcp.sts.oauth.client.id | Technical user client ID for the specific connector (one per connector) |
+| `DCP_STS_DIM_URL` | dcp.sts.dim.url | Base URL of your Decentralized Identity Management instance |
+| `PARTICIPANT_ID` | participant_id | Your organization's Business Partner Number (BPN) |
+| `DCP_ID` | dcp.id | Your connector's Decentralized Identifier (DID) |
+| `DID_RESOLVER` | DID Resolver | BPN/DID Resolution Service (BDRS) URL for resolving participant identities |
 
 > [!NOTE]
-> The OAuth client secret is stored separately in AWS Secrets Manager (not in code). After deployment, update the secret `edc.iam.sts.oauth.client.secret` via the AWS console.
+> The OAuth client secret (`dcp.sts.oauth.client.secret_alias` in the portal) is stored in AWS Secrets Manager, not in code. After deployment, update the secret `edc.iam.sts.oauth.client.secret` via the AWS console.
 
 ### Infrastructure Configuration (`DataspaceConnectorStackConfig`)
 

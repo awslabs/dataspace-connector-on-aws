@@ -30,7 +30,7 @@ export class EdcFargateService extends FargateService {
     super(scope, id, {
       capacityProviderStrategies:
         props.profile === "development"
-          ? [{ capacityProvider: "FARGATE_SPOT" }]
+          ? [{ capacityProvider: "FARGATE_SPOT", weight: 1 }]
           : undefined,
       circuitBreaker: { enable: true },
       cluster: props.cluster,
