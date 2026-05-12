@@ -14,8 +14,10 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
+import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.keyFromId
 import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromNumber
 import software.amazon.edc.extensions.common.ddb.utility.toPredicate
 import software.amazon.edc.extensions.controlplane.ddb.types.TransferProcess
 import software.amazon.edc.extensions.controlplane.ddb.types.toDdbTransferProcess
@@ -38,6 +40,7 @@ class DdbTransferProcessStore(
     ),
     TransferProcessStore {
     private val correlationIdIndex = table.index(TransferProcess.INDEX_CORRELATION_ID)
+    private val stateIndex = table.index(TransferProcess.INDEX_STATE)
     private val queryResolver = ReflectionBasedQueryResolver(EdcTransferProcess::class.java, criterionOperatorRegistry)
 
     override fun findById(id: String): EdcTransferProcess? = getTransferProcess(id)?.toEdcTransferProcess(objectMapper)
@@ -47,11 +50,17 @@ class DdbTransferProcessStore(
         vararg criteria: Criterion,
     ): MutableList<EdcTransferProcess> {
         val predicate = criteria.toList().toPredicate<Any>(criterionOperatorRegistry)
-        return table
-            .scan()
-            .items()
-            .asSequence()
-            .filterNot { hasLease(it.id) }
+        val stateValues = criteria.extractStateValues()
+        val items =
+            if (stateValues != null) {
+                stateValues
+                    .flatMap { stateIndex.query(queryRequestFromNumber(it)).flatMap { page -> page.items() } }
+                    .asSequence()
+            } else {
+                table.scan().items().asSequence()
+            }
+        return items
+            .filterNot { hasActiveLease(it) }
             .map { it.toEdcTransferProcess(objectMapper) }
             .filter { predicate.test(it) }
             .sortedBy { it.stateTimestamp }

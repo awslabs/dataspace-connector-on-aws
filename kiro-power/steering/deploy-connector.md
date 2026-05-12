@@ -160,18 +160,17 @@ Only modify if the user explicitly asks.
 Tell the user:
 > "Configuration is complete. I'll now run the deployment. This will build the EDC Java artifacts, install CDK dependencies, bootstrap your AWS account (if needed), and deploy the CloudFormation stack. This typically takes 10-15 minutes."
 
-IMPORTANT: `deploy.sh` is a long-running process (10-15+ minutes). Start it as a background process so you can monitor progress without blocking. The script reads `AWS_PROFILE` and `AWS_REGION` from the environment (with `eu-central-1` as the default region). Set the profile before running:
+IMPORTANT: `deploy.sh` is a long-running process (10-15+ minutes). Start it as a background process so you can monitor progress without blocking. The script requires `AWS_PROFILE` and `AWS_REGION` as environment variables — if either is missing, it will prompt interactively, which blocks agent-driven deployments.
+
+ALWAYS export BOTH variables before running the script:
 
 ```bash
 export AWS_PROFILE=<deployment-profile>
+export AWS_REGION=<chosen-region>
 ./deploy.sh
 ```
 
-If a different region was chosen in Phase 2, also set it:
-
-```bash
-export AWS_REGION=<chosen-region>
-```
+Use the profile identified in Phase 1 and the region chosen in Phase 2 (default: `eu-central-1`).
 
 Poll the process output at 30-second intervals to monitor progress. Do NOT poll more frequently — rapid polling generates excessive tool calls and can cause the agent to stall or hit context limits on long deployments. The deployment has these major phases:
 1. Gradle build (~30s) — look for `BUILD SUCCESSFUL`

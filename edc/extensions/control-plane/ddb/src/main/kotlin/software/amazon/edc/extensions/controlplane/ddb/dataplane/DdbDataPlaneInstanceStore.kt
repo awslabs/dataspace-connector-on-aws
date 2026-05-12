@@ -13,8 +13,10 @@ import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDa
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
+import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
 import software.amazon.edc.extensions.common.ddb.utility.keyFromId
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromNumber
 import software.amazon.edc.extensions.common.ddb.utility.toScanRequest
 import software.amazon.edc.extensions.controlplane.ddb.types.DataPlaneInstance
 import software.amazon.edc.extensions.controlplane.ddb.types.toDdbDataPlaneInstance
@@ -34,6 +36,8 @@ class DdbDataPlaneInstanceStore(
         leaseTable = leaseTable,
     ),
     DataPlaneInstanceStore {
+    private val stateIndex = table.index(DataPlaneInstance.INDEX_STATE)
+
     override fun findById(id: String): EdcDataPlaneInstance? = getDataPlaneInstance(id)?.toEdcDataPlaneInstance()
 
     override fun nextNotLeased(
@@ -48,11 +52,17 @@ class DdbDataPlaneInstanceStore(
                 .sortOrder(SortOrder.ASC)
                 .limit(max)
                 .build()
-        return table
-            .scan(querySpec.toScanRequest())
-            .items()
-            .asSequence()
-            .filterNot { hasLease(it.id) }
+        val stateValues = criteria.extractStateValues()
+        val items =
+            if (stateValues != null) {
+                stateValues
+                    .flatMap { stateIndex.query(queryRequestFromNumber(it)).flatMap { page -> page.items() } }
+                    .asSequence()
+            } else {
+                table.scan(querySpec.toScanRequest()).items().asSequence()
+            }
+        return items
+            .filterNot { hasActiveLease(it) }
             .sortedWith(querySpec.getGenericPropertyComparator())
             .applyOffsetAndLimit(querySpec)
             .onEach { acquireLease(it) }

@@ -7,6 +7,7 @@ import org.eclipse.edc.connector.policy.monitor.spi.PolicyMonitorEntry
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttribute
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 
 @DynamoDbBean
@@ -23,6 +24,7 @@ data class PolicyMonitor(
     @get:DynamoDbAttribute(LEASE_ID)
     override var leaseId: String? = null,
     @get:DynamoDbAttribute(STATE)
+    @get:DynamoDbSecondaryPartitionKey(indexNames = [INDEX_STATE])
     var state: Int = 0,
     @get:DynamoDbAttribute(STATE_COUNT)
     var stateCount: Int = 0,
@@ -60,6 +62,7 @@ data class PolicyMonitor(
         const val TRACE_CONTEXT = "traceContext"
         const val UPDATED_AT = "updatedAt"
 
+        const val INDEX_STATE = "index-state"
         const val TABLE_NAME = "PolicyMonitors"
     }
 }

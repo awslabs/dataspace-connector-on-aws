@@ -111,7 +111,7 @@ These values are obtained from the [Cofinity-X Portal](https://portal.beta.cofin
 | `architecture` | No | `"x86_64"` | CPU architecture: `"x86_64"` or `"arm64"` (Graviton, ~20% cheaper). |
 | `controlPlaneCpu` | Yes | — | CPU units for the Control Plane task (256 = 0.25 vCPU) |
 | `controlPlaneMemoryLimitMiB` | Yes | — | Memory in MiB for the Control Plane task (1024 recommended) |
-| `controlPlanePolicyMonitorIteration` | Yes | — | Policy monitor polling interval in milliseconds. Set to `"600000"` (10 min) to minimize DynamoDB read costs. EDC default is `"1000"` (1 sec). |
+| `stateMachineIterationMillis` | Yes | `"60000"` | Polling interval for all EDC state machine processors (ms). Lower values detect state changes faster but increase DynamoDB reads. |
 | `controlPlanePortMapping` | Yes | — | Port mapping for the Control Plane. Use `CONTROL_PLANE_PORT_MAPPING_DEFAULT`. |
 | `dataPlaneCpu` | Yes | — | CPU units for the Data Plane task (256 = 0.25 vCPU) |
 | `dataPlaneMemoryLimitMiB` | Yes | — | Memory in MiB for the Data Plane task (512 recommended) |

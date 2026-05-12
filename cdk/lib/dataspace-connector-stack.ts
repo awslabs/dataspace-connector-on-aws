@@ -23,7 +23,7 @@ export interface DataspaceConnectorStackProps extends StackProps {
   readonly certificateArn?: string;
   readonly controlPlaneCpu: number;
   readonly controlPlaneMemoryLimitMiB: number;
-  readonly controlPlanePolicyMonitorIteration: string;
+  readonly stateMachineIterationMillis: string;
   readonly controlPlanePortMapping: ControlPlanePortMapping;
   readonly dataPlaneCpu: number;
   readonly dataPlaneMemoryLimitMiB: number;
@@ -86,8 +86,7 @@ export class DataspaceConnectorStack extends Stack {
       architecture: props.architecture,
       controlPlaneCpu: props.controlPlaneCpu,
       controlPlaneMemoryLimitMiB: props.controlPlaneMemoryLimitMiB,
-      controlPlanePolicyMonitorIteration:
-        props.controlPlanePolicyMonitorIteration,
+      stateMachineIterationMillis: props.stateMachineIterationMillis,
       controlPlanePortMapping: props.controlPlanePortMapping,
       dataPlaneCpu: props.dataPlaneCpu,
       dataPlaneMemoryLimitMiB: props.dataPlaneMemoryLimitMiB,

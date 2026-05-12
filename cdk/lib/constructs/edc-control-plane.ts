@@ -33,7 +33,7 @@ export interface EdcControlPlaneProps {
   readonly image: ContainerImage;
   readonly memoryLimitMiB: number;
   readonly nlbOutputs: EdcNlbOutputs;
-  readonly policyMonitorIteration: string;
+  readonly stateMachineIterationMillis: string;
   readonly portMapping: ControlPlanePortMapping;
   readonly profile: DeploymentProfile;
   readonly taskRolePolicyStatements: PolicyStatement[];
@@ -84,8 +84,14 @@ export class EdcControlPlane extends Construct {
         "edc.iam.did.web.use.https": "true",
         "edc.iam.sts.oauth.client.secret.alias":
           EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS,
+        "edc.negotiation.consumer.state-machine.iteration-wait-millis":
+          props.stateMachineIterationMillis,
+        "edc.negotiation.provider.state-machine.iteration-wait-millis":
+          props.stateMachineIterationMillis,
         "edc.policy.monitor.state-machine.iteration-wait-millis":
-          props.policyMonitorIteration,
+          props.stateMachineIterationMillis,
+        "edc.transfer.state-machine.iteration-wait-millis":
+          props.stateMachineIterationMillis,
         "edc.runtime.id": id,
         "edc.vault.aws.region": Stack.of(this).region,
 

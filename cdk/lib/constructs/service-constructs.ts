@@ -21,7 +21,7 @@ export interface ServiceConstructsProps {
   readonly architecture?: Architecture;
   readonly controlPlaneCpu: number;
   readonly controlPlaneMemoryLimitMiB: number;
-  readonly controlPlanePolicyMonitorIteration: string;
+  readonly stateMachineIterationMillis: string;
   readonly controlPlanePortMapping: ControlPlanePortMapping;
   readonly dataPlaneCpu: number;
   readonly dataPlaneMemoryLimitMiB: number;
@@ -121,7 +121,7 @@ export class ServiceConstructs extends Construct {
       ),
       memoryLimitMiB: props.controlPlaneMemoryLimitMiB,
       nlbOutputs: props.infraConstructs.nlbOutputs,
-      policyMonitorIteration: props.controlPlanePolicyMonitorIteration,
+      stateMachineIterationMillis: props.stateMachineIterationMillis,
       portMapping: props.controlPlanePortMapping,
       profile: props.profile,
       taskRolePolicyStatements: policyStatements,
@@ -142,6 +142,7 @@ export class ServiceConstructs extends Construct {
       memoryLimitMiB: props.dataPlaneMemoryLimitMiB,
       nlbOutputs: props.infraConstructs.nlbOutputs,
       profile: props.profile,
+      stateMachineIterationMillis: props.stateMachineIterationMillis,
       taskRolePolicyStatements: policyStatements,
       vpc: props.infraConstructs.vpc,
     });

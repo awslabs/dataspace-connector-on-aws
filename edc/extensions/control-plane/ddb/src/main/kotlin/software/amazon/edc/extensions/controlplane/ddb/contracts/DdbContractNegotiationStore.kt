@@ -16,9 +16,11 @@ import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDa
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
+import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
 import software.amazon.edc.extensions.common.ddb.utility.hasProperty
 import software.amazon.edc.extensions.common.ddb.utility.keyFromId
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromNumber
 import software.amazon.edc.extensions.common.ddb.utility.registerConstraintSubtypes
 import software.amazon.edc.extensions.common.ddb.utility.toScanRequest
 import software.amazon.edc.extensions.controlplane.ddb.types.ContractAgreement
@@ -47,6 +49,7 @@ class DdbContractNegotiationStore(
     ContractNegotiationStore {
     private val negotiationQueryResolver =
         ReflectionBasedQueryResolver(EdcContractNegotiation::class.java, criterionOperatorRegistry)
+    private val stateIndex = contractNegotiationTable.index(ContractNegotiation.INDEX_STATE)
 
     override fun findById(id: String): EdcContractNegotiation? {
         val contractNegotiation = getContractNegotiation(id) ?: return null
@@ -66,12 +69,17 @@ class DdbContractNegotiationStore(
                 .sortOrder(SortOrder.ASC)
                 .limit(max)
                 .build()
-        val request = querySpec.toScanRequest()
-        return contractNegotiationTable
-            .scan(request)
-            .items()
-            .asSequence()
-            .filterNot { hasLease(it.id) }
+        val stateValues = criteria.extractStateValues()
+        val items: Sequence<ContractNegotiation> =
+            if (stateValues != null) {
+                stateValues
+                    .flatMap { state -> stateIndex.query(queryRequestFromNumber(state)).flatMap { page -> page.items() } }
+                    .asSequence()
+            } else {
+                contractNegotiationTable.scan(querySpec.toScanRequest()).items().asSequence()
+            }
+        return items
+            .filterNot { hasActiveLease(it) }
             .sortedBy { it.id } // Required by EDC tests
             .sortedWith(querySpec.getGenericPropertyComparator())
             .map {

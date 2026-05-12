@@ -60,7 +60,7 @@ export const DataspaceConnectorStackConfig: DataspaceConnectorStackProps = {
   architecture: "arm64",
   controlPlaneCpu: 256,
   controlPlaneMemoryLimitMiB: 1024,
-  controlPlanePolicyMonitorIteration: "600000", // Run every 10 minutes
+  stateMachineIterationMillis: "60000", // State machine poll interval (default: 60s)
   controlPlanePortMapping: CONTROL_PLANE_PORT_MAPPING_DEFAULT,
   dataPlaneCpu: 256,
   dataPlaneMemoryLimitMiB: 512,

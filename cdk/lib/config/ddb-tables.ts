@@ -26,6 +26,13 @@ const INDEX_CORRELATION_ID: GlobalSecondaryIndexPropsV2 = {
     type: AttributeType.STRING,
   },
 };
+const INDEX_STATE: GlobalSecondaryIndexPropsV2 = {
+  indexName: "index-state",
+  partitionKey: {
+    name: "state",
+    type: AttributeType.NUMBER,
+  },
+};
 
 export const DDB_TABLES: EdcTableProps[] = [
   {
@@ -51,15 +58,17 @@ export const DDB_TABLES: EdcTableProps[] = [
   {
     tableName: "ContractNegotiations",
     partitionKey: COMMON_PARTITION_KEY,
-    globalSecondaryIndexes: [INDEX_CORRELATION_ID],
+    globalSecondaryIndexes: [INDEX_CORRELATION_ID, INDEX_STATE],
   },
   {
     tableName: "DataFlows",
     partitionKey: COMMON_PARTITION_KEY,
+    globalSecondaryIndexes: [INDEX_STATE],
   },
   {
     tableName: "DataPlaneInstances",
     partitionKey: COMMON_PARTITION_KEY,
+    globalSecondaryIndexes: [INDEX_STATE],
   },
   {
     tableName: "EdrEntries",
@@ -76,10 +85,11 @@ export const DDB_TABLES: EdcTableProps[] = [
   {
     tableName: "PolicyMonitors",
     partitionKey: COMMON_PARTITION_KEY,
+    globalSecondaryIndexes: [INDEX_STATE],
   },
   {
     tableName: "TransferProcesses",
     partitionKey: COMMON_PARTITION_KEY,
-    globalSecondaryIndexes: [INDEX_CORRELATION_ID],
+    globalSecondaryIndexes: [INDEX_CORRELATION_ID, INDEX_STATE],
   },
 ];

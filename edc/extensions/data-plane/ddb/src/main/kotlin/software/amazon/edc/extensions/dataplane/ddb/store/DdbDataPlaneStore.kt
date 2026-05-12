@@ -13,8 +13,10 @@ import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDa
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
+import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
 import software.amazon.edc.extensions.common.ddb.utility.keyFromId
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromNumber
 import software.amazon.edc.extensions.common.ddb.utility.toScanRequest
 import software.amazon.edc.extensions.dataplane.ddb.types.DataFlow
 import software.amazon.edc.extensions.dataplane.ddb.types.toDdbDataFlow
@@ -32,6 +34,8 @@ class DdbDataPlaneStore(
         leaseTable = leaseTable,
     ),
     DataPlaneStore {
+    private val stateIndex = table.index(DataFlow.INDEX_STATE)
+
     override fun findById(id: String): EdcDataFlow? = getDataFlow(id)?.toEdcDataFlow()
 
     override fun nextNotLeased(
@@ -46,12 +50,17 @@ class DdbDataPlaneStore(
                 .sortOrder(SortOrder.ASC)
                 .limit(max)
                 .build()
-        val request = querySpec.toScanRequest()
-        return table
-            .scan(request)
-            .items()
-            .asSequence()
-            .filterNot { hasLease(it.id) }
+        val stateValues = criteria.extractStateValues()
+        val items =
+            if (stateValues != null) {
+                stateValues
+                    .flatMap { stateIndex.query(queryRequestFromNumber(it)).flatMap { page -> page.items() } }
+                    .asSequence()
+            } else {
+                table.scan(querySpec.toScanRequest()).items().asSequence()
+            }
+        return items
+            .filterNot { hasActiveLease(it) }
             .sortedWith(querySpec.getGenericPropertyComparator())
             .map {
                 acquireLease(it)
