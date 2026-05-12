@@ -172,9 +172,8 @@ Stores credentials needed to access data sources and destinations during transfe
 * Configurable switch between DynamoDB and Aurora PostgreSQL for control plane persistance
 * Include examples for EDC assets, such as OAuth 2.0 and S3
 * Configurable control and data plane auto-scaling on ECS Service level
-* Scale-to-zero for consumer-only connectors (auto-scale ECS desired count to 0 when idle)
 * Create data plane extension to serve DynamoDB data as EDC asset
-* Allow for deployment of entire [Tractus-X Hausanschluss](https://github.com/eclipse-tractusx/tractus-x-umbrella/blob/main/docs/user/common/guides/hausanschluss-bundles.md) bundles, instead of Tractus-X EDC only
+* Allow for deployment of Digital Twin Registry (DTR) or entire [Tractus-X Hausanschluss](https://github.com/eclipse-tractusx/tractus-x-umbrella/blob/main/docs/user/common/guides/hausanschluss-bundles.md)
 
 ## Security
 
