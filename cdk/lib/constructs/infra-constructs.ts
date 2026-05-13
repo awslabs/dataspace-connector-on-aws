@@ -32,6 +32,7 @@ import { EdcApi } from "./edc-api";
 import { EdcDdb } from "./edc-ddb";
 import { EdcNlb, EdcNlbOutputs } from "./edc-nlb";
 import { EdcTokenKeyPair } from "./edc-token-key-pair";
+import { EdcSecretCleanup } from "./edc-secret-cleanup";
 
 import { DeploymentProfile } from "../config/environments";
 
@@ -171,6 +172,8 @@ export class InfraConstructs extends Construct {
       publicKeySecretName:
         EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY,
     });
+
+    new EdcSecretCleanup(scope, "EdcSecretCleanup");
 
     new CfnOutput(scope, "EdcOauthClientSecretArn", {
       value: oauthClientSecret.secretArn,
