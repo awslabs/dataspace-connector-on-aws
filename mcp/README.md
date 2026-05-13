@@ -48,19 +48,23 @@ Set these environment variables:
 # EDC Management API endpoint (default: http://localhost:8080/management)
 export EDC_MANAGEMENT_URL="https://your-edc-instance.com/management"
 
-# Required: API key for EDC authentication
+# Optional: EDC API key authentication (for standard EDC deployments)
 export EDC_API_KEY="your-api-key"
 
-# Optional: Enable AWS IAM authentication for API Gateway
+# Optional: Enable AWS IAM authentication for API Gateway (for Dataspace Connector on AWS deployments)
 export EDC_USE_AWS_IAM="true"
 export AWS_REGION="us-east-1"
 ```
 
-### AWS IAM Authentication
+### Authentication Modes
 
-When deploying EDC behind Amazon API Gateway with IAM authorization, you need both:
-1. **X-Api-Key header** - For EDC authentication (always required, even if set to an empty value)
-2. **AWS SigV4 signing** - For API Gateway authorization (when `EDC_USE_AWS_IAM=true`)
+The MCP server supports two authentication modes that can be used independently or combined:
+
+1. **EDC API Key** (`EDC_API_KEY`) — Sends an `X-Api-Key` header with each request. Used by standard EDC deployments that enable token-based authentication. Only included when the value is non-empty.
+
+2. **AWS SigV4** (`EDC_USE_AWS_IAM=true`) — Signs all requests with AWS SigV4 for API Gateway IAM authorization. Used when the EDC Management API is deployed behind Amazon API Gateway (as in this project).
+
+For this project's deployment, only SigV4 is needed (`EDC_USE_AWS_IAM=true`, no `EDC_API_KEY`). For other EDC deployments, set `EDC_API_KEY` and leave `EDC_USE_AWS_IAM` unset.
 
 The server uses boto3's standard credential chain:
 - Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
@@ -74,7 +78,7 @@ Make sure your AWS credentials have `execute-api:Invoke` permission for the API 
 
 ## Usage with Kiro
 
-### Local Development (no AWS IAM)
+### Standard EDC Deployment (API Key auth)
 
 Add to your `.kiro/settings/mcp.json`:
 
@@ -90,15 +94,15 @@ Add to your `.kiro/settings/mcp.json`:
         "dataspace-connector-mcp"
       ],
       "env": {
-        "EDC_MANAGEMENT_URL": "http://localhost:8080/management",
-        "EDC_API_KEY": "password"
+        "EDC_MANAGEMENT_URL": "http://your-edc-host:8182/management",
+        "EDC_API_KEY": "your-api-key"
       }
     }
   }
 }
 ```
 
-### AWS Deployment (with API Gateway IAM)
+### Dataspace Connector on AWS Deployment (API Gateway with IAM auth)
 
 ```json
 {
@@ -113,7 +117,6 @@ Add to your `.kiro/settings/mcp.json`:
       ],
       "env": {
         "EDC_MANAGEMENT_URL": "https://<api-id>.execute-api.<aws-region>.amazonaws.com/management",
-        "EDC_API_KEY": "password",
         "EDC_USE_AWS_IAM": "true",
         "AWS_REGION": "us-east-1",
         "AWS_PROFILE": ""

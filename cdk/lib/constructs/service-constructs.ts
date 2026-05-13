@@ -17,7 +17,6 @@ import { EdcControlPlane } from "./edc-control-plane";
 import { EdcDataPlane } from "./edc-data-plane";
 
 export interface ServiceConstructsProps {
-  readonly apiAuthKey: string;
   readonly controlPlaneCpu: number;
   readonly controlPlaneMemoryLimitMiB: number;
   readonly stateMachineIterationMillis: string;
@@ -109,7 +108,6 @@ export class ServiceConstructs extends Construct {
     }
 
     const controlPlane = new EdcControlPlane(scope, "ControlPlane", {
-      apiAuthKey: props.apiAuthKey,
       cluster: props.infraConstructs.ecsCluster,
       cpu: props.controlPlaneCpu,
       dspCallbackAddress: props.infraConstructs.api.outputs.dspUrl,

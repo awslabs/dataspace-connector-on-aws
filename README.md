@@ -115,7 +115,6 @@ These values are obtained from the [Cofinity-X Portal](https://portal.beta.cofin
 | `dataPlanePortMapping` | Yes | — | Port mapping for the Data Plane. Use `DATA_PLANE_PORT_MAPPING_DEFAULT`. |
 | `edcIam` | Yes | — | EDC identity configuration object (see table above) |
 | `edcStateRemovalPolicy` | Yes | — | CloudFormation removal policy for DynamoDB tables and S3. Use `RemovalPolicy.DESTROY` for dev, `RemovalPolicy.RETAIN` for prod. |
-| `managementApiAuthKey` | Yes | — | EDC-level API key for the Management API. Set to `""` if relying on IAM auth alone. |
 | `managementApiPrincipals` | Yes | — | IAM principals allowed to call the Management API (array of `ArnPrincipal`). |
 | `observabilityApiPrincipals` | Yes | — | IAM principals allowed to call the Observability/Health API. |
 | `vpcIpAddresses` | Yes | — | CIDR block for the VPC (e.g., `"10.0.10.0/24"`). |
@@ -166,7 +165,7 @@ Stores credentials needed to access data sources and destinations during transfe
 
 ## Backlog / Ideas 💡
 
-* Allow for deployment of multiple EDC connectors per DSCA architecture cell, e.g. by passing a config array in `environments.ts`
+* Allow for deployment of multiple EDC connectors per architecture cell, e.g. by passing a config array in `environments.ts`
 * Allow for deployment of Digital Twin Registry (DTR) or entire [Tractus-X Hausanschluss](https://github.com/eclipse-tractusx/tractus-x-umbrella/blob/main/docs/user/common/guides/hausanschluss-bundles.md)
 * Configurable switch between DynamoDB and Aurora PostgreSQL for control plane persistance
 * Include examples for EDC assets, such as OAuth 2.0 and S3

@@ -17,6 +17,7 @@ import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
+import software.amazon.edc.extensions.common.ddb.utility.extractStringValue
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
 import software.amazon.edc.extensions.common.ddb.utility.hasProperty
 import software.amazon.edc.extensions.common.ddb.utility.keyFromId
@@ -70,11 +71,13 @@ class DdbContractNegotiationStore(
                 .limit(max)
                 .build()
         val stateValues = criteria.extractStateValues()
+        val typeFilter = criteria.extractStringValue("type")
         val items: Sequence<ContractNegotiation> =
             if (stateValues != null) {
                 stateValues
                     .flatMap { state -> stateIndex.query(queryRequestFromNumber(state)).flatMap { page -> page.items() } }
                     .asSequence()
+                    .let { seq -> if (typeFilter != null) seq.filter { it.type == typeFilter } else seq }
             } else {
                 contractNegotiationTable.scan(querySpec.toScanRequest()).items().asSequence()
             }

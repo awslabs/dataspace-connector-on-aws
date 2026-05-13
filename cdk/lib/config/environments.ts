@@ -66,7 +66,6 @@ export const DataspaceConnectorStackConfig: DataspaceConnectorStackProps = {
   dataPlanePortMapping: DATA_PLANE_PORT_MAPPING_DEFAULT,
   edcIam: edcIam,
   edcStateRemovalPolicy: RemovalPolicy.DESTROY,
-  managementApiAuthKey: "",
   managementApiPrincipals: [
     // new ArnPrincipal("arn:aws:iam::<account-id>:role/<role-name>"),
   ],

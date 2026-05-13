@@ -154,3 +154,16 @@ fun Array<out Criterion>.extractStateValues(): List<Int>? {
     }
     return null
 }
+
+/**
+ * Extracts a string filter value for a given field name from criteria (supports "=" operator).
+ * Returns null if no matching criterion is found.
+ */
+fun Array<out Criterion>.extractStringValue(fieldName: String): String? {
+    for (criterion in this) {
+        if (criterion.operandLeft.toString() == fieldName && criterion.operator == "=") {
+            return criterion.operandRight?.toString()
+        }
+    }
+    return null
+}

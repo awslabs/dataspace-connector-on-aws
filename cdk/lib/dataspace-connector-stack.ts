@@ -32,7 +32,6 @@ export interface DataspaceConnectorStackProps extends StackProps {
   readonly edcIam: { [key: string]: string };
   readonly edcStateRemovalPolicy: RemovalPolicy;
   readonly hostedZoneId?: string;
-  readonly managementApiAuthKey: string;
   readonly managementApiPrincipals: IPrincipal[];
   readonly observabilityApiPrincipals: IPrincipal[];
   readonly profile: DeploymentProfile;
@@ -82,7 +81,6 @@ export class DataspaceConnectorStack extends Stack {
     });
 
     new ServiceConstructs(this, "Service", {
-      apiAuthKey: props.managementApiAuthKey,
       controlPlaneCpu: props.controlPlaneCpu,
       controlPlaneMemoryLimitMiB: props.controlPlaneMemoryLimitMiB,
       stateMachineIterationMillis: props.stateMachineIterationMillis,

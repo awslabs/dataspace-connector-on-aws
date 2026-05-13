@@ -138,13 +138,6 @@ observabilityApiPrincipals: [
 ],
 ```
 
-### Optional: Management API Key
-
-Inform the user:
-> "The `managementApiAuthKey` is currently set to an empty string, which is fine since IAM auth is already enabled. Would you like to set an additional EDC API key? This adds an extra `x-api-key` header requirement on top of IAM auth. Press Enter to skip."
-
-If they provide a value, update `managementApiAuthKey` in `environments.ts`. Store this value — it's needed for MCP configuration later.
-
 ### Optional: Resource Sizing
 
 Mention to the user:
@@ -217,7 +210,6 @@ IMPORTANT: The `--secret-string` value MUST be wrapped in single quotes (`'`), n
 Automatically configure the MCP server using values already collected during this workflow. Do NOT prompt the user — all required values are known:
 
 - `EDC_MANAGEMENT_URL` = the `EdcApiManagementApiEndpoint` from CDK output (Phase 5)
-- `EDC_API_KEY` = the `managementApiAuthKey` from Phase 4 (empty string if skipped)
 - `AWS_REGION` = the region chosen in Phase 2
 - `AWS_PROFILE` = the AWS CLI profile the user used for deployment (from `$AWS_PROFILE` environment variable, or ask the user if not set)
 - `--directory` = the absolute path to the `mcp/` subdirectory of this project (resolve from the workspace root)
@@ -237,7 +229,6 @@ Write or merge the `dataspace-connector-on-aws` server entry into `.kiro/setting
       ],
       "env": {
         "EDC_MANAGEMENT_URL": "<management-api-endpoint-from-cdk-output>",
-        "EDC_API_KEY": "<management-api-auth-key-from-phase-4>",
         "EDC_USE_AWS_IAM": "true",
         "AWS_REGION": "<region-from-phase-2>",
         "AWS_PROFILE": "<aws-profile-from-user>"

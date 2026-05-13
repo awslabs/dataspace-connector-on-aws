@@ -59,8 +59,9 @@ def get_headers() -> dict[str, str]:
     """Get HTTP headers for API requests."""
     headers = {
         "Content-Type": "application/json",
-        "X-Api-Key": EDC_API_KEY  # Always include, even if empty
     }
+    if EDC_API_KEY:
+        headers["X-Api-Key"] = EDC_API_KEY
     return headers
 
 

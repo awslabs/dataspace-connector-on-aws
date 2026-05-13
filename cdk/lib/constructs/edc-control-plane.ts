@@ -24,7 +24,6 @@ import { ControlPlanePortMapping } from "../config/port-mappings";
 import { DeploymentProfile } from "../config/environments";
 
 export interface EdcControlPlaneProps {
-  readonly apiAuthKey: string;
   readonly cluster: ICluster;
   readonly cpu: number;
   readonly dspCallbackAddress: string;
@@ -104,7 +103,6 @@ export class EdcControlPlane extends Construct {
         "web.http.path": "/api",
         "web.http.management.port": `${props.portMapping.management}`,
         "web.http.management.path": "/api/management",
-        "web.http.management.auth.key": props.apiAuthKey,
         "web.http.control.port": `${props.portMapping.control}`,
         "web.http.control.path": "/api/control",
         "web.http.protocol.port": `${props.portMapping.protocol}`,
