@@ -86,18 +86,17 @@ First, check whether the `edcIam` object already has values populated (i.e., fie
 
 If the user wants to keep existing values, skip to Phase 4.
 
-In a fresh clone, the `edcIam` object has 8 fields all set to empty strings (`""`). These must be populated with values from the Cofinity-X Portal:
+In a fresh clone, the `edcIam` object has 7 fields all set to empty strings (`""`). These must be populated with values from the Cofinity-X Portal:
 
 | Field | What to ask the user |
 |-------|---------------------|
+| `TRUSTED_ISSUER` | "What is the trusted issuer DID?" (starts with `did:web:`) |
+| `DCP_STS_OAUTH_TOKEN_URL` | "What is your OAuth token endpoint URL?" |
+| `DCP_STS_OAUTH_CLIENT_ID` | "What is your technical user's OAuth client ID?" |
+| `DCP_STS_DIM_URL` | "What is your DIM integration service URL?" |
+| `PARTICIPANT_ID` | "What is your BPNL number?" (e.g., `BPNL000000000001`) |
+| `DCP_ID` | "What is your organization's DID?" (starts with `did:web:` — used as both issuer ID and participant ID) |
 | `DID_RESOLVER` | "What is your BDRS server URL?" (e.g., `https://bdrs.beta.cofinity-x.com/api/directory`) |
-| `DIM_URL` | "What is your DIM integration service URL?" |
-| `IATP_ID` | "What is your organization's DID?" (starts with `did:web:`) |
-| `OAUTH_CLIENT_ID` | "What is your technical user's OAuth client ID?" |
-| `OAUTH_TOKEN_URL` | "What is your OAuth token endpoint URL?" |
-| `PARTICIPANT_ID` | "What is your organization's DID?" (same value as `IATP_ID` — used as the DSP protocol identity) |
-| `PARTICIPANT_BPN` | "What is your BPNL number?" (e.g., `BPNL000000000001`) |
-| `TRUSTED_ISSUER_ID` | "What is the trusted issuer DID?" (starts with `did:web:`) |
 
 Collect all values from the user, then update the `edcIam` object in `cdk/lib/config/environments.ts` with the provided values.
 
@@ -267,7 +266,7 @@ Then validate the DSP endpoint by requesting the connector's own catalog:
 ```
 request_catalog(
     counter_party_address="<EdcApiDspApiEndpoint from CDK output>",
-    counter_party_id="<PARTICIPANT_BPN from Phase 3>"
+    counter_party_id="<PARTICIPANT_ID from Phase 3>"
 )
 ```
 

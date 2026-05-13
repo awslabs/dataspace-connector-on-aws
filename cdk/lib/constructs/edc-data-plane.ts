@@ -25,11 +25,10 @@ import {
 import { EdcNlbOutputs } from "./edc-nlb";
 import { EDC_SECRETS_MANAGER_ALIASES } from "../config/environments";
 import { EdcFargateService } from "./edc-fargate-service";
-import { DeploymentProfile, Architecture } from "../config/environments";
+import { DeploymentProfile } from "../config/environments";
 
 export interface EdcDataPlaneProps {
   readonly apiPublicUrl: string;
-  readonly architecture?: Architecture;
   readonly cluster: ICluster;
   readonly controlPlanePortMapping: ControlPlanePortMapping;
   readonly cpu: number;
@@ -68,10 +67,7 @@ export class EdcDataPlane extends Construct {
       cpu: props.cpu,
       memoryLimitMiB: props.memoryLimitMiB,
       runtimePlatform: {
-        cpuArchitecture:
-          props.architecture === "arm64"
-            ? CpuArchitecture.ARM64
-            : CpuArchitecture.X86_64,
+        cpuArchitecture: CpuArchitecture.ARM64,
       },
     });
     props.taskRolePolicyStatements.forEach((policyStatement) =>

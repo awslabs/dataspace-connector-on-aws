@@ -277,14 +277,13 @@ The MCP server refreshes AWS credentials on every request, so temporary credenti
 
 | Field | Description |
 |-------|-------------|
+| `TRUSTED_ISSUER` | Trusted issuer DID (Cofinity-X) |
+| `DCP_STS_OAUTH_TOKEN_URL` | OAuth token endpoint URL |
+| `DCP_STS_OAUTH_CLIENT_ID` | Technical user OAuth client ID |
+| `DCP_STS_DIM_URL` | DIM integration service URL |
+| `PARTICIPANT_ID` | Your organization's BPNL number |
+| `DCP_ID` | Your connector's Decentralized Identifier (DID) |
 | `DID_RESOLVER` | BDRS server URL for DID resolution |
-| `DIM_URL` | DIM integration service URL |
-| `IATP_ID` | Your organization's DID |
-| `OAUTH_CLIENT_ID` | Technical user OAuth client ID |
-| `OAUTH_TOKEN_URL` | OAuth token endpoint URL |
-| `PARTICIPANT_ID` | Your organization's DID (same as `IATP_ID`) |
-| `PARTICIPANT_BPN` | Your BPNL number |
-| `TRUSTED_ISSUER_ID` | Trusted issuer DID (Cofinity-X) |
 
 ### environments.ts — AWS Resource Settings
 

@@ -51,25 +51,22 @@ The stack supports two deployment profiles via the `profile` setting in [`enviro
 |---------|--------------|--------------|
 | VPC Availability Zones | 1 (single NAT Gateway, single EIP) | 2 (HA with 2 NAT Gateways, 2 EIPs) |
 | Fargate capacity | Spot (70% cheaper, 2-min interruption warning) | On-Demand |
-| Container Insights | Disabled | Enabled |
 | Log retention | 7 days | 30 days |
 
 ### Estimated Monthly Cost (eu-central-1, idle connector)
 
 | Resource | `production` | `development` |
 |----------|-------------|---------------|
-| Fargate (Control + Data Plane) | ~$23 | ~$7 (Spot) |
+| Fargate (Control + Data Plane, Graviton) | ~$18 | ~$6 (Spot) |
 | NAT Gateway | ~$76 (×2) | ~$38 (×1) |
 | Elastic IP | ~$7 (×2) | ~$4 (×1) |
 | Network Load Balancer | ~$19 | ~$19 |
 | Other (DynamoDB, API GW, S3, Secrets, Logs) | ~$1 | ~$1 |
-| **Total** | **~$125/month** | **~$68/month** |
+| **Total** | **~$120/month** | **~$67/month** |
 
-These are rough estimates for a single idle connector in eu-central-1. Actual costs depend on data transfer volume, API request frequency, and Spot pricing fluctuations. See [AWS Pricing Calculator](https://calculator.aws/) for detailed estimates.
+These are rough estimates for a single idle connector in eu-central-1. Actual costs depend on data transfer volume, API request frequency, and Spot pricing fluctuations. See [AWS Pricing Calculator](https://calculator.aws/) for detailed estimates. Setting `containerInsights: false` saves an additional ~$3–5/month by disabling ECS Container Insights metrics collection.
 
 The `development` profile is recommended for testing, development, and non-critical workloads. Use `production` for connectors that serve data to third-party consumers and require high availability.
-
-Setting `architecture: "arm64"` additionally reduces Fargate compute cost by ~20% (Graviton processors). This is independent of profile and stacks with Spot.
 
 ## Architecture
 
@@ -108,10 +105,10 @@ These values are obtained from the [Cofinity-X Portal](https://portal.beta.cofin
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `profile` | Yes | — | Deployment profile: `"development"` (single AZ, Spot, lower cost) or `"production"` (multi-AZ, On-Demand, HA). See [Deployment Profiles](#deployment-profiles). |
-| `architecture` | No | `"x86_64"` | CPU architecture: `"x86_64"` or `"arm64"` (Graviton, ~20% cheaper). |
+| `containerInsights` | Yes | `true` | ECS Container Insights. Set to `false` to disable. |
 | `controlPlaneCpu` | Yes | — | CPU units for the Control Plane task (256 = 0.25 vCPU) |
 | `controlPlaneMemoryLimitMiB` | Yes | — | Memory in MiB for the Control Plane task (1024 recommended) |
-| `stateMachineIterationMillis` | Yes | `"60000"` | Polling interval for all EDC state machine processors (ms). Lower values detect state changes faster but increase DynamoDB reads. |
+| `stateMachineIterationMillis` | Yes | `"10000"` | Polling interval for all EDC state machine processors (ms). Lower values detect state changes faster but increase DynamoDB reads. |
 | `controlPlanePortMapping` | Yes | — | Port mapping for the Control Plane. Use `CONTROL_PLANE_PORT_MAPPING_DEFAULT`. |
 | `dataPlaneCpu` | Yes | — | CPU units for the Data Plane task (256 = 0.25 vCPU) |
 | `dataPlaneMemoryLimitMiB` | Yes | — | Memory in MiB for the Data Plane task (512 recommended) |
@@ -169,11 +166,12 @@ Stores credentials needed to access data sources and destinations during transfe
 
 ## Backlog / Ideas 💡
 
+* Allow for deployment of multiple EDC connectors per DSCA architecture cell, e.g. by passing a config array in `environments.ts`
+* Allow for deployment of Digital Twin Registry (DTR) or entire [Tractus-X Hausanschluss](https://github.com/eclipse-tractusx/tractus-x-umbrella/blob/main/docs/user/common/guides/hausanschluss-bundles.md)
 * Configurable switch between DynamoDB and Aurora PostgreSQL for control plane persistance
 * Include examples for EDC assets, such as OAuth 2.0 and S3
 * Configurable control and data plane auto-scaling on ECS Service level
 * Create data plane extension to serve DynamoDB data as EDC asset
-* Allow for deployment of Digital Twin Registry (DTR) or entire [Tractus-X Hausanschluss](https://github.com/eclipse-tractusx/tractus-x-umbrella/blob/main/docs/user/common/guides/hausanschluss-bundles.md)
 
 ## Security
 

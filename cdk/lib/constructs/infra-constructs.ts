@@ -33,11 +33,11 @@ import { EdcDdb } from "./edc-ddb";
 import { EdcNlb, EdcNlbOutputs } from "./edc-nlb";
 import { EdcTokenKeyPair } from "./edc-token-key-pair";
 
-import { DeploymentProfile, Architecture } from "../config/environments";
+import { DeploymentProfile } from "../config/environments";
 
 export interface InfraConstructsProps {
-  readonly architecture?: Architecture;
   readonly certificate?: ICertificate;
+  readonly containerInsights?: boolean;
   readonly controlPlanePortMapping: ControlPlanePortMapping;
   readonly dataPlanePortMapping: DataPlanePortMapping;
   readonly edcStateRemovalPolicy: RemovalPolicy;
@@ -63,21 +63,16 @@ export class InfraConstructs extends Construct {
 
     // Build and push EDC container images
 
-    const imagePlatform =
-      props.architecture === "arm64"
-        ? Platform.LINUX_ARM64
-        : Platform.LINUX_AMD64;
-
     const controlPlaneDir = resolve(__dirname, "../../../edc/control-plane");
     this.controlPlaneImage = new DockerImageAsset(scope, "ControlPlaneImage", {
       directory: controlPlaneDir,
-      platform: imagePlatform,
+      platform: Platform.LINUX_ARM64,
     });
 
     const dataPlaneDir = resolve(__dirname, "../../../edc/data-plane");
     this.dataPlaneImage = new DockerImageAsset(scope, "DataPlaneImage", {
       directory: dataPlaneDir,
-      platform: imagePlatform,
+      platform: Platform.LINUX_ARM64,
     });
 
     // Create DynamoDB tables for EDC
@@ -112,9 +107,9 @@ export class InfraConstructs extends Construct {
 
     this.ecsCluster = new Cluster(scope, "EcsCluster", {
       containerInsightsV2:
-        props.profile === "production"
-          ? ContainerInsights.ENABLED
-          : ContainerInsights.DISABLED,
+        props.containerInsights === false
+          ? ContainerInsights.DISABLED
+          : ContainerInsights.ENABLED,
       vpc: this.vpc,
     });
 

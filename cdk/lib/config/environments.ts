@@ -6,7 +6,6 @@ import { ArnPrincipal } from "aws-cdk-lib/aws-iam";
 import { DataspaceConnectorStackProps } from "../dataspace-connector-stack";
 
 export type DeploymentProfile = "development" | "production";
-export type Architecture = "x86_64" | "arm64";
 
 import {
   CONTROL_PLANE_PORT_MAPPING_DEFAULT,
@@ -50,17 +49,17 @@ const edcIam = {
  * Enter CDK configuration values for AWS resources below.
  *
  * Make sure to adjust CPU and memory as per your needs and set the APIs' IAM principals.
+ * To use a custom domain for EDC API endpoints, uncomment and set certificateArn,
+ * domainName, and hostedZoneId below (see README for details).
  */
 
 export const DataspaceConnectorStackConfig: DataspaceConnectorStackProps = {
-  // Optional: Custom domain for EDC API endpoints (see README for details)
   // certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id>",
   // domainName: "edc.example.com",
   // hostedZoneId: "Z0123456789ABCDEFGHIJ",
-  architecture: "arm64",
+  containerInsights: true,
   controlPlaneCpu: 256,
   controlPlaneMemoryLimitMiB: 1024,
-  stateMachineIterationMillis: "60000", // State machine poll interval (default: 60s)
   controlPlanePortMapping: CONTROL_PLANE_PORT_MAPPING_DEFAULT,
   dataPlaneCpu: 256,
   dataPlaneMemoryLimitMiB: 512,
@@ -75,5 +74,6 @@ export const DataspaceConnectorStackConfig: DataspaceConnectorStackProps = {
     // new ArnPrincipal("arn:aws:iam::<account-id>:role/<role-name>"),
   ],
   profile: "development",
+  stateMachineIterationMillis: "10000",
   vpcIpAddresses: "10.0.10.0/24",
 };
