@@ -14,8 +14,10 @@ import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDa
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
+import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
 import software.amazon.edc.extensions.common.ddb.utility.keyFromId
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromNumber
 import software.amazon.edc.extensions.common.ddb.utility.toScanRequest
 import software.amazon.edc.extensions.controlplane.ddb.types.PolicyMonitor
 import software.amazon.edc.extensions.controlplane.ddb.types.toDdbPolicyMonitor
@@ -32,6 +34,8 @@ class DdbPolicyMonitorStore(
         leaseTable = leaseTable,
     ),
     PolicyMonitorStore {
+    private val stateIndex = table.index(PolicyMonitor.INDEX_STATE)
+
     override fun findById(id: String): PolicyMonitorEntry? = getPolicyMonitor(id)?.toEdcPolicyMonitor()
 
     override fun nextNotLeased(
@@ -46,11 +50,17 @@ class DdbPolicyMonitorStore(
                 .sortOrder(SortOrder.ASC)
                 .limit(max)
                 .build()
-        return table
-            .scan(querySpec.toScanRequest())
-            .items()
-            .asSequence()
-            .filterNot { hasLease(it.id) }
+        val stateValues = criteria.extractStateValues()
+        val items =
+            if (stateValues != null) {
+                stateValues
+                    .flatMap { stateIndex.query(queryRequestFromNumber(it)).flatMap { page -> page.items() } }
+                    .asSequence()
+            } else {
+                table.scan(querySpec.toScanRequest()).items().asSequence()
+            }
+        return items
+            .filterNot { hasActiveLease(it) }
             .sortedWith(querySpec.getGenericPropertyComparator())
             .map {
                 acquireLease(it)

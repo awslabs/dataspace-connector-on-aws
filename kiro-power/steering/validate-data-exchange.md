@@ -319,7 +319,7 @@ Extract (the output keys have CDK-generated hash suffixes — match by prefix):
 - Key starting with `EdcApiDspApiEndpoint` → DSP endpoint URL
 - Key starting with `EdcApiManagementApiEndpoint` → Management API URL (for reference)
 
-Read the `PARTICIPANT_BPN` from `cdk/lib/config/environments.ts` (the `tractusx.edc.participant.bpn` field in the `edcIam` object) for the connector's BPNL. Use this as the `counter_party_id` for catalog requests and as the `assigner` for contract negotiations.
+Read the `PARTICIPANT_ID` from `cdk/lib/config/environments.ts` (the `tractusx.edc.participant.bpn` field in the `edcIam` object) for the connector's BPNL. Use this as the `counter_party_id` for catalog requests and as the `assigner` for contract negotiations.
 
 If the user already has these values from a prior deployment, use them directly.
 

@@ -11,15 +11,15 @@ import {
   DataPlanePortMapping,
 } from "../config/port-mappings";
 
+import { DeploymentProfile } from "../config/environments";
 import { InfraConstructs } from "./infra-constructs";
 import { EdcControlPlane } from "./edc-control-plane";
 import { EdcDataPlane } from "./edc-data-plane";
 
 export interface ServiceConstructsProps {
-  readonly apiAuthKey: string;
   readonly controlPlaneCpu: number;
   readonly controlPlaneMemoryLimitMiB: number;
-  readonly controlPlanePolicyMonitorIteration: string;
+  readonly stateMachineIterationMillis: string;
   readonly controlPlanePortMapping: ControlPlanePortMapping;
   readonly dataPlaneCpu: number;
   readonly dataPlaneMemoryLimitMiB: number;
@@ -27,6 +27,7 @@ export interface ServiceConstructsProps {
   readonly ddbTables?: TableV2[];
   readonly edcIamEnvVars: { [key: string]: string };
   readonly infraConstructs: InfraConstructs;
+  readonly profile: DeploymentProfile;
 }
 
 export class ServiceConstructs extends Construct {
@@ -107,7 +108,6 @@ export class ServiceConstructs extends Construct {
     }
 
     const controlPlane = new EdcControlPlane(scope, "ControlPlane", {
-      apiAuthKey: props.apiAuthKey,
       cluster: props.infraConstructs.ecsCluster,
       cpu: props.controlPlaneCpu,
       dspCallbackAddress: props.infraConstructs.api.outputs.dspUrl,
@@ -117,8 +117,9 @@ export class ServiceConstructs extends Construct {
       ),
       memoryLimitMiB: props.controlPlaneMemoryLimitMiB,
       nlbOutputs: props.infraConstructs.nlbOutputs,
-      policyMonitorIteration: props.controlPlanePolicyMonitorIteration,
+      stateMachineIterationMillis: props.stateMachineIterationMillis,
       portMapping: props.controlPlanePortMapping,
+      profile: props.profile,
       taskRolePolicyStatements: policyStatements,
       vpc: props.infraConstructs.vpc,
     });
@@ -135,6 +136,8 @@ export class ServiceConstructs extends Construct {
       ),
       memoryLimitMiB: props.dataPlaneMemoryLimitMiB,
       nlbOutputs: props.infraConstructs.nlbOutputs,
+      profile: props.profile,
+      stateMachineIterationMillis: props.stateMachineIterationMillis,
       taskRolePolicyStatements: policyStatements,
       vpc: props.infraConstructs.vpc,
     });

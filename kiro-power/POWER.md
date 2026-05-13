@@ -259,9 +259,6 @@ create_contract_definition(
 ### MCP tools return 403 Forbidden
 Your AWS credentials don't have `execute-api:Invoke` permission for the Management API Gateway, or your IAM principal ARN isn't listed in `managementApiPrincipals` in `environments.ts`.
 
-### MCP tools return 401 Unauthorized
-The `EDC_API_KEY` environment variable in your MCP config doesn't match the `managementApiAuthKey` in `environments.ts`.
-
 ### Contract negotiation returns "Policy not equal to offer"
 You must pass the full policy from the catalog offer (including `permission`, `prohibition`, `obligation` arrays) when calling `initiate_contract_negotiation`. Don't construct a minimal policy stub.
 
@@ -277,14 +274,13 @@ The MCP server refreshes AWS credentials on every request, so temporary credenti
 
 | Field | Description |
 |-------|-------------|
+| `TRUSTED_ISSUER` | Trusted issuer DID (Cofinity-X) |
+| `DCP_STS_OAUTH_TOKEN_URL` | OAuth token endpoint URL |
+| `DCP_STS_OAUTH_CLIENT_ID` | Technical user OAuth client ID |
+| `DCP_STS_DIM_URL` | DIM integration service URL |
+| `PARTICIPANT_ID` | Your organization's BPNL number |
+| `DCP_ID` | Your connector's Decentralized Identifier (DID) |
 | `DID_RESOLVER` | BDRS server URL for DID resolution |
-| `DIM_URL` | DIM integration service URL |
-| `IATP_ID` | Your organization's DID |
-| `OAUTH_CLIENT_ID` | Technical user OAuth client ID |
-| `OAUTH_TOKEN_URL` | OAuth token endpoint URL |
-| `PARTICIPANT_ID` | Your organization's DID (same as `IATP_ID`) |
-| `PARTICIPANT_BPN` | Your BPNL number |
-| `TRUSTED_ISSUER_ID` | Trusted issuer DID (Cofinity-X) |
 
 ### environments.ts — AWS Resource Settings
 
@@ -294,7 +290,6 @@ The MCP server refreshes AWS credentials on every request, so temporary credenti
 | `controlPlaneMemoryLimitMiB` | 1024 | Control plane memory (MB) |
 | `dataPlaneCpu` | 256 | Data plane Fargate CPU units |
 | `dataPlaneMemoryLimitMiB` | 512 | Data plane memory (MB) |
-| `managementApiAuthKey` | `""` | EDC API key for x-api-key header |
 | `managementApiPrincipals` | `[]` | IAM ARNs allowed to call Management API |
 | `observabilityApiPrincipals` | `[]` | IAM ARNs allowed to call Observability API |
 | `vpcIpAddresses` | `10.0.10.0/24` | VPC CIDR block |
@@ -313,9 +308,6 @@ Before using this power, replace the following placeholders in `mcp.json` with y
 
 - **`PLACEHOLDER_MANAGEMENT_API_URL`**: The EDC Management API endpoint URL from your CDK deployment output.
   - **How to get it:** After running `deploy.sh`, look for the CDK output key starting with `EdcApiManagementApiEndpoint`. It looks like `https://<api-id>.execute-api.<region>.amazonaws.com/management/`
-
-- **`PLACEHOLDER_API_KEY`**: The EDC API key configured in `managementApiAuthKey` in `environments.ts`.
-  - **How to set it:** If you left `managementApiAuthKey` as an empty string during deployment, use an empty string here too. Otherwise, use the value you configured.
 
 - **`PLACEHOLDER_AWS_REGION`**: The AWS region where the connector is deployed.
   - **How to set it:** Use the region you chose during deployment (e.g., `eu-central-1`)

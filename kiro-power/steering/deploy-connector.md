@@ -86,18 +86,17 @@ First, check whether the `edcIam` object already has values populated (i.e., fie
 
 If the user wants to keep existing values, skip to Phase 4.
 
-In a fresh clone, the `edcIam` object has 8 fields all set to empty strings (`""`). These must be populated with values from the Cofinity-X Portal:
+In a fresh clone, the `edcIam` object has 7 fields all set to empty strings (`""`). These must be populated with values from the Cofinity-X Portal:
 
 | Field | What to ask the user |
 |-------|---------------------|
+| `TRUSTED_ISSUER` | "What is the trusted issuer DID?" (starts with `did:web:`) |
+| `DCP_STS_OAUTH_TOKEN_URL` | "What is your OAuth token endpoint URL?" |
+| `DCP_STS_OAUTH_CLIENT_ID` | "What is your technical user's OAuth client ID?" |
+| `DCP_STS_DIM_URL` | "What is your DIM integration service URL?" |
+| `PARTICIPANT_ID` | "What is your BPNL number?" (e.g., `BPNL000000000001`) |
+| `DCP_ID` | "What is your organization's DID?" (starts with `did:web:` — used as both issuer ID and participant ID) |
 | `DID_RESOLVER` | "What is your BDRS server URL?" (e.g., `https://bdrs.beta.cofinity-x.com/api/directory`) |
-| `DIM_URL` | "What is your DIM integration service URL?" |
-| `IATP_ID` | "What is your organization's DID?" (starts with `did:web:`) |
-| `OAUTH_CLIENT_ID` | "What is your technical user's OAuth client ID?" |
-| `OAUTH_TOKEN_URL` | "What is your OAuth token endpoint URL?" |
-| `PARTICIPANT_ID` | "What is your organization's DID?" (same value as `IATP_ID` — used as the DSP protocol identity) |
-| `PARTICIPANT_BPN` | "What is your BPNL number?" (e.g., `BPNL000000000001`) |
-| `TRUSTED_ISSUER_ID` | "What is the trusted issuer DID?" (starts with `did:web:`) |
 
 Collect all values from the user, then update the `edcIam` object in `cdk/lib/config/environments.ts` with the provided values.
 
@@ -139,13 +138,6 @@ observabilityApiPrincipals: [
 ],
 ```
 
-### Optional: Management API Key
-
-Inform the user:
-> "The `managementApiAuthKey` is currently set to an empty string, which is fine since IAM auth is already enabled. Would you like to set an additional EDC API key? This adds an extra `x-api-key` header requirement on top of IAM auth. Press Enter to skip."
-
-If they provide a value, update `managementApiAuthKey` in `environments.ts`. Store this value — it's needed for MCP configuration later.
-
 ### Optional: Resource Sizing
 
 Mention to the user:
@@ -160,18 +152,17 @@ Only modify if the user explicitly asks.
 Tell the user:
 > "Configuration is complete. I'll now run the deployment. This will build the EDC Java artifacts, install CDK dependencies, bootstrap your AWS account (if needed), and deploy the CloudFormation stack. This typically takes 10-15 minutes."
 
-IMPORTANT: `deploy.sh` is a long-running process (10-15+ minutes). Start it as a background process so you can monitor progress without blocking. The script reads `AWS_PROFILE` and `AWS_REGION` from the environment (with `eu-central-1` as the default region). Set the profile before running:
+IMPORTANT: `deploy.sh` is a long-running process (10-15+ minutes). Start it as a background process so you can monitor progress without blocking. The script requires `AWS_PROFILE` and `AWS_REGION` as environment variables — if either is missing, it will prompt interactively, which blocks agent-driven deployments.
+
+ALWAYS export BOTH variables before running the script:
 
 ```bash
 export AWS_PROFILE=<deployment-profile>
+export AWS_REGION=<chosen-region>
 ./deploy.sh
 ```
 
-If a different region was chosen in Phase 2, also set it:
-
-```bash
-export AWS_REGION=<chosen-region>
-```
+Use the profile identified in Phase 1 and the region chosen in Phase 2 (default: `eu-central-1`).
 
 Poll the process output at 30-second intervals to monitor progress. Do NOT poll more frequently — rapid polling generates excessive tool calls and can cause the agent to stall or hit context limits on long deployments. The deployment has these major phases:
 1. Gradle build (~30s) — look for `BUILD SUCCESSFUL`
@@ -219,7 +210,6 @@ IMPORTANT: The `--secret-string` value MUST be wrapped in single quotes (`'`), n
 Automatically configure the MCP server using values already collected during this workflow. Do NOT prompt the user — all required values are known:
 
 - `EDC_MANAGEMENT_URL` = the `EdcApiManagementApiEndpoint` from CDK output (Phase 5)
-- `EDC_API_KEY` = the `managementApiAuthKey` from Phase 4 (empty string if skipped)
 - `AWS_REGION` = the region chosen in Phase 2
 - `AWS_PROFILE` = the AWS CLI profile the user used for deployment (from `$AWS_PROFILE` environment variable, or ask the user if not set)
 - `--directory` = the absolute path to the `mcp/` subdirectory of this project (resolve from the workspace root)
@@ -239,7 +229,6 @@ Write or merge the `dataspace-connector-on-aws` server entry into `.kiro/setting
       ],
       "env": {
         "EDC_MANAGEMENT_URL": "<management-api-endpoint-from-cdk-output>",
-        "EDC_API_KEY": "<management-api-auth-key-from-phase-4>",
         "EDC_USE_AWS_IAM": "true",
         "AWS_REGION": "<region-from-phase-2>",
         "AWS_PROFILE": "<aws-profile-from-user>"
@@ -268,7 +257,7 @@ Then validate the DSP endpoint by requesting the connector's own catalog:
 ```
 request_catalog(
     counter_party_address="<EdcApiDspApiEndpoint from CDK output>",
-    counter_party_id="<PARTICIPANT_BPN from Phase 3>"
+    counter_party_id="<PARTICIPANT_ID from Phase 3>"
 )
 ```
 

@@ -9,7 +9,11 @@ import software.amazon.awssdk.enhanced.dynamodb.model.QueryEnhancedRequest
 
 fun keyFromId(id: String): Key = Key.builder().partitionValue(id).build()
 
+fun keyFromNumber(value: Int): Key = Key.builder().partitionValue(value.toLong()).build()
+
 fun queryRequestFromId(id: String): QueryEnhancedRequest = queryRequestFromKey(keyFromId(id))
+
+fun queryRequestFromNumber(value: Int): QueryEnhancedRequest = queryRequestFromKey(keyFromNumber(value))
 
 fun queryRequestFromKey(key: Key): QueryEnhancedRequest =
     QueryEnhancedRequest.builder().queryConditional(QueryConditional.keyEqualTo(key)).build()

@@ -79,6 +79,11 @@ abstract class AbstractLeasableEntityDao(
 
     protected fun hasLease(entityId: String): Boolean {
         val leasable = getLeasableById(entityId) ?: return false
+        return hasActiveLease(leasable)
+    }
+
+    /** Check lease status using an already-loaded entity, avoiding an extra GetItem call. */
+    protected fun hasActiveLease(leasable: Leasable): Boolean {
         val leaseId = leasable.leaseId ?: return false
         val lease = getLease(leaseId) ?: return false
         return if (lease.isExpired(clock)) {

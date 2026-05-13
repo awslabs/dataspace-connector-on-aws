@@ -16,11 +16,14 @@ import {
 import { InfraConstructs } from "./constructs/infra-constructs";
 import { ServiceConstructs } from "./constructs/service-constructs";
 
+import { DeploymentProfile } from "./config/environments";
+
 export interface DataspaceConnectorStackProps extends StackProps {
   readonly certificateArn?: string;
+  readonly containerInsights: boolean;
   readonly controlPlaneCpu: number;
   readonly controlPlaneMemoryLimitMiB: number;
-  readonly controlPlanePolicyMonitorIteration: string;
+  readonly stateMachineIterationMillis: string;
   readonly controlPlanePortMapping: ControlPlanePortMapping;
   readonly dataPlaneCpu: number;
   readonly dataPlaneMemoryLimitMiB: number;
@@ -29,9 +32,9 @@ export interface DataspaceConnectorStackProps extends StackProps {
   readonly edcIam: { [key: string]: string };
   readonly edcStateRemovalPolicy: RemovalPolicy;
   readonly hostedZoneId?: string;
-  readonly managementApiAuthKey: string;
   readonly managementApiPrincipals: IPrincipal[];
   readonly observabilityApiPrincipals: IPrincipal[];
+  readonly profile: DeploymentProfile;
   readonly vpcIpAddresses: string;
 }
 
@@ -66,21 +69,21 @@ export class DataspaceConnectorStack extends Stack {
 
     const infraConstructs = new InfraConstructs(this, "Infra", {
       certificate: certificate,
+      containerInsights: props.containerInsights,
       controlPlanePortMapping: props.controlPlanePortMapping,
       dataPlanePortMapping: props.dataPlanePortMapping,
       edcStateRemovalPolicy: props.edcStateRemovalPolicy,
       hostedZone: hostedZone,
       managementApiPrincipals: props.managementApiPrincipals,
       observabilityApiPrincipals: props.observabilityApiPrincipals,
+      profile: props.profile,
       vpcIpAddresses: props.vpcIpAddresses,
     });
 
     new ServiceConstructs(this, "Service", {
-      apiAuthKey: props.managementApiAuthKey,
       controlPlaneCpu: props.controlPlaneCpu,
       controlPlaneMemoryLimitMiB: props.controlPlaneMemoryLimitMiB,
-      controlPlanePolicyMonitorIteration:
-        props.controlPlanePolicyMonitorIteration,
+      stateMachineIterationMillis: props.stateMachineIterationMillis,
       controlPlanePortMapping: props.controlPlanePortMapping,
       dataPlaneCpu: props.dataPlaneCpu,
       dataPlaneMemoryLimitMiB: props.dataPlaneMemoryLimitMiB,
@@ -88,6 +91,7 @@ export class DataspaceConnectorStack extends Stack {
       ddbTables: infraConstructs.ddbTables,
       edcIamEnvVars: props.edcIam,
       infraConstructs: infraConstructs,
+      profile: props.profile,
     });
   }
 }

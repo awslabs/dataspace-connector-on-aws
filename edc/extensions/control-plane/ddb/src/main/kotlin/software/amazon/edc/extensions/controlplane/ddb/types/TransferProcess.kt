@@ -72,6 +72,7 @@ data class TransferProcess(
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var resourceManifest: Map<String, Any>? = null,
     @get:DynamoDbAttribute(STATE)
+    @get:DynamoDbSecondaryPartitionKey(indexNames = [INDEX_STATE])
     var state: Int = 0,
     @get:DynamoDbAttribute(STATE_COUNT)
     var stateCount: Int = 0,
@@ -162,6 +163,7 @@ data class TransferProcess(
         const val UPDATED_AT = "updatedAt"
 
         const val INDEX_CORRELATION_ID = "index-correlationId"
+        const val INDEX_STATE = "index-state"
         const val TABLE_NAME = "TransferProcesses"
     }
 }

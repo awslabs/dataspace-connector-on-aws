@@ -4,7 +4,7 @@
 import { Construct } from "constructs";
 import { Stack } from "aws-cdk-lib";
 import { IRole, PolicyStatement } from "aws-cdk-lib/aws-iam";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 
 import { IVpc, Peer, Port, SecurityGroup } from "aws-cdk-lib/aws-ec2";
 
@@ -25,6 +25,7 @@ import {
 import { EdcNlbOutputs } from "./edc-nlb";
 import { EDC_SECRETS_MANAGER_ALIASES } from "../config/environments";
 import { EdcFargateService } from "./edc-fargate-service";
+import { DeploymentProfile } from "../config/environments";
 
 export interface EdcDataPlaneProps {
   readonly apiPublicUrl: string;
@@ -36,6 +37,8 @@ export interface EdcDataPlaneProps {
   readonly image: ContainerImage;
   readonly memoryLimitMiB: number;
   readonly nlbOutputs: EdcNlbOutputs;
+  readonly profile: DeploymentProfile;
+  readonly stateMachineIterationMillis: string;
   readonly taskRolePolicyStatements: PolicyStatement[];
   readonly vpc: IVpc;
 }
@@ -64,7 +67,7 @@ export class EdcDataPlane extends Construct {
       cpu: props.cpu,
       memoryLimitMiB: props.memoryLimitMiB,
       runtimePlatform: {
-        cpuArchitecture: CpuArchitecture.X86_64,
+        cpuArchitecture: CpuArchitecture.ARM64,
       },
     });
     props.taskRolePolicyStatements.forEach((policyStatement) =>
@@ -77,11 +80,13 @@ export class EdcDataPlane extends Construct {
       containerName: containerName,
       environment: {
         "edc.dataplane.api.public.baseurl": props.apiPublicUrl,
+        "edc.dataplane.state-machine.iteration-wait-millis":
+          props.stateMachineIterationMillis,
         "edc.dpf.selector.url": `http://${props.nlbOutputs.dnsName}:${props.controlPlanePortMapping.control}/api/control/v1/dataplanes`,
         "edc.hostname": props.nlbOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",
         "edc.iam.sts.oauth.client.secret.alias":
-          EDC_SECRETS_MANAGER_ALIASES.OAUTH_CLIENT_SECRET,
+          EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS,
         "edc.runtime.id": id,
         "edc.vault.aws.region": Stack.of(this).region,
         "tx.edc.dataplane.token.refresh.endpoint": `${props.apiPublicUrl}token`,
@@ -93,6 +98,7 @@ export class EdcDataPlane extends Construct {
           EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY,
 
         ...props.edcIamEnvVars,
+        "edc.participant.id": props.edcIamEnvVars["edc.iam.issuer.id"],
 
         "web.http.port": `${props.dataPlanePortMapping.default}`,
         "web.http.path": "/api",
@@ -107,7 +113,12 @@ export class EdcDataPlane extends Construct {
       },
       image: props.image,
       logging: LogDriver.awsLogs({
-        logGroup: new LogGroup(this, "LogGroup"),
+        logGroup: new LogGroup(this, "LogGroup", {
+          retention:
+            props.profile === "production"
+              ? RetentionDays.ONE_MONTH
+              : RetentionDays.ONE_WEEK,
+        }),
         mode: AwsLogDriverMode.NON_BLOCKING,
         streamPrefix: "EdcDataPlane",
       }),
@@ -123,6 +134,7 @@ export class EdcDataPlane extends Construct {
     new EdcFargateService(this, "DataPlaneFargateService", {
       cluster: props.cluster,
       containerName: containerName,
+      profile: props.profile,
       securityGroups: [securityGroup],
       targetGroups: props.nlbOutputs.dataPlaneTargetGroups,
       taskDefinition: taskDefinition,

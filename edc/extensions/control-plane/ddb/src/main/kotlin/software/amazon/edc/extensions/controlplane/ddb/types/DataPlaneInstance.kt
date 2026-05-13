@@ -7,6 +7,7 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttri
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbConvertedBy
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import java.time.Instant
@@ -36,6 +37,7 @@ data class DataPlaneInstance(
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var properties: Map<String, Any>? = null,
     @get:DynamoDbAttribute(STATE)
+    @get:DynamoDbSecondaryPartitionKey(indexNames = [INDEX_STATE])
     var state: Int = 0,
     @get:DynamoDbAttribute(STATE_COUNT)
     var stateCount: Int = 0,
@@ -81,6 +83,7 @@ data class DataPlaneInstance(
         const val UPDATED_AT = "updatedAt"
         const val URL = "url"
 
+        const val INDEX_STATE = "index-state"
         const val TABLE_NAME = "DataPlaneInstances"
     }
 }

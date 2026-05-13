@@ -5,71 +5,74 @@ import { RemovalPolicy } from "aws-cdk-lib";
 import { ArnPrincipal } from "aws-cdk-lib/aws-iam";
 import { DataspaceConnectorStackProps } from "../dataspace-connector-stack";
 
+export type DeploymentProfile = "development" | "production";
+
 import {
   CONTROL_PLANE_PORT_MAPPING_DEFAULT,
   DATA_PLANE_PORT_MAPPING_DEFAULT,
 } from "./port-mappings";
 
 export const EDC_IAM_ENVIRONMENT_VARIABLE_KEYS = {
+  TRUSTED_ISSUER: "edc.iam.trusted-issuer.issuer-1.id",
+  DCP_STS_OAUTH_TOKEN_URL: "edc.iam.sts.oauth.token.url",
+  DCP_STS_OAUTH_CLIENT_ID: "edc.iam.sts.oauth.client.id",
+  DCP_STS_DIM_URL: "tx.edc.iam.sts.dim.url",
+  PARTICIPANT_ID: "tractusx.edc.participant.bpn",
+  DCP_ID: "edc.iam.issuer.id",
   DID_RESOLVER: "tx.edc.iam.iatp.bdrs.server.url",
-  DIM_URL: "tx.edc.iam.sts.dim.url",
-  IATP_ID: "edc.iam.issuer.id",
-  OAUTH_CLIENT_ID: "edc.iam.sts.oauth.client.id",
-  OAUTH_TOKEN_URL: "edc.iam.sts.oauth.token.url",
-  PARTICIPANT_ID: "edc.participant.id",
-  PARTICIPANT_BPN: "tractusx.edc.participant.bpn",
-  TRUSTED_ISSUER_ID: "edc.iam.trusted-issuer.issuer-1.id",
 };
 
 export const EDC_SECRETS_MANAGER_ALIASES = {
-  OAUTH_CLIENT_SECRET: "edc.iam.sts.oauth.client.secret",
+  DCP_STS_OAUTH_CLIENT_SECRET_ALIAS: "edc.iam.sts.oauth.client.secret",
   TOKEN_SIGNER_PRIVATE_KEY: "edc.transfer.proxy.token.signer.privatekey",
   TOKEN_VERIFIER_PUBLIC_KEY: "edc.transfer.proxy.token.verifier.publickey",
 };
 
 /**
- * Enter EDC configuration values obtained from Cofinity-X Portal below.
+ * Enter EDC configuration values obtained from the Cofinity-X Portal below.
  *
- * This includes the client ID of the technical user the deployed EDC should use.
+ * The keys match the labels shown in the portal's "Configure Your Connector" dialog under https://portal.beta.cofinity-x.com/connectorManagement.
+ * Copy-paste the values directly from the portal into this configuration.
  */
 
 const edcIam = {
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DID_RESOLVER]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DIM_URL]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.IATP_ID]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.OAUTH_CLIENT_ID]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.OAUTH_TOKEN_URL]: "",
+  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.TRUSTED_ISSUER]: "",
+  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_OAUTH_TOKEN_URL]: "",
+  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_OAUTH_CLIENT_ID]: "",
+  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_DIM_URL]: "",
   [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.PARTICIPANT_ID]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.PARTICIPANT_BPN]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.TRUSTED_ISSUER_ID]: "",
+  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_ID]: "",
+  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DID_RESOLVER]: "",
 };
 
 /**
  * Enter CDK configuration values for AWS resources below.
  *
  * Make sure to adjust CPU and memory as per your needs and set the APIs' IAM principals.
+ * To use a custom domain for EDC API endpoints, uncomment and set certificateArn,
+ * domainName, and hostedZoneId below (see README for details).
  */
 
 export const DataspaceConnectorStackConfig: DataspaceConnectorStackProps = {
-  // Optional: Custom domain for EDC API endpoints (see README for details)
   // certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id>",
   // domainName: "edc.example.com",
   // hostedZoneId: "Z0123456789ABCDEFGHIJ",
+  containerInsights: true,
   controlPlaneCpu: 256,
   controlPlaneMemoryLimitMiB: 1024,
-  controlPlanePolicyMonitorIteration: "600000", // Run every 10 minutes
   controlPlanePortMapping: CONTROL_PLANE_PORT_MAPPING_DEFAULT,
   dataPlaneCpu: 256,
   dataPlaneMemoryLimitMiB: 512,
   dataPlanePortMapping: DATA_PLANE_PORT_MAPPING_DEFAULT,
   edcIam: edcIam,
   edcStateRemovalPolicy: RemovalPolicy.DESTROY,
-  managementApiAuthKey: "",
   managementApiPrincipals: [
     // new ArnPrincipal("arn:aws:iam::<account-id>:role/<role-name>"),
   ],
   observabilityApiPrincipals: [
     // new ArnPrincipal("arn:aws:iam::<account-id>:role/<role-name>"),
   ],
+  profile: "development",
+  stateMachineIterationMillis: "10000",
   vpcIpAddresses: "10.0.10.0/24",
 };

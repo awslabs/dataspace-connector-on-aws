@@ -137,3 +137,33 @@ private fun Any?.toAttributeValue(): AttributeValue {
 }
 
 fun KClass<*>.hasProperty(propertyName: String): Boolean = memberProperties.any { it.name == propertyName }
+
+/**
+ * Extracts integer state values from criteria that filter on "state" with "in" or "=" operators.
+ * Returns null if no state criterion is found, allowing callers to fall back to a scan.
+ */
+fun Array<out Criterion>.extractStateValues(): List<Int>? {
+    for (criterion in this) {
+        if (criterion.operandLeft.toString() == "state") {
+            return when (val right = criterion.operandRight) {
+                is Collection<*> -> right.mapNotNull { (it as? Number)?.toInt() }
+                is Number -> listOf(right.toInt())
+                else -> null
+            }
+        }
+    }
+    return null
+}
+
+/**
+ * Extracts a string filter value for a given field name from criteria (supports "=" operator).
+ * Returns null if no matching criterion is found.
+ */
+fun Array<out Criterion>.extractStringValue(fieldName: String): String? {
+    for (criterion in this) {
+        if (criterion.operandLeft.toString() == fieldName && criterion.operator == "=") {
+            return criterion.operandRight?.toString()
+        }
+    }
+    return null
+}
