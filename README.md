@@ -1,6 +1,6 @@
 # Dataspace Connector on AWS
 
-🚀 Deploy a production-ready Dataspace Connector for [Catena-X](https://catena-x.net/) on AWS with a single command.
+🚀 Deploy a Dataspace Connector for [Catena-X](https://catena-x.net/) on production-ready AWS infrastructure with a single command.
 
 To participate in secure, sovereign data sharing through the Catena-X data space, member organizations must host a [*Dataspace Connector*](https://eclipse-tractusx.github.io/docs-kits/category/connector-kit). This open-source project comes with just that:
 
@@ -17,7 +17,7 @@ The goal is to provide easy access to production-ready connector deployments wit
 Configure your deployment in [`cdk/lib/config/environments.ts`](cdk/lib/config/environments.ts) — see [Configuration](#configuration) for all available options.
 
 > [!IMPORTANT]
-> To use this open-source project, your company or organization must be onboarded to the Catena-X data space. Instructions on how to get started with your Catena-X journey [can be found here](https://catena-x.net/ecosystem/onboarding/).
+> To use this project, your organization must be onboarded to the Catena-X data space. Instructions on how to get started [can be found here](https://catena-x.net/ecosystem/onboarding/). Additionally, operating a connector in the Catena-X production environment requires your organization to pass a [conformity assessment](https://catena-x.net/ecosystem/certification/) conducted by an accredited Conformity Assessment Body (CAB). "Production-ready" in this project refers to AWS infrastructure quality (high availability, security, observability) — not Catena-X certification status.
 
 ```bash
 ~ ./deploy.sh
