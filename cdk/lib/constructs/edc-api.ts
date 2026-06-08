@@ -37,6 +37,7 @@ import {
 import { DeploymentProfile } from "../config/environments";
 
 export interface EdcApiProps {
+  readonly albArn: string;
   readonly certificate?: ICertificate;
   readonly controlPlanePortMapping: ControlPlanePortMapping;
   readonly dataPlanePortMapping: DataPlanePortMapping;
@@ -133,6 +134,7 @@ export class EdcApi extends Construct {
         observabilityApiSpec,
         observabilityAddress,
         props.vpcLinkId,
+        props.albArn,
       ),
       deployOptions: {
         ...commonDeployOptions,
@@ -161,6 +163,7 @@ export class EdcApi extends Construct {
         managementApiSpec,
         managementAddress,
         props.vpcLinkId,
+        props.albArn,
       ),
       deployOptions: {
         ...commonDeployOptions,
@@ -189,6 +192,7 @@ export class EdcApi extends Construct {
         dspApiSpec,
         dspAddress,
         props.vpcLinkId,
+        props.albArn,
       ),
       deployOptions: {
         ...commonDeployOptions,
@@ -216,6 +220,7 @@ export class EdcApi extends Construct {
         dataPlaneApiSpec,
         dataPlaneAddress,
         props.vpcLinkId,
+        props.albArn,
       ),
       deployOptions: {
         ...commonDeployOptions,

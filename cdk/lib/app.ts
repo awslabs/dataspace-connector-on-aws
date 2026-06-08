@@ -3,16 +3,34 @@
 
 import { App, Tags } from "aws-cdk-lib";
 
-import { DataspaceConnectorStack } from "./dataspace-connector-stack";
-import { DataspaceConnectorStackConfig } from "./config/environments";
+import { SharedInfraStack } from "./shared-infra-stack";
+import { ConnectorStack } from "./connector-stack";
+import { DEPLOYMENT_CONFIG, validateConnectorId } from "./config/environments";
 
 const app = new App();
 
-new DataspaceConnectorStack(
+const sharedInfra = new SharedInfraStack(
   app,
-  "DataspaceConnectorStack",
-  DataspaceConnectorStackConfig,
+  "DataspaceConnectorSharedInfraStack",
+  {
+    config: DEPLOYMENT_CONFIG.sharedInfra,
+  },
 );
+
+DEPLOYMENT_CONFIG.connectors.forEach((connectorConfig, index) => {
+  validateConnectorId(connectorConfig.connectorId);
+  const stack = new ConnectorStack(
+    app,
+    `DataspaceConnector-${connectorConfig.connectorId}`,
+    {
+      connectorConfig,
+      sharedInfra,
+      sharedInfraConfig: DEPLOYMENT_CONFIG.sharedInfra,
+      priority: index + 1,
+    },
+  );
+  stack.addDependency(sharedInfra);
+});
 
 Tags.of(app).add("Project", "dataspace-connector-on-aws");
 Tags.of(app).add("GitRepo", "github.com/awslabs/dataspace-connector-on-aws");

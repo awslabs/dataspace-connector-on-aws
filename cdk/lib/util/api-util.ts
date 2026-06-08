@@ -24,11 +24,13 @@ export function getApiDefinitionTransform(
   filePath: string,
   loadBalancerDnsName: string,
   vpcLinkId: string,
+  albArn: string,
 ): ApiDefinition {
   let apiSpec = JSON.stringify(
     yaml.load(fs.readFileSync(filePath, { encoding: "utf-8" })),
   );
   apiSpec = apiSpec.replace(/\${loadBalancerDnsName}/g, loadBalancerDnsName);
   apiSpec = apiSpec.replace(/\${vpcLinkId}/g, vpcLinkId);
+  apiSpec = apiSpec.replace(/\${albArn}/g, albArn);
   return ApiDefinition.fromInline(JSON.parse(apiSpec));
 }

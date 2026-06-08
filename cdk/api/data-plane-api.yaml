@@ -4,19 +4,13 @@
 openapi: 3.0.1
 tags:
   - description:
-      "The public API of the Data Plane is a data proxy enabling a data consumer\
-      \ to actively querydata from the provider data source (e.g. backend Rest API,\
-      \ internal database...) through its Data Planeinstance. Thus the Data Plane is\
-      \ the only entry/output door for the data, which avoids the provider to exposedirectly\
-      \ its data externally.The Data Plane public API being a proxy, it supports all\
-      \ verbs (i.e. GET, POST, PUT, PATCH, DELETE), whichcan then conveyed until the\
-      \ data source is required. This is especially useful when the actual data sourceis\
-      \ a Rest API itself.In the same manner, any set of arbitrary query parameters,\
-      \ path parameters and request body are supported (in the limits fixed by the HTTP\
-      \ server) and can also conveyed to the actual data source."
+      The public API of the Data Plane is a data proxy enabling a data consumer to actively querydata from the provider data source (e.g. backend Rest API, internal database...) through its Data
+      Planeinstance. Thus the Data Plane is the only entry/output door for the data, which avoids the provider to exposedirectly its data externally.The Data Plane public API being a proxy, it supports all
+      verbs (i.e. GET, POST, PUT, PATCH, DELETE), whichcan then conveyed until the data source is required. This is especially useful when the actual data sourceis a Rest API itself.In the same manner, any
+      set of arbitrary query parameters, path parameters and request body are supported (in the limits fixed by the HTTP server) and can also conveyed to the actual data source.
     name: Data Plane public API
 paths:
-  /{any}:
+  /${connectorId}/{any}:
     delete:
       description: Send `DELETE` data query to the Data Plane.
       operationId: delete
@@ -32,9 +26,17 @@ paths:
       x-amazon-apigateway-integration:
         type: http_proxy
         httpMethod: DELETE
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/public/{any}
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/public/{any}
+        integrationTarget: ${albArn}
+      parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: &id001
+            type: string
+          description: Connector identifier for path-based routing
     get:
       description: Send `GET` data query to the Data Plane.
       operationId: get
@@ -52,9 +54,16 @@ paths:
         httpMethod: GET
         requestParameters:
           integration.request.path.any: method.request.path.any
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/public/{any}
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/public/{any}
+        integrationTarget: ${albArn}
+      parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
     head:
       description: Send `HEAD` data query to the Data Plane.
       operationId: head
@@ -70,9 +79,16 @@ paths:
       x-amazon-apigateway-integration:
         type: http_proxy
         httpMethod: HEAD
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/public/{any}
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/public/{any}
+        integrationTarget: ${albArn}
+      parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
     patch:
       description: Send `PATCH` data query to the Data Plane.
       operationId: patch
@@ -88,9 +104,16 @@ paths:
       x-amazon-apigateway-integration:
         type: http_proxy
         httpMethod: PATCH
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/public/{any}
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/public/{any}
+        integrationTarget: ${albArn}
+      parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
     post:
       description: Send `POST` data query to the Data Plane.
       operationId: post
@@ -106,9 +129,16 @@ paths:
       x-amazon-apigateway-integration:
         type: http_proxy
         httpMethod: POST
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/public/{any}
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/public/{any}
+        integrationTarget: ${albArn}
+      parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
     put:
       description: Send `PUT` data query to the Data Plane.
       operationId: put
@@ -124,6 +154,13 @@ paths:
       x-amazon-apigateway-integration:
         type: http_proxy
         httpMethod: PUT
-        connectionId: "${vpcLinkId}"
+        connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/public/{any}
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/public/{any}
+        integrationTarget: ${albArn}
+      parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing

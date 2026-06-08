@@ -3,7 +3,7 @@
 
 import { Construct } from "constructs";
 import { ISecurityGroup } from "aws-cdk-lib/aws-ec2";
-import { INetworkTargetGroup } from "aws-cdk-lib/aws-elasticloadbalancingv2";
+import { IApplicationTargetGroup } from "aws-cdk-lib/aws-elasticloadbalancingv2";
 
 import {
   FargatePlatformVersion,
@@ -17,11 +17,12 @@ import { DeploymentProfile } from "../config/environments";
 export interface EdcFargateServiceProps {
   readonly cluster: ICluster;
   readonly containerName: string;
+  readonly containerPort: number;
   readonly maxHealthyPercent?: number;
   readonly minHealthyPercent?: number;
   readonly profile: DeploymentProfile;
   readonly securityGroups: ISecurityGroup[];
-  readonly targetGroups: Map<number, INetworkTargetGroup>;
+  readonly targetGroup: IApplicationTargetGroup;
   readonly taskDefinition: TaskDefinition;
 }
 
@@ -41,15 +42,11 @@ export class EdcFargateService extends FargateService {
       taskDefinition: props.taskDefinition,
     });
 
-    props.targetGroups.forEach(
-      (targetGroup: INetworkTargetGroup, port: number) => {
-        targetGroup.addTarget(
-          this.loadBalancerTarget({
-            containerName: props.containerName,
-            containerPort: port,
-          }),
-        );
-      },
+    props.targetGroup.addTarget(
+      this.loadBalancerTarget({
+        containerName: props.containerName,
+        containerPort: props.containerPort,
+      }),
     );
   }
 }

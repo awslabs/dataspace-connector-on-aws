@@ -3,10 +3,16 @@
 
 openapi: 3.0.1
 paths:
-  /.well-known/dspace-version:
+  /${connectorId}/.well-known/dspace-version:
     get:
       operationId: getProtocolVersions
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: &id001
+            type: string
+          description: Connector identifier for path-based routing
         - in: header
           name: Authorization
           schema:
@@ -28,10 +34,16 @@ paths:
             statusCode: 200
             responseTemplates:
               application/json: "{\n  \"Success\": true\n}\n"
-  /2024/1/catalog/datasets/{id}:
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/catalog/datasets/{id}:
     get:
       operationId: getDataset
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -56,13 +68,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/catalog/datasets/{id}
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/catalog/datasets/{id}
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2024/1/catalog/request:
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/catalog/request:
     post:
       operationId: requestCatalog
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: Authorization
           in: header
           required: false
@@ -107,11 +125,17 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/catalog/request
-  /2024/1/negotiations/offer:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/catalog/request
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/negotiations/offer:
     post:
       operationId: initialContractOffer
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: Authorization
           in: header
           required: false
@@ -149,11 +173,17 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/offer
-  /2024/1/negotiations/request:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/offer
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/negotiations/request:
     post:
       operationId: initialContractRequest
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: Authorization
           in: header
           required: false
@@ -191,11 +221,17 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/request
-  /2024/1/negotiations/{id}:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/request
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/negotiations/{id}:
     get:
       operationId: getNegotiation
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -220,13 +256,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2024/1/negotiations/{id}/agreement:
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/negotiations/{id}/agreement:
     post:
       operationId: createAgreement
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -271,13 +313,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}/agreement
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}/agreement
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2024/1/negotiations/{id}/agreement/verification:
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/negotiations/{id}/agreement/verification:
     post:
       operationId: verifyAgreement
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -322,13 +370,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}/agreement/verification
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}/agreement/verification
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2024/1/negotiations/{id}/events:
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/negotiations/{id}/events:
     post:
       operationId: createEvent
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -373,13 +427,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}/events
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}/events
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2024/1/negotiations/{id}/offer:
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/negotiations/{id}/offer:
     post:
       operationId: providerOffer
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -424,13 +484,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}/offer
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}/offer
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2024/1/negotiations/{id}/request:
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/negotiations/{id}/request:
     post:
       operationId: contractRequest
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -475,13 +541,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}/request
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}/request
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2024/1/negotiations/{id}/termination:
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/negotiations/{id}/termination:
     post:
       operationId: terminateNegotiation
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -526,13 +598,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/negotiations/{id}/termination
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}/termination
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2024/1/transfers/request:
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/transfers/request:
     post:
       operationId: initiateTransferProcess
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: Authorization
           in: header
           required: false
@@ -570,11 +648,17 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/transfers/request
-  /2024/1/transfers/{id}:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/transfers/request
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/transfers/{id}:
     get:
       operationId: getTransferProcess
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -599,13 +683,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/transfers/{id}
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/transfers/{id}
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2024/1/transfers/{id}/completion:
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/transfers/{id}/completion:
     post:
       operationId: transferProcessCompletion
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -650,13 +740,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/transfers/{id}/completion
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/transfers/{id}/completion
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2024/1/transfers/{id}/start:
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/transfers/{id}/start:
     post:
       operationId: transferProcessStart
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -701,13 +797,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/transfers/{id}/start
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/transfers/{id}/start
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2024/1/transfers/{id}/suspension:
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/transfers/{id}/suspension:
     post:
       operationId: transferProcessSuspension
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -752,13 +854,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/transfers/{id}/suspension
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/transfers/{id}/suspension
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2024/1/transfers/{id}/termination:
+        integrationTarget: ${albArn}
+  /${connectorId}/2024/1/transfers/{id}/termination:
     post:
       operationId: transferProcessTermination
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -803,13 +911,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2024/1/transfers/{id}/termination
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/transfers/{id}/termination
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2025-1/catalog/datasets/{id}:
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/catalog/datasets/{id}:
     get:
       operationId: getDataset
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -834,13 +948,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/catalog/datasets/{id}
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/catalog/datasets/{id}
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2025-1/catalog/request:
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/catalog/request:
     post:
       operationId: requestCatalog
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: Authorization
           in: header
           required: false
@@ -885,11 +1005,17 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/catalog/request
-  /2025-1/negotiations/offers:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/catalog/request
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/negotiations/offers:
     post:
       operationId: initialContractOffer
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: Authorization
           in: header
           required: false
@@ -927,11 +1053,17 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/offers
-  /2025-1/negotiations/request:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/offers
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/negotiations/request:
     post:
       operationId: initialContractRequest
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: Authorization
           in: header
           required: false
@@ -969,11 +1101,17 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/request
-  /2025-1/negotiations/{id}:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/request
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/negotiations/{id}:
     get:
       operationId: getNegotiation
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -998,13 +1136,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2025-1/negotiations/{id}/agreement:
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/negotiations/{id}/agreement:
     post:
       operationId: createAgreement
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -1049,13 +1193,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}/agreement
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}/agreement
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2025-1/negotiations/{id}/agreement/verification:
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/negotiations/{id}/agreement/verification:
     post:
       operationId: verifyAgreement
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -1100,13 +1250,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}/agreement/verification
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}/agreement/verification
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2025-1/negotiations/{id}/events:
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/negotiations/{id}/events:
     post:
       operationId: createEvent
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -1151,13 +1307,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}/events
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}/events
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2025-1/negotiations/{id}/offers:
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/negotiations/{id}/offers:
     post:
       operationId: providerOffer
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -1202,13 +1364,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}/offers
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}/offers
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2025-1/negotiations/{id}/request:
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/negotiations/{id}/request:
     post:
       operationId: contractRequest
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -1253,13 +1421,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}/request
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}/request
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2025-1/negotiations/{id}/termination:
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/negotiations/{id}/termination:
     post:
       operationId: terminateNegotiation
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -1304,13 +1478,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/negotiations/{id}/termination
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}/termination
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2025-1/transfers/request:
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/transfers/request:
     post:
       operationId: initiateTransferProcess
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: Authorization
           in: header
           required: false
@@ -1348,11 +1528,17 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/transfers/request
-  /2025-1/transfers/{id}:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/transfers/request
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/transfers/{id}:
     get:
       operationId: getTransferProcess
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -1377,13 +1563,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/transfers/{id}
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/transfers/{id}
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2025-1/transfers/{id}/completion:
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/transfers/{id}/completion:
     post:
       operationId: transferProcessCompletion
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -1428,13 +1620,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/transfers/{id}/completion
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/transfers/{id}/completion
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2025-1/transfers/{id}/start:
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/transfers/{id}/start:
     post:
       operationId: transferProcessStart
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -1479,13 +1677,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/transfers/{id}/start
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/transfers/{id}/start
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2025-1/transfers/{id}/suspension:
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/transfers/{id}/suspension:
     post:
       operationId: transferProcessSuspension
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -1530,13 +1734,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/transfers/{id}/suspension
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/transfers/{id}/suspension
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /2025-1/transfers/{id}/termination:
+        integrationTarget: ${albArn}
+  /${connectorId}/2025-1/transfers/{id}/termination:
     post:
       operationId: transferProcessTermination
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - name: id
           in: path
           required: true
@@ -1581,13 +1791,19 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/api/protocol/2025-1/transfers/{id}/termination
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/transfers/{id}/termination
         requestParameters:
           integration.request.path.id: method.request.path.id
-  /catalog/datasets/{id}:
+        integrationTarget: ${albArn}
+  /${connectorId}/catalog/datasets/{id}:
     get:
       operationId: getDataset
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: path
           name: id
           required: true
@@ -1609,11 +1825,17 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/catalog/datasets/{id}
-  /catalog/request:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/catalog/datasets/{id}
+        integrationTarget: ${albArn}
+  /${connectorId}/catalog/request:
     post:
       operationId: requestCatalog
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: header
           name: Authorization
           schema:
@@ -1652,11 +1874,17 @@ paths:
         connectionType: VPC_LINK
         httpMethod: POST
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/catalog/request
-  /negotiations/offer:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/catalog/request
+        integrationTarget: ${albArn}
+  /${connectorId}/negotiations/offer:
     post:
       operationId: initialContractOffer
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: header
           name: Authorization
           schema:
@@ -1691,11 +1919,17 @@ paths:
         connectionType: VPC_LINK
         httpMethod: POST
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/offer
-  /negotiations/request:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/offer
+        integrationTarget: ${albArn}
+  /${connectorId}/negotiations/request:
     post:
       operationId: initialContractRequest
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: header
           name: Authorization
           schema:
@@ -1730,11 +1964,17 @@ paths:
         connectionType: VPC_LINK
         httpMethod: POST
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/request
-  /negotiations/{id}:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/request
+        integrationTarget: ${albArn}
+  /${connectorId}/negotiations/{id}:
     get:
       operationId: getNegotiation
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: path
           name: id
           required: true
@@ -1756,11 +1996,17 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}
-  /negotiations/{id}/agreement:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}
+        integrationTarget: ${albArn}
+  /${connectorId}/negotiations/{id}/agreement:
     post:
       operationId: createAgreement
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: path
           name: id
           required: true
@@ -1802,11 +2048,17 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}/agreement
-  /negotiations/{id}/agreement/verification:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}/agreement
+        integrationTarget: ${albArn}
+  /${connectorId}/negotiations/{id}/agreement/verification:
     post:
       operationId: verifyAgreement
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: path
           name: id
           required: true
@@ -1848,11 +2100,17 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}/agreement/verification
-  /negotiations/{id}/events:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}/agreement/verification
+        integrationTarget: ${albArn}
+  /${connectorId}/negotiations/{id}/events:
     post:
       operationId: createEvent
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: path
           name: id
           required: true
@@ -1894,11 +2152,17 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}/events
-  /negotiations/{id}/offer:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}/events
+        integrationTarget: ${albArn}
+  /${connectorId}/negotiations/{id}/offer:
     post:
       operationId: providerOffer
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: path
           name: id
           required: true
@@ -1940,11 +2204,17 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}/offer
-  /negotiations/{id}/request:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}/offer
+        integrationTarget: ${albArn}
+  /${connectorId}/negotiations/{id}/request:
     post:
       operationId: contractRequest
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: path
           name: id
           required: true
@@ -1986,11 +2256,17 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}/request
-  /negotiations/{id}/termination:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}/request
+        integrationTarget: ${albArn}
+  /${connectorId}/negotiations/{id}/termination:
     post:
       operationId: terminateNegotiation
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: path
           name: id
           required: true
@@ -2032,11 +2308,17 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/negotiations/{id}/termination
-  /transfers/request:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}/termination
+        integrationTarget: ${albArn}
+  /${connectorId}/transfers/request:
     post:
       operationId: initiateTransferProcess
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: header
           name: Authorization
           schema:
@@ -2071,11 +2353,17 @@ paths:
         connectionType: VPC_LINK
         httpMethod: POST
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/transfers/request
-  /transfers/{id}:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/transfers/request
+        integrationTarget: ${albArn}
+  /${connectorId}/transfers/{id}:
     get:
       operationId: getTransferProcess
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: path
           name: id
           required: true
@@ -2097,11 +2385,17 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/transfers/{id}
-  /transfers/{id}/completion:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/transfers/{id}
+        integrationTarget: ${albArn}
+  /${connectorId}/transfers/{id}/completion:
     post:
       operationId: transferProcessCompletion
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: path
           name: id
           required: true
@@ -2143,11 +2437,17 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/transfers/{id}/completion
-  /transfers/{id}/start:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/transfers/{id}/completion
+        integrationTarget: ${albArn}
+  /${connectorId}/transfers/{id}/start:
     post:
       operationId: transferProcessStart
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: path
           name: id
           required: true
@@ -2189,11 +2489,17 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/transfers/{id}/start
-  /transfers/{id}/suspension:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/transfers/{id}/start
+        integrationTarget: ${albArn}
+  /${connectorId}/transfers/{id}/suspension:
     post:
       operationId: transferProcessSuspension
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: path
           name: id
           required: true
@@ -2235,11 +2541,17 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/transfers/{id}/suspension
-  /transfers/{id}/termination:
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/transfers/{id}/suspension
+        integrationTarget: ${albArn}
+  /${connectorId}/transfers/{id}/termination:
     post:
       operationId: transferProcessTermination
       parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema: *id001
+          description: Connector identifier for path-based routing
         - in: path
           name: id
           required: true
@@ -2281,4 +2593,5 @@ paths:
         requestParameters:
           integration.request.path.id: method.request.path.id
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/api/protocol/transfers/{id}/termination
+        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/transfers/{id}/termination
+        integrationTarget: ${albArn}
