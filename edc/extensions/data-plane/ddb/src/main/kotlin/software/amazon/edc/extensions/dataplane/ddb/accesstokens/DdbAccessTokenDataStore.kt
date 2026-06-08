@@ -9,9 +9,11 @@ import org.eclipse.edc.spi.query.CriterionOperatorRegistry
 import org.eclipse.edc.spi.query.QuerySpec
 import org.eclipse.edc.spi.result.StoreResult
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
-import software.amazon.awssdk.enhanced.dynamodb.Key
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
+import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.common.ddb.utility.toPredicate
 import software.amazon.edc.extensions.dataplane.ddb.types.AccessToken
 import software.amazon.edc.extensions.dataplane.ddb.types.toDdbAccessToken
@@ -20,7 +22,7 @@ class DdbAccessTokenDataStore(
     private val criterionOperatorRegistry: CriterionOperatorRegistry,
     private val table: DynamoDbTable<AccessToken>,
 ) : AccessTokenDataStore {
-    override fun getById(id: String): AccessTokenData? = table.getItem(Key.builder().partitionValue(id).build())?.toEdcAccessTokenData()
+    override fun getById(id: String): AccessTokenData? = table.getItem(keyFromPkSk(EntityType.ACCESS_TOKEN, id))?.toEdcAccessTokenData()
 
     override fun store(accessTokenData: AccessTokenData): StoreResult<Void> =
         if (getById(accessTokenData.id()) == null) {
@@ -42,19 +44,17 @@ class DdbAccessTokenDataStore(
         if (getById(id) == null) {
             StoreResult.notFound("AccessTokenData with ID '$id' does not exist.")
         } else {
-            table.deleteItem(Key.builder().partitionValue(id).build())
+            table.deleteItem(keyFromPkSk(EntityType.ACCESS_TOKEN, id))
             StoreResult.success()
         }
 
     override fun query(querySpec: QuerySpec): MutableCollection<AccessTokenData> {
-//        log().info("query: $querySpec")
-
-        val pages = table.scan()
         val predicate = querySpec.filterExpression.toPredicate<Any>(criterionOperatorRegistry)
         val comparator = querySpec.getGenericPropertyComparator<Any>()
 
-        return pages
-            .items()
+        return table
+            .query(queryRequestFromPk(EntityType.ACCESS_TOKEN))
+            .flatMap { it.items() }
             .asSequence()
             .map { it.toEdcAccessTokenData() }
             .filter { predicate.test(it) }

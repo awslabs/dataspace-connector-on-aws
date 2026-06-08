@@ -9,31 +9,25 @@ import org.eclipse.edc.connector.dataplane.selector.spi.testfixtures.store.DataP
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema
 import software.amazon.edc.extensions.common.ddb.types.Lease
+import software.amazon.edc.extensions.controlplane.ddb.TestTableHelper
 import software.amazon.edc.extensions.controlplane.ddb.types.DataPlaneInstance
 import java.time.Clock
 import java.time.Duration
 
 class DdbDataPlaneInstanceStoreTest : DataPlaneInstanceStoreTestBase() {
-    private val client =
-        DynamoDbEnhancedClient
-            .builder()
-            .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
-            .build()
-    private val leaseTable =
-        client
-            .table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
-            .apply { createTable() }
-    private val dataPlaneInstanceTable =
-        client
-            .table(DataPlaneInstance.TABLE_NAME, TableSchema.fromBean(DataPlaneInstance::class.java))
-            .apply { createTable() }
+    private val ddbClient = DynamoDBEmbedded.create().dynamoDbClient()
+    private val client = DynamoDbEnhancedClient.builder().dynamoDbClient(ddbClient).build()
+
+    init {
+        ddbClient.createTable(TestTableHelper.createRequest())
+    }
 
     private val dataPlaneInstanceStore =
         DdbDataPlaneInstanceStore(
             clock = Clock.systemDefaultZone(),
             leaseHolder = CONNECTOR_NAME,
-            leaseTable = leaseTable,
-            table = dataPlaneInstanceTable,
+            leaseTable = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(Lease::class.java)),
+            table = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(DataPlaneInstance::class.java)),
         )
 
     override fun getStore(): DataPlaneInstanceStore = dataPlaneInstanceStore

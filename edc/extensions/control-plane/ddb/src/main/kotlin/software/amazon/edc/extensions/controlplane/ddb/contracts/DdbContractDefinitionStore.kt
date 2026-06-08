@@ -13,10 +13,13 @@ import org.eclipse.edc.spi.query.QuerySpec
 import org.eclipse.edc.spi.result.StoreResult
 import org.eclipse.edc.store.ReflectionBasedQueryResolver
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
-import software.amazon.edc.extensions.common.ddb.utility.keyFromId
+import software.amazon.edc.extensions.common.ddb.EntityType
+import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.controlplane.ddb.types.ContractDefinition
 import software.amazon.edc.extensions.controlplane.ddb.types.toDdbContractDefinition
 import java.util.stream.Stream
+import kotlin.streams.asStream
 import org.eclipse.edc.connector.controlplane.contract.spi.types.offer.ContractDefinition as EdcContractDefinition
 
 class DdbContractDefinitionStore(
@@ -27,17 +30,16 @@ class DdbContractDefinitionStore(
     private val queryResolver: QueryResolver<EdcContractDefinition> =
         ReflectionBasedQueryResolver(EdcContractDefinition::class.java, criterionOperatorRegistry)
 
-    override fun findAll(querySpec: QuerySpec): Stream<EdcContractDefinition> {
-//        log().info("findAll: $querySpec")
-        return queryResolver.query(
+    override fun findAll(querySpec: QuerySpec): Stream<EdcContractDefinition> =
+        queryResolver.query(
             table
-                .scan()
-                .items()
-                .stream()
-                .map { it.toEdcContractDefinition(objectMapper) },
+                .query(queryRequestFromPk(EntityType.CONTRACT_DEFINITION))
+                .flatMap { it.items() }
+                .asSequence()
+                .map { it.toEdcContractDefinition(objectMapper) }
+                .asStream(),
             querySpec,
         )
-    }
 
     override fun findById(id: String): EdcContractDefinition? = getContractDefinition(id)?.toEdcContractDefinition(objectMapper)
 
@@ -64,5 +66,5 @@ class DdbContractDefinitionStore(
         return if (deleted == null) notFound else StoreResult.success(deleted)
     }
 
-    private fun getContractDefinition(id: String): ContractDefinition? = table.getItem(keyFromId(id))
+    private fun getContractDefinition(id: String): ContractDefinition? = table.getItem(keyFromPkSk(EntityType.CONTRACT_DEFINITION, id))
 }

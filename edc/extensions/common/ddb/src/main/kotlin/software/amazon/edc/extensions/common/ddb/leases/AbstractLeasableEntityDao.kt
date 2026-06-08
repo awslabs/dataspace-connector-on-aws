@@ -4,9 +4,10 @@
 package software.amazon.edc.extensions.common.ddb.leases
 
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
-import software.amazon.edc.extensions.common.ddb.utility.keyFromId
+import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
 import java.time.Clock
 import java.time.Duration
 import java.util.UUID
@@ -68,7 +69,8 @@ abstract class AbstractLeasableEntityDao(
         updateLeaseId(leasable)
         leaseTable.putItem(
             Lease(
-                leaseId = id,
+                pk = EntityType.LEASE,
+                sk = id,
                 leasedAt = now,
                 leasedBy = leaseHolder,
                 leaseDuration = duration.toMillis(),
@@ -82,7 +84,6 @@ abstract class AbstractLeasableEntityDao(
         return hasActiveLease(leasable)
     }
 
-    /** Check lease status using an already-loaded entity, avoiding an extra GetItem call. */
     protected fun hasActiveLease(leasable: Leasable): Boolean {
         val leaseId = leasable.leaseId ?: return false
         val lease = getLease(leaseId) ?: return false
@@ -104,5 +105,5 @@ abstract class AbstractLeasableEntityDao(
         return !lease.isExpired(clock) && lease.leasedBy == leaseHolder
     }
 
-    private fun getLease(id: String): Lease? = leaseTable.getItem(keyFromId(id))
+    private fun getLease(id: String): Lease? = leaseTable.getItem(keyFromPkSk(EntityType.LEASE, id))
 }

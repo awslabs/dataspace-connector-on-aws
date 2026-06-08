@@ -15,17 +15,25 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbConvertedBy
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondarySortKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.ListOfMapsConverter
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.utility.convertValueToMapStringAny
+import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import org.eclipse.edc.connector.controlplane.transfer.spi.types.TransferProcess as EdcTransferProcess
 
 @DynamoDbBean
 data class TransferProcess(
-    @get:DynamoDbAttribute(ID)
     @get:DynamoDbPartitionKey
-    var id: String = "",
+    @get:DynamoDbAttribute("pk")
+    @get:DynamoDbSecondarySortKey(indexNames = [GSI_CORRELATION_ID])
+    var pk: String = EntityType.TRANSFER_PROCESS,
+    @get:DynamoDbSortKey
+    @get:DynamoDbAttribute("sk")
+    var sk: String = "",
     @get:DynamoDbAttribute(ASSET_ID)
     var assetId: String? = null,
     @get:DynamoDbAttribute(CALLBACK_ADDRESSES)
@@ -37,7 +45,7 @@ data class TransferProcess(
     @get:DynamoDbAttribute(CONTRACT_ID)
     var contractId: String? = null,
     @get:DynamoDbAttribute(CORRELATION_ID)
-    @get:DynamoDbSecondaryPartitionKey(indexNames = [INDEX_CORRELATION_ID])
+    @get:DynamoDbSecondaryPartitionKey(indexNames = [GSI_CORRELATION_ID])
     var correlationId: String? = null,
     @get:DynamoDbAttribute(COUNTER_PARTY_ADDRESS)
     var counterPartyAddress: String? = null,
@@ -53,6 +61,9 @@ data class TransferProcess(
     var deprovisionedResources: List<Map<String, Any>>? = null,
     @get:DynamoDbAttribute(ERROR_DETAIL)
     var errorDetail: String? = null,
+    @get:DynamoDbAttribute(GSI_STATE_PK)
+    @get:DynamoDbSecondaryPartitionKey(indexNames = [GSI_STATE])
+    var gsiStatePk: String? = null,
     @get:DynamoDbAttribute(LEASE_ID)
     override var leaseId: String? = null,
     @get:DynamoDbAttribute(PENDING)
@@ -72,11 +83,11 @@ data class TransferProcess(
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var resourceManifest: Map<String, Any>? = null,
     @get:DynamoDbAttribute(STATE)
-    @get:DynamoDbSecondaryPartitionKey(indexNames = [INDEX_STATE])
     var state: Int = 0,
     @get:DynamoDbAttribute(STATE_COUNT)
     var stateCount: Int = 0,
     @get:DynamoDbAttribute(STATE_TIMESTAMP)
+    @get:DynamoDbSecondarySortKey(indexNames = [GSI_STATE])
     var stateTimestamp: Long = 0,
     @get:DynamoDbAttribute(TRACE_CONTEXT)
     var traceContext: Map<String, String>? = null,
@@ -87,18 +98,20 @@ data class TransferProcess(
     @get:DynamoDbAttribute(UPDATED_AT)
     var updatedAt: Long = 0,
 ) : Leasable {
+    val id: String get() = sk
+
     fun toEdcTransferProcess(objectMapper: ObjectMapper): EdcTransferProcess =
         EdcTransferProcess.Builder
             .newInstance()
             .apply {
-                id(id)
+                id(sk)
                 assetId(assetId)
                 callbackAddresses(callbackAddresses?.map { objectMapper.convertValue(it, CallbackAddress::class.java) })
                 contentDataAddress?.let {
                     contentDataAddress(
                         DataAddress.Builder
                             .newInstance()
-                            .properties(contentDataAddress)
+                            .properties(it)
                             .build(),
                     )
                 }
@@ -110,7 +123,7 @@ data class TransferProcess(
                     dataDestination(
                         DataAddress.Builder
                             .newInstance()
-                            .properties(dataDestination)
+                            .properties(it)
                             .build(),
                     )
                 }
@@ -146,7 +159,7 @@ data class TransferProcess(
         const val DATA_PLANE_ID = "dataPlaneId"
         const val DEPROVISIONED_RESOURCES = "deprovisionedResources"
         const val ERROR_DETAIL = "errorDetail"
-        const val ID = "id"
+        const val GSI_STATE_PK = "gsiStatePk"
         const val LEASE_ID = "leaseId"
         const val PENDING = "pending"
         const val PRIVATE_PROPERTIES = "privateProperties"
@@ -162,9 +175,8 @@ data class TransferProcess(
         const val TYPE = "type"
         const val UPDATED_AT = "updatedAt"
 
-        const val INDEX_CORRELATION_ID = "index-correlationId"
-        const val INDEX_STATE = "index-state"
-        const val TABLE_NAME = "TransferProcesses"
+        const val GSI_CORRELATION_ID = "gsi-correlationId"
+        const val GSI_STATE = "gsi-state"
     }
 }
 
@@ -173,7 +185,8 @@ fun EdcTransferProcess.toDdbTransferProcess(
     leaseId: String? = null,
 ): TransferProcess =
     TransferProcess(
-        id = id,
+        pk = EntityType.TRANSFER_PROCESS,
+        sk = id,
         assetId = assetId,
         callbackAddresses = callbackAddresses.map { objectMapper.convertValueToMapStringAny(it) },
         contentDataAddress = contentDataAddress?.properties,
@@ -185,15 +198,13 @@ fun EdcTransferProcess.toDdbTransferProcess(
         dataPlaneId = dataPlaneId,
         deprovisionedResources = deprovisionedResources.map { objectMapper.convertValueToMapStringAny(it) },
         errorDetail = errorDetail,
+        gsiStatePk = gsiStatePk(EntityType.TRANSFER_PROCESS, state),
         leaseId = leaseId,
         pending = isPending,
         privateProperties = privateProperties,
         protocol = protocol,
         protocolMessages = protocolMessages?.let { objectMapper.convertValueToMapStringAny(protocolMessages) },
-        provisionedResourceSet =
-            provisionedResourceSet?.let {
-                objectMapper.convertValueToMapStringAny(provisionedResourceSet)
-            },
+        provisionedResourceSet = provisionedResourceSet?.let { objectMapper.convertValueToMapStringAny(provisionedResourceSet) },
         resourceManifest = resourceManifest?.let { objectMapper.convertValueToMapStringAny(resourceManifest) },
         state = state,
         stateCount = stateCount,

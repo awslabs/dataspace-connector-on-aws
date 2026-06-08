@@ -10,24 +10,22 @@ import org.eclipse.edc.connector.controlplane.policy.spi.testfixtures.store.Poli
 import org.eclipse.edc.query.CriterionOperatorRegistryImpl
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema
+import software.amazon.edc.extensions.controlplane.ddb.TestTableHelper
 import software.amazon.edc.extensions.controlplane.ddb.types.PolicyDefinition
 
 class DdbPolicyDefinitionStoreTest : PolicyDefinitionStoreTestBase() {
-    private val client =
-        DynamoDbEnhancedClient
-            .builder()
-            .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
-            .build()
-    private val table =
-        client
-            .table(PolicyDefinition.TABLE_NAME, TableSchema.fromBean(PolicyDefinition::class.java))
-            .apply { createTable() }
+    private val ddbClient = DynamoDBEmbedded.create().dynamoDbClient()
+    private val client = DynamoDbEnhancedClient.builder().dynamoDbClient(ddbClient).build()
+
+    init {
+        ddbClient.createTable(TestTableHelper.createRequest())
+    }
 
     private val policyDefinitionStore =
         DdbPolicyDefinitionStore(
             criterionOperatorRegistry = CriterionOperatorRegistryImpl.ofDefaults(),
             objectMapper = ObjectMapper(),
-            table = table,
+            table = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(PolicyDefinition::class.java)),
         )
 
     override fun getPolicyDefinitionStore(): PolicyDefinitionStore = policyDefinitionStore

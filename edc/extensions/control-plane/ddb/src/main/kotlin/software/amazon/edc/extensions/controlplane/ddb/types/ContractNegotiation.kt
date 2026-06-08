@@ -12,19 +12,25 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbConvertedBy
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondarySortKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.ListOfMapsConverter
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.utility.convertValueToMapStringAny
+import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import org.eclipse.edc.connector.controlplane.contract.spi.types.negotiation.ContractNegotiation as EdcContractNegotiation
 
 @DynamoDbBean
 data class ContractNegotiation(
-    @get:DynamoDbAttribute(ID)
     @get:DynamoDbPartitionKey
-    var id: String = "",
-    @get:DynamoDbAttribute(CREATED_AT)
-    var createdAt: Long = 0L,
+    @get:DynamoDbAttribute("pk")
+    @get:DynamoDbSecondarySortKey(indexNames = [GSI_CORRELATION_ID])
+    var pk: String = EntityType.CONTRACT_NEGOTIATION,
+    @get:DynamoDbSortKey
+    @get:DynamoDbAttribute("sk")
+    var sk: String = "",
     @get:DynamoDbAttribute(AGREEMENT_ID)
     var agreementId: String? = null,
     @get:DynamoDbAttribute(CALLBACK_ADDRESSES)
@@ -34,14 +40,19 @@ data class ContractNegotiation(
     @get:DynamoDbConvertedBy(ListOfMapsConverter::class)
     var contractOffers: List<Map<String, Any>>? = null,
     @get:DynamoDbAttribute(CORRELATION_ID)
-    @get:DynamoDbSecondaryPartitionKey(indexNames = [INDEX_CORRELATION_ID])
+    @get:DynamoDbSecondaryPartitionKey(indexNames = [GSI_CORRELATION_ID])
     var correlationId: String? = null,
     @get:DynamoDbAttribute(COUNTER_PARTY_ADDRESS)
     var counterPartyAddress: String = "",
     @get:DynamoDbAttribute(COUNTER_PARTY_ID)
     var counterPartyId: String = "",
+    @get:DynamoDbAttribute(CREATED_AT)
+    var createdAt: Long = 0L,
     @get:DynamoDbAttribute(ERROR_DETAIL)
     var errorDetail: String? = null,
+    @get:DynamoDbAttribute(GSI_STATE_PK)
+    @get:DynamoDbSecondaryPartitionKey(indexNames = [GSI_STATE])
+    var gsiStatePk: String? = null,
     @get:DynamoDbAttribute(LEASE_ID)
     override var leaseId: String? = null,
     @get:DynamoDbAttribute(PENDING)
@@ -52,11 +63,11 @@ data class ContractNegotiation(
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var protocolMessages: Map<String, Any>? = null,
     @get:DynamoDbAttribute(STATE)
-    @get:DynamoDbSecondaryPartitionKey(indexNames = [INDEX_STATE])
     var state: Int = 0,
     @get:DynamoDbAttribute(STATE_COUNT)
     var stateCount: Int = 0,
     @get:DynamoDbAttribute(STATE_TIMESTAMP)
+    @get:DynamoDbSecondarySortKey(indexNames = [GSI_STATE])
     var stateTimestamp: Long? = null,
     @get:DynamoDbAttribute(TRACE_CONTEXT)
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
@@ -66,6 +77,8 @@ data class ContractNegotiation(
     @get:DynamoDbAttribute(UPDATED_AT)
     var updatedAt: Long = 0L,
 ) : Leasable {
+    val id: String get() = sk
+
     fun toEdcContractNegotiation(
         objectMapper: ObjectMapper,
         contractAgreement: ContractAgreement? = null,
@@ -73,7 +86,7 @@ data class ContractNegotiation(
         EdcContractNegotiation.Builder
             .newInstance()
             .apply {
-                id(id)
+                id(sk)
                 createdAt(createdAt)
                 contractAgreement?.let { contractAgreement(it.toEdcContractAgreement(objectMapper)) }
                 callbackAddresses(callbackAddresses?.map { objectMapper.convertValue(it, CallbackAddress::class.java) })
@@ -102,7 +115,7 @@ data class ContractNegotiation(
         const val COUNTER_PARTY_ID = "counterPartyId"
         const val CREATED_AT = "createdAt"
         const val ERROR_DETAIL = "errorDetail"
-        const val ID = "id"
+        const val GSI_STATE_PK = "gsiStatePk"
         const val LEASE_ID = "leaseId"
         const val PENDING = "pending"
         const val PROTOCOL = "protocol"
@@ -114,9 +127,8 @@ data class ContractNegotiation(
         const val TYPE = "type"
         const val UPDATED_AT = "updatedAt"
 
-        const val INDEX_CORRELATION_ID = "index-correlationId"
-        const val INDEX_STATE = "index-state"
-        const val TABLE_NAME = "ContractNegotiations"
+        const val GSI_CORRELATION_ID = "gsi-correlationId"
+        const val GSI_STATE = "gsi-state"
     }
 }
 
@@ -125,15 +137,17 @@ fun EdcContractNegotiation.toDdbContractNegotiation(
     leaseId: String? = null,
 ): ContractNegotiation =
     ContractNegotiation(
-        id = id,
-        createdAt = createdAt,
+        pk = EntityType.CONTRACT_NEGOTIATION,
+        sk = id,
         agreementId = contractAgreement?.id,
         callbackAddresses = callbackAddresses?.map { objectMapper.convertValueToMapStringAny(it) },
         contractOffers = contractOffers?.map { objectMapper.convertValueToMapStringAny(it) },
         correlationId = correlationId,
         counterPartyAddress = counterPartyAddress,
         counterPartyId = counterPartyId,
+        createdAt = createdAt,
         errorDetail = errorDetail,
+        gsiStatePk = gsiStatePk(EntityType.CONTRACT_NEGOTIATION, state),
         leaseId = leaseId,
         pending = isPending,
         protocol = protocol,

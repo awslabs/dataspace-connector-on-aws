@@ -9,29 +9,25 @@ import org.eclipse.edc.connector.policy.monitor.spi.testfixtures.store.PolicyMon
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema
 import software.amazon.edc.extensions.common.ddb.types.Lease
+import software.amazon.edc.extensions.controlplane.ddb.TestTableHelper
 import software.amazon.edc.extensions.controlplane.ddb.types.PolicyMonitor
 import java.time.Clock
 import java.time.Duration
 
 class DdbPolicyMonitorStoreTest : PolicyMonitorStoreTestBase() {
-    private val client =
-        DynamoDbEnhancedClient
-            .builder()
-            .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
-            .build()
-    private val leaseTable =
-        client
-            .table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
-            .apply { createTable() }
-    private val policyMonitorTable =
-        client.table(PolicyMonitor.TABLE_NAME, TableSchema.fromBean(PolicyMonitor::class.java)).apply { createTable() }
+    private val ddbClient = DynamoDBEmbedded.create().dynamoDbClient()
+    private val client = DynamoDbEnhancedClient.builder().dynamoDbClient(ddbClient).build()
+
+    init {
+        ddbClient.createTable(TestTableHelper.createRequest())
+    }
 
     private val policyMonitorStore =
         DdbPolicyMonitorStore(
             clock = Clock.systemDefaultZone(),
             leaseHolder = CONNECTOR_NAME,
-            leaseTable = leaseTable,
-            table = policyMonitorTable,
+            leaseTable = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(Lease::class.java)),
+            table = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(PolicyMonitor::class.java)),
         )
 
     override fun getStore(): PolicyMonitorStore = policyMonitorStore

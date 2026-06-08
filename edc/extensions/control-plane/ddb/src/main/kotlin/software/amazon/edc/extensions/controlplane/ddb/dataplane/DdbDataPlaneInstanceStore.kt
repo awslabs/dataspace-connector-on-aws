@@ -9,15 +9,17 @@ import org.eclipse.edc.spi.query.QuerySpec
 import org.eclipse.edc.spi.query.SortOrder
 import org.eclipse.edc.spi.result.StoreResult
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
-import software.amazon.edc.extensions.common.ddb.utility.keyFromId
-import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromNumber
-import software.amazon.edc.extensions.common.ddb.utility.toScanRequest
+import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
+import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.controlplane.ddb.types.DataPlaneInstance
 import software.amazon.edc.extensions.controlplane.ddb.types.toDdbDataPlaneInstance
 import java.time.Clock
@@ -36,7 +38,7 @@ class DdbDataPlaneInstanceStore(
         leaseTable = leaseTable,
     ),
     DataPlaneInstanceStore {
-    private val stateIndex = table.index(DataPlaneInstance.INDEX_STATE)
+    private val stateIndex = table.index(DataPlaneInstance.GSI_STATE)
 
     override fun findById(id: String): EdcDataPlaneInstance? = getDataPlaneInstance(id)?.toEdcDataPlaneInstance()
 
@@ -56,10 +58,13 @@ class DdbDataPlaneInstanceStore(
         val items =
             if (stateValues != null) {
                 stateValues
-                    .flatMap { stateIndex.query(queryRequestFromNumber(it)).flatMap { page -> page.items() } }
-                    .asSequence()
+                    .flatMap {
+                        stateIndex.query(queryRequestFromId(gsiStatePk(EntityType.DATA_PLANE_INSTANCE, it))).flatMap { page ->
+                            page.items()
+                        }
+                    }.asSequence()
             } else {
-                table.scan(querySpec.toScanRequest()).items().asSequence()
+                table.query(queryRequestFromPk(EntityType.DATA_PLANE_INSTANCE)).flatMap { it.items() }.asSequence()
             }
         return items
             .filterNot { hasActiveLease(it) }
@@ -78,9 +83,7 @@ class DdbDataPlaneInstanceStore(
             acquireLease(dataPlaneInstance)
             StoreResult.success(dataPlaneInstance.toEdcDataPlaneInstance())
         } catch (e: IllegalStateException) {
-            val message = "DataPlaneInstance $id is already leased!"
-//            log().error(message, e)
-            StoreResult.alreadyLeased(message)
+            StoreResult.alreadyLeased("DataPlaneInstance $id is already leased!")
         }
     }
 
@@ -101,13 +104,13 @@ class DdbDataPlaneInstanceStore(
     }
 
     override fun deleteById(id: String): StoreResult<EdcDataPlaneInstance> =
-        table.deleteItem(keyFromId(id))?.let { StoreResult.success(it.toEdcDataPlaneInstance()) }
+        table.deleteItem(keyFromPkSk(EntityType.DATA_PLANE_INSTANCE, id))?.let { StoreResult.success(it.toEdcDataPlaneInstance()) }
             ?: StoreResult.notFound("DataPlaneInstance $id not found!")
 
     override fun getAll(): Stream<EdcDataPlaneInstance> =
         table
-            .scan()
-            .items()
+            .query(queryRequestFromPk(EntityType.DATA_PLANE_INSTANCE))
+            .flatMap { it.items() }
             .asSequence()
             .map { it.toEdcDataPlaneInstance() }
             .asStream()
@@ -118,5 +121,5 @@ class DdbDataPlaneInstanceStore(
         table.updateItem(leasable as DataPlaneInstance)
     }
 
-    private fun getDataPlaneInstance(id: String): DataPlaneInstance? = table.getItem(keyFromId(id))
+    private fun getDataPlaneInstance(id: String): DataPlaneInstance? = table.getItem(keyFromPkSk(EntityType.DATA_PLANE_INSTANCE, id))
 }

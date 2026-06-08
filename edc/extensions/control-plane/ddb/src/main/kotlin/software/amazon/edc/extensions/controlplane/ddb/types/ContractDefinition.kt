@@ -9,6 +9,8 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttri
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbConvertedBy
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.ListOfMapsConverter
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
 import software.amazon.edc.extensions.common.ddb.utility.convertValueToMapStringAny
@@ -16,9 +18,12 @@ import org.eclipse.edc.connector.controlplane.contract.spi.types.offer.ContractD
 
 @DynamoDbBean
 data class ContractDefinition(
-    @get:DynamoDbAttribute(ID)
     @get:DynamoDbPartitionKey
-    var id: String = "",
+    @get:DynamoDbAttribute("pk")
+    var pk: String = EntityType.CONTRACT_DEFINITION,
+    @get:DynamoDbSortKey
+    @get:DynamoDbAttribute("sk")
+    var sk: String = "",
     @get:DynamoDbAttribute(CREATED_AT)
     var createdAt: Long = 0L,
     @get:DynamoDbAttribute(ACCESS_POLICY_ID)
@@ -32,11 +37,13 @@ data class ContractDefinition(
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var privateProperties: Map<String, Any>? = null,
 ) {
+    val id: String get() = sk
+
     fun toEdcContractDefinition(objectMapper: ObjectMapper): EdcContractDefinition =
         EdcContractDefinition.Builder
             .newInstance()
             .apply {
-                id(id)
+                id(sk)
                 createdAt(createdAt)
                 accessPolicyId(accessPolicyId)
                 assetsSelector(assetsSelector.map { objectMapper.convertValue(it, Criterion::class.java) })
@@ -49,16 +56,14 @@ data class ContractDefinition(
         const val ASSETS_SELECTOR = "assetSelector"
         const val CONTRACT_POLICY_ID = "contractPolicyId"
         const val CREATED_AT = "createdAt"
-        const val ID = "id"
         const val PRIVATE_PROPERTIES = "privateProperties"
-
-        const val TABLE_NAME = "ContractDefinitions"
     }
 }
 
 fun EdcContractDefinition.toDdbContractDefinition(objectMapper: ObjectMapper): ContractDefinition =
     ContractDefinition(
-        id = id,
+        pk = EntityType.CONTRACT_DEFINITION,
+        sk = id,
         createdAt = createdAt,
         accessPolicyId = accessPolicyId,
         assetsSelector = assetsSelector.map { objectMapper.convertValueToMapStringAny(it) },

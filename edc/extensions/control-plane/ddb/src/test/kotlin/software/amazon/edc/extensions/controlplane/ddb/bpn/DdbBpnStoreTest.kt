@@ -8,19 +8,18 @@ import org.eclipse.tractusx.edc.validation.businesspartner.spi.store.BusinessPar
 import org.eclipse.tractusx.edc.validation.businesspartner.store.BusinessPartnerStoreTestBase
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema
+import software.amazon.edc.extensions.controlplane.ddb.TestTableHelper
 import software.amazon.edc.extensions.controlplane.ddb.types.BpnGroup
 
 class DdbBpnStoreTest : BusinessPartnerStoreTestBase() {
-    private val client =
-        DynamoDbEnhancedClient
-            .builder()
-            .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
-            .build()
-    private val table =
-        client
-            .table(BpnGroup.TABLE_NAME, TableSchema.fromBean(BpnGroup::class.java))
-            .apply { createTable() }
+    private val ddbClient = DynamoDBEmbedded.create().dynamoDbClient()
+    private val client = DynamoDbEnhancedClient.builder().dynamoDbClient(ddbClient).build()
 
+    init {
+        ddbClient.createTable(TestTableHelper.createRequest())
+    }
+
+    private val table = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(BpnGroup::class.java))
     private val bpnStore = DdbBpnStore(table)
 
     override fun getStore(): BusinessPartnerStore = bpnStore

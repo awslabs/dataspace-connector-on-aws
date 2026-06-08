@@ -11,13 +11,15 @@ import org.eclipse.edc.spi.query.QuerySpec
 import org.eclipse.edc.spi.result.StoreResult
 import org.eclipse.edc.store.ReflectionBasedQueryResolver
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
-import software.amazon.edc.extensions.common.ddb.utility.keyFromId
+import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
+import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
 import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
-import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromNumber
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.common.ddb.utility.toPredicate
 import software.amazon.edc.extensions.controlplane.ddb.types.TransferProcess
 import software.amazon.edc.extensions.controlplane.ddb.types.toDdbTransferProcess
@@ -39,8 +41,8 @@ class DdbTransferProcessStore(
         leaseTable = leaseTable,
     ),
     TransferProcessStore {
-    private val correlationIdIndex = table.index(TransferProcess.INDEX_CORRELATION_ID)
-    private val stateIndex = table.index(TransferProcess.INDEX_STATE)
+    private val correlationIdIndex = table.index(TransferProcess.GSI_CORRELATION_ID)
+    private val stateIndex = table.index(TransferProcess.GSI_STATE)
     private val queryResolver = ReflectionBasedQueryResolver(EdcTransferProcess::class.java, criterionOperatorRegistry)
 
     override fun findById(id: String): EdcTransferProcess? = getTransferProcess(id)?.toEdcTransferProcess(objectMapper)
@@ -54,10 +56,13 @@ class DdbTransferProcessStore(
         val items =
             if (stateValues != null) {
                 stateValues
-                    .flatMap { stateIndex.query(queryRequestFromNumber(it)).flatMap { page -> page.items() } }
-                    .asSequence()
+                    .flatMap {
+                        stateIndex.query(queryRequestFromId(gsiStatePk(EntityType.TRANSFER_PROCESS, it))).flatMap { page ->
+                            page.items()
+                        }
+                    }.asSequence()
             } else {
-                table.scan().items().asSequence()
+                table.query(queryRequestFromPk(EntityType.TRANSFER_PROCESS)).flatMap { it.items() }.asSequence()
             }
         return items
             .filterNot { hasActiveLease(it) }
@@ -77,7 +82,6 @@ class DdbTransferProcessStore(
             acquireLease(transferProcess)
             StoreResult.success(transferProcess.toEdcTransferProcess(objectMapper))
         } catch (e: IllegalStateException) {
-//            log().error("TransferProcess $id is already leased!", e)
             StoreResult.alreadyLeased("TransferProcess $id is already leased!")
         }
     }
@@ -99,22 +103,27 @@ class DdbTransferProcessStore(
     }
 
     override fun findForCorrelationId(correlationId: String): EdcTransferProcess? =
-        getTransferProcessByCorrelationId(correlationId)?.toEdcTransferProcess(objectMapper)
+        correlationIdIndex
+            .query(queryRequestFromId(correlationId))
+            .toList()
+            .flatMap { it.items() }
+            .firstOrNull()
+            ?.toEdcTransferProcess(objectMapper)
 
     override fun delete(id: String) {
         if (hasLease(id)) {
             throw IllegalStateException("TransferProcess $id cannot be deleted because it is currently leased!")
         }
-        table.deleteItem(keyFromId(id))
+        table.deleteItem(keyFromPkSk(EntityType.TRANSFER_PROCESS, id))
     }
 
     override fun findAll(querySpec: QuerySpec): Stream<EdcTransferProcess> =
         queryResolver.query(
             table
-                .scan()
-                .items()
+                .query(queryRequestFromPk(EntityType.TRANSFER_PROCESS))
+                .flatMap { it.items() }
                 .asSequence()
-                .sortedBy { it.id } // Tests assume a specific order
+                .sortedBy { it.id }
                 .map { it.toEdcTransferProcess(objectMapper) }
                 .asStream(),
             querySpec,
@@ -126,12 +135,5 @@ class DdbTransferProcessStore(
         table.updateItem(leasable as TransferProcess)
     }
 
-    private fun getTransferProcess(id: String): TransferProcess? = table.getItem(keyFromId(id))
-
-    private fun getTransferProcessByCorrelationId(correlationId: String): TransferProcess? =
-        correlationIdIndex
-            .query(queryRequestFromId(correlationId))
-            .toList()
-            .flatMap { it.items() }
-            .firstOrNull()
+    private fun getTransferProcess(id: String): TransferProcess? = table.getItem(keyFromPkSk(EntityType.TRANSFER_PROCESS, id))
 }

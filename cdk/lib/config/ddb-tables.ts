@@ -2,94 +2,42 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {
-  Attribute,
   AttributeType,
   GlobalSecondaryIndexPropsV2,
 } from "aws-cdk-lib/aws-dynamodb";
 
-export interface EdcTableProps {
-  readonly tableName: string;
-  readonly partitionKey: Attribute;
-  readonly sortKey?: Attribute;
-  readonly globalSecondaryIndexes?: GlobalSecondaryIndexPropsV2[];
-}
+export const EDC_DDB_TABLE_NAME_ENV_VAR = "edc.ddb.table.name";
 
-const ID = "id";
-const COMMON_PARTITION_KEY: Attribute = {
-  name: ID,
+export const SINGLE_TABLE_PARTITION_KEY = {
+  name: "pk",
   type: AttributeType.STRING,
 };
-const INDEX_CORRELATION_ID: GlobalSecondaryIndexPropsV2 = {
-  indexName: "index-correlationId",
+
+export const SINGLE_TABLE_SORT_KEY = {
+  name: "sk",
+  type: AttributeType.STRING,
+};
+
+export const GSI_STATE: GlobalSecondaryIndexPropsV2 = {
+  indexName: "gsi-state",
   partitionKey: {
-    name: "correlationId",
+    name: "gsiStatePk",
     type: AttributeType.STRING,
   },
-};
-const INDEX_STATE: GlobalSecondaryIndexPropsV2 = {
-  indexName: "index-state",
-  partitionKey: {
-    name: "state",
+  sortKey: {
+    name: "stateTimestamp",
     type: AttributeType.NUMBER,
   },
 };
 
-export const DDB_TABLES: EdcTableProps[] = [
-  {
-    tableName: "AccessTokens",
-    partitionKey: COMMON_PARTITION_KEY,
+export const GSI_CORRELATION_ID: GlobalSecondaryIndexPropsV2 = {
+  indexName: "gsi-correlationId",
+  partitionKey: {
+    name: "correlationId",
+    type: AttributeType.STRING,
   },
-  {
-    tableName: "Assets",
-    partitionKey: COMMON_PARTITION_KEY,
+  sortKey: {
+    name: "pk",
+    type: AttributeType.STRING,
   },
-  {
-    tableName: "BusinessPartnerGroups",
-    partitionKey: COMMON_PARTITION_KEY,
-  },
-  {
-    tableName: "ContractAgreements",
-    partitionKey: COMMON_PARTITION_KEY,
-  },
-  {
-    tableName: "ContractDefinitions",
-    partitionKey: COMMON_PARTITION_KEY,
-  },
-  {
-    tableName: "ContractNegotiations",
-    partitionKey: COMMON_PARTITION_KEY,
-    globalSecondaryIndexes: [INDEX_CORRELATION_ID, INDEX_STATE],
-  },
-  {
-    tableName: "DataFlows",
-    partitionKey: COMMON_PARTITION_KEY,
-    globalSecondaryIndexes: [INDEX_STATE],
-  },
-  {
-    tableName: "DataPlaneInstances",
-    partitionKey: COMMON_PARTITION_KEY,
-    globalSecondaryIndexes: [INDEX_STATE],
-  },
-  {
-    tableName: "EdrEntries",
-    partitionKey: COMMON_PARTITION_KEY,
-  },
-  {
-    tableName: "Leases",
-    partitionKey: COMMON_PARTITION_KEY,
-  },
-  {
-    tableName: "PolicyDefinitions",
-    partitionKey: COMMON_PARTITION_KEY,
-  },
-  {
-    tableName: "PolicyMonitors",
-    partitionKey: COMMON_PARTITION_KEY,
-    globalSecondaryIndexes: [INDEX_STATE],
-  },
-  {
-    tableName: "TransferProcesses",
-    partitionKey: COMMON_PARTITION_KEY,
-    globalSecondaryIndexes: [INDEX_CORRELATION_ID, INDEX_STATE],
-  },
-];
+};

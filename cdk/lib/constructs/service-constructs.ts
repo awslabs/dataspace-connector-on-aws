@@ -24,7 +24,8 @@ export interface ServiceConstructsProps {
   readonly dataPlaneCpu: number;
   readonly dataPlaneMemoryLimitMiB: number;
   readonly dataPlanePortMapping: DataPlanePortMapping;
-  readonly ddbTables?: TableV2[];
+  readonly ddbTable?: TableV2;
+  readonly ddbTableName: string;
   readonly edcIamEnvVars: { [key: string]: string };
   readonly infraConstructs: InfraConstructs;
   readonly profile: DeploymentProfile;
@@ -97,12 +98,12 @@ export class ServiceConstructs extends Construct {
       "dynamodb:UpdateItem",
     ];
 
-    if (props.ddbTables) {
+    if (props.ddbTable) {
       policyStatements.push(
         new PolicyStatement({
           actions: ddbActions,
           effect: Effect.ALLOW,
-          resources: props.ddbTables.map((table) => table.tableArn + "*"),
+          resources: [props.ddbTable.tableArn, props.ddbTable.tableArn + "/*"],
         }),
       );
     }
@@ -110,6 +111,7 @@ export class ServiceConstructs extends Construct {
     const controlPlane = new EdcControlPlane(scope, "ControlPlane", {
       cluster: props.infraConstructs.ecsCluster,
       cpu: props.controlPlaneCpu,
+      ddbTableName: props.ddbTableName,
       dspCallbackAddress: props.infraConstructs.api.outputs.dspUrl,
       edcIamEnvVars: props.edcIamEnvVars,
       image: ContainerImage.fromDockerImageAsset(
@@ -130,6 +132,7 @@ export class ServiceConstructs extends Construct {
       controlPlanePortMapping: props.controlPlanePortMapping,
       cpu: props.dataPlaneCpu,
       dataPlanePortMapping: props.dataPlanePortMapping,
+      ddbTableName: props.ddbTableName,
       edcIamEnvVars: props.edcIamEnvVars,
       image: ContainerImage.fromDockerImageAsset(
         props.infraConstructs.dataPlaneImage,

@@ -33,6 +33,7 @@ export interface EdcDataPlaneProps {
   readonly controlPlanePortMapping: ControlPlanePortMapping;
   readonly cpu: number;
   readonly dataPlanePortMapping: DataPlanePortMapping;
+  readonly ddbTableName: string;
   readonly edcIamEnvVars: { [key: string]: string };
   readonly image: ContainerImage;
   readonly memoryLimitMiB: number;
@@ -82,6 +83,7 @@ export class EdcDataPlane extends Construct {
         "edc.dataplane.api.public.baseurl": props.apiPublicUrl,
         "edc.dataplane.state-machine.iteration-wait-millis":
           props.stateMachineIterationMillis,
+        "edc.ddb.table.name": props.ddbTableName,
         "edc.dpf.selector.url": `http://${props.nlbOutputs.dnsName}:${props.controlPlanePortMapping.control}/api/control/v1/dataplanes`,
         "edc.hostname": props.nlbOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",

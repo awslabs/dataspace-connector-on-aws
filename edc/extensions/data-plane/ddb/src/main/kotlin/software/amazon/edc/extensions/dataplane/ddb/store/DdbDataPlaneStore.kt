@@ -3,21 +3,26 @@
 
 package software.amazon.edc.extensions.dataplane.ddb.store
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.eclipse.edc.connector.dataplane.spi.store.DataPlaneStore
 import org.eclipse.edc.spi.query.Criterion
+import org.eclipse.edc.spi.query.CriterionOperatorRegistry
 import org.eclipse.edc.spi.query.QuerySpec
 import org.eclipse.edc.spi.query.SortOrder
 import org.eclipse.edc.spi.result.StoreResult
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
-import software.amazon.edc.extensions.common.ddb.utility.keyFromId
-import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromNumber
-import software.amazon.edc.extensions.common.ddb.utility.toScanRequest
+import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
+import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
+import software.amazon.edc.extensions.common.ddb.utility.toPredicate
 import software.amazon.edc.extensions.dataplane.ddb.types.DataFlow
 import software.amazon.edc.extensions.dataplane.ddb.types.toDdbDataFlow
 import java.time.Clock
@@ -25,8 +30,10 @@ import org.eclipse.edc.connector.dataplane.spi.DataFlow as EdcDataFlow
 
 class DdbDataPlaneStore(
     clock: Clock,
+    private val criterionOperatorRegistry: CriterionOperatorRegistry,
     leaseHolder: String,
     leaseTable: DynamoDbTable<Lease>,
+    private val objectMapper: ObjectMapper,
     private val table: DynamoDbTable<DataFlow>,
 ) : AbstractLeasableEntityDao(
         clock = clock,
@@ -34,38 +41,31 @@ class DdbDataPlaneStore(
         leaseTable = leaseTable,
     ),
     DataPlaneStore {
-    private val stateIndex = table.index(DataFlow.INDEX_STATE)
+    private val stateIndex = table.index(DataFlow.GSI_STATE)
 
-    override fun findById(id: String): EdcDataFlow? = getDataFlow(id)?.toEdcDataFlow()
+    override fun findById(id: String): EdcDataFlow? = getDataFlow(id)?.toEdcDataFlow(objectMapper)
 
     override fun nextNotLeased(
         max: Int,
         vararg criteria: Criterion,
     ): MutableList<EdcDataFlow> {
-        val querySpec =
-            QuerySpec.Builder
-                .newInstance()
-                .filter(criteria.toList())
-                .sortField(DataFlow.STATE_TIMESTAMP)
-                .sortOrder(SortOrder.ASC)
-                .limit(max)
-                .build()
+        val predicate = criteria.toList().toPredicate<Any>(criterionOperatorRegistry)
         val stateValues = criteria.extractStateValues()
         val items =
             if (stateValues != null) {
                 stateValues
-                    .flatMap { stateIndex.query(queryRequestFromNumber(it)).flatMap { page -> page.items() } }
+                    .flatMap { stateIndex.query(queryRequestFromId(gsiStatePk(EntityType.DATA_FLOW, it))).flatMap { page -> page.items() } }
                     .asSequence()
             } else {
-                table.scan(querySpec.toScanRequest()).items().asSequence()
+                table.query(queryRequestFromPk(EntityType.DATA_FLOW)).flatMap { it.items() }.asSequence()
             }
         return items
             .filterNot { hasActiveLease(it) }
-            .sortedWith(querySpec.getGenericPropertyComparator())
-            .map {
-                acquireLease(it)
-                it.toEdcDataFlow()
-            }.applyOffsetAndLimit(querySpec)
+            .map { it.toEdcDataFlow(objectMapper) }
+            .filter { predicate.test(it) }
+            .sortedBy { it.stateTimestamp }
+            .take(max)
+            .onEach { acquireLease(it.id) }
             .toMutableList()
     }
 
@@ -73,9 +73,8 @@ class DdbDataPlaneStore(
         val dataFlow = getDataFlow(id) ?: return StoreResult.notFound("DataFlow with ID $id was not found!")
         return try {
             acquireLease(dataFlow)
-            StoreResult.success(dataFlow.toEdcDataFlow())
+            StoreResult.success(dataFlow.toEdcDataFlow(objectMapper))
         } catch (e: IllegalStateException) {
-//            log().error("DataFlow $id is already leased!", e)
             StoreResult.alreadyLeased("DataFlow $id is already leased!")
         }
     }
@@ -88,7 +87,7 @@ class DdbDataPlaneStore(
                 acquireLease(dataFlow.id)
             }
         try {
-            table.putItem(dataFlow.toDdbDataFlow(leaseId))
+            table.putItem(dataFlow.toDdbDataFlow(objectMapper, leaseId))
         } finally {
             if (leaseId != null) {
                 breakLease(dataFlow.id)
@@ -102,5 +101,5 @@ class DdbDataPlaneStore(
         table.updateItem(leasable as DataFlow)
     }
 
-    private fun getDataFlow(id: String): DataFlow? = table.getItem(keyFromId(id))
+    private fun getDataFlow(id: String): DataFlow? = table.getItem(keyFromPkSk(EntityType.DATA_FLOW, id))
 }

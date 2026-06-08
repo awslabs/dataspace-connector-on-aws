@@ -24,6 +24,7 @@ dependencies {
     implementation(libs.kotlin.stdlib)
 
     testImplementation(libs.aws.dynamodb.local)
+    testImplementation(libs.edc.lib.query)
     testImplementation(libs.junit.jupiter)
     testImplementation(testFixtures(libs.edc.spi.store.edr))
 }

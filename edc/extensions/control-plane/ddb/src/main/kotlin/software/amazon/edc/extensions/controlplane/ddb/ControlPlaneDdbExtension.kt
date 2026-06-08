@@ -22,9 +22,9 @@ import org.eclipse.edc.spi.system.ServiceExtensionContext
 import org.eclipse.edc.spi.types.TypeManager
 import org.eclipse.tractusx.edc.validation.businesspartner.spi.store.BusinessPartnerStore
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient
-import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
+import software.amazon.edc.extensions.common.ddb.EDC_DDB_TABLE_NAME_SETTING
 import software.amazon.edc.extensions.common.ddb.edr.DdbEdrEntryIndex
 import software.amazon.edc.extensions.common.ddb.types.EdrEntry
 import software.amazon.edc.extensions.common.ddb.types.Lease
@@ -61,10 +61,6 @@ import java.time.Clock
     TransferProcessStore::class,
 )
 class ControlPlaneDdbExtension : ServiceExtension {
-    private val ddbClient = DynamoDbEnhancedClient.builder().dynamoDbClient(DynamoDbClient.create()).build()
-    private val leaseTable: DynamoDbTable<Lease> =
-        ddbClient.table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
-
     @Inject
     private lateinit var clock: Clock
 
@@ -74,110 +70,93 @@ class ControlPlaneDdbExtension : ServiceExtension {
     @Inject
     private lateinit var typeManager: TypeManager
 
-    private lateinit var assetIndexImpl: DdbAssetIndex
-    private lateinit var bpnStoreImpl: DdbBpnStore
-    private lateinit var contractDefinitionStoreImpl: DdbContractDefinitionStore
-    private lateinit var contractNegotiationStoreImpl: DdbContractNegotiationStore
-    private lateinit var dataPlaneInstanceStoreImpl: DdbDataPlaneInstanceStore
-    private lateinit var edrIndexImpl: DdbEdrEntryIndex
-    private lateinit var policyDefinitionStoreImpl: DdbPolicyDefinitionStore
-    private lateinit var policyMonitorStoreImpl: DdbPolicyMonitorStore
-    private lateinit var transferProcessStoreImpl: DdbTransferProcessStore
-
     override fun initialize(context: ServiceExtensionContext) {
-//        log().info("Initializing....")
+        val tableName = context.getSetting(EDC_DDB_TABLE_NAME_SETTING, "")
+        require(tableName.isNotBlank()) { "Setting '$EDC_DDB_TABLE_NAME_SETTING' must be configured!" }
+
+        val ddbClient = DynamoDbEnhancedClient.builder().dynamoDbClient(DynamoDbClient.create()).build()
+
         criterionOperatorRegistry.registerPropertyLookup(AssetPropertyLookup())
 
-        assetIndexImpl =
-            DdbAssetIndex(
-                criterionOperatorRegistry,
-                ddbClient.table(Asset.TABLE_NAME, TableSchema.fromBean(Asset::class.java)),
-            )
-        context.registerService(AssetIndex::class.java, assetIndexImpl)
-        context.registerService(DataAddressResolver::class.java, assetIndexImpl)
+        val leaseTable = ddbClient.table(tableName, TableSchema.fromBean(Lease::class.java))
+        val assetTable = ddbClient.table(tableName, TableSchema.fromBean(Asset::class.java))
+        val bpnTable = ddbClient.table(tableName, TableSchema.fromBean(BpnGroup::class.java))
+        val contractAgreementTable = ddbClient.table(tableName, TableSchema.fromBean(ContractAgreement::class.java))
+        val contractDefinitionTable = ddbClient.table(tableName, TableSchema.fromBean(ContractDefinition::class.java))
+        val contractNegotiationTable = ddbClient.table(tableName, TableSchema.fromBean(ContractNegotiation::class.java))
+        val dataPlaneInstanceTable = ddbClient.table(tableName, TableSchema.fromBean(DataPlaneInstance::class.java))
+        val edrEntryTable = ddbClient.table(tableName, TableSchema.fromBean(EdrEntry::class.java))
+        val policyDefinitionTable = ddbClient.table(tableName, TableSchema.fromBean(PolicyDefinition::class.java))
+        val policyMonitorTable = ddbClient.table(tableName, TableSchema.fromBean(PolicyMonitor::class.java))
+        val transferProcessTable = ddbClient.table(tableName, TableSchema.fromBean(TransferProcess::class.java))
 
-        bpnStoreImpl = DdbBpnStore(ddbClient.table(BpnGroup.TABLE_NAME, TableSchema.fromBean(BpnGroup::class.java)))
-        context.registerService(BusinessPartnerStore::class.java, bpnStoreImpl)
+        val assetIndex = DdbAssetIndex(criterionOperatorRegistry, assetTable)
+        context.registerService(AssetIndex::class.java, assetIndex)
+        context.registerService(DataAddressResolver::class.java, assetIndex)
 
-        contractDefinitionStoreImpl =
-            DdbContractDefinitionStore(
-                criterionOperatorRegistry = criterionOperatorRegistry,
-                objectMapper = typeManager.mapper,
-                table =
-                    ddbClient.table(
-                        ContractDefinition.TABLE_NAME,
-                        TableSchema.fromBean(ContractDefinition::class.java),
-                    ),
-            )
-        context.registerService(ContractDefinitionStore::class.java, contractDefinitionStoreImpl)
+        context.registerService(
+            BusinessPartnerStore::class.java,
+            DdbBpnStore(bpnTable),
+        )
 
-        contractNegotiationStoreImpl =
+        context.registerService(
+            ContractDefinitionStore::class.java,
+            DdbContractDefinitionStore(criterionOperatorRegistry, typeManager.mapper, contractDefinitionTable),
+        )
+
+        context.registerService(
+            ContractNegotiationStore::class.java,
             DdbContractNegotiationStore(
-                criterionOperatorRegistry = criterionOperatorRegistry,
-                objectMapper = typeManager.mapper,
                 clock = clock,
+                criterionOperatorRegistry = criterionOperatorRegistry,
                 leaseHolder = context.runtimeId,
                 leaseTable = leaseTable,
-                contractAgreementTable =
-                    ddbClient.table(
-                        ContractAgreement.TABLE_NAME,
-                        TableSchema.fromBean(ContractAgreement::class.java),
-                    ),
-                contractNegotiationTable =
-                    ddbClient.table(
-                        ContractNegotiation.TABLE_NAME,
-                        TableSchema.fromBean(ContractNegotiation::class.java),
-                    ),
-            )
-        context.registerService(ContractNegotiationStore::class.java, contractNegotiationStoreImpl)
+                contractAgreementTable = contractAgreementTable,
+                contractNegotiationTable = contractNegotiationTable,
+                objectMapper = typeManager.mapper,
+            ),
+        )
 
-        dataPlaneInstanceStoreImpl =
+        context.registerService(
+            DataPlaneInstanceStore::class.java,
             DdbDataPlaneInstanceStore(
                 clock = clock,
                 leaseHolder = context.runtimeId,
                 leaseTable = leaseTable,
-                table =
-                    ddbClient.table(
-                        DataPlaneInstance.TABLE_NAME,
-                        TableSchema.fromBean(DataPlaneInstance::class.java),
-                    ),
-            )
-        context.registerService(DataPlaneInstanceStore::class.java, dataPlaneInstanceStoreImpl)
+                table = dataPlaneInstanceTable,
+            ),
+        )
 
-        edrIndexImpl =
-            DdbEdrEntryIndex(
-                ddbClient.table(EdrEntry.TABLE_NAME, TableSchema.fromBean(EdrEntry::class.java)),
-            )
-        context.registerService(EndpointDataReferenceEntryIndex::class.java, edrIndexImpl)
+        context.registerService(
+            EndpointDataReferenceEntryIndex::class.java,
+            DdbEdrEntryIndex(criterionOperatorRegistry, edrEntryTable),
+        )
 
-        policyDefinitionStoreImpl =
-            DdbPolicyDefinitionStore(
-                criterionOperatorRegistry = criterionOperatorRegistry,
-                objectMapper = typeManager.mapper,
-                table = ddbClient.table(PolicyDefinition.TABLE_NAME, TableSchema.fromBean(PolicyDefinition::class.java)),
-            )
-        context.registerService(PolicyDefinitionStore::class.java, policyDefinitionStoreImpl)
+        context.registerService(
+            PolicyDefinitionStore::class.java,
+            DdbPolicyDefinitionStore(criterionOperatorRegistry, typeManager.mapper, policyDefinitionTable),
+        )
 
-        policyMonitorStoreImpl =
+        context.registerService(
+            PolicyMonitorStore::class.java,
             DdbPolicyMonitorStore(
                 clock = clock,
                 leaseHolder = context.runtimeId,
                 leaseTable = leaseTable,
-                table = ddbClient.table(PolicyMonitor.TABLE_NAME, TableSchema.fromBean(PolicyMonitor::class.java)),
-            )
-        context.registerService(PolicyMonitorStore::class.java, policyMonitorStoreImpl)
+                table = policyMonitorTable,
+            ),
+        )
 
-        transferProcessStoreImpl =
+        context.registerService(
+            TransferProcessStore::class.java,
             DdbTransferProcessStore(
                 clock = clock,
                 leaseHolder = context.runtimeId,
                 leaseTable = leaseTable,
                 criterionOperatorRegistry = criterionOperatorRegistry,
                 objectMapper = typeManager.mapper,
-                table = ddbClient.table(TransferProcess.TABLE_NAME, TableSchema.fromBean(TransferProcess::class.java)),
-            )
-        context.registerService(TransferProcessStore::class.java, transferProcessStoreImpl)
-
-//        log().info("Initialization complete!")
+                table = transferProcessTable,
+            ),
+        )
     }
 }

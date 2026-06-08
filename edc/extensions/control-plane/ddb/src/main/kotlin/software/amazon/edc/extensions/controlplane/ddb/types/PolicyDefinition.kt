@@ -13,6 +13,8 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttri
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbConvertedBy
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.ListOfMapsConverter
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
 import software.amazon.edc.extensions.common.ddb.utility.convertValueToMapStringAny
@@ -20,9 +22,12 @@ import org.eclipse.edc.connector.controlplane.policy.spi.PolicyDefinition as Edc
 
 @DynamoDbBean
 data class PolicyDefinition(
-    @get:DynamoDbAttribute(ID)
     @get:DynamoDbPartitionKey
-    var id: String = "",
+    @get:DynamoDbAttribute("pk")
+    var pk: String = EntityType.POLICY_DEFINITION,
+    @get:DynamoDbSortKey
+    @get:DynamoDbAttribute("sk")
+    var sk: String = "",
     @get:DynamoDbAttribute(CREATED_AT)
     var createdAt: Long = 0,
     @get:DynamoDbAttribute(ASSIGNEE)
@@ -45,17 +50,21 @@ data class PolicyDefinition(
     @get:DynamoDbAttribute(PRIVATE_PROPERTIES)
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var privateProperties: Map<String, Any>? = null,
+    @get:DynamoDbAttribute(PROFILES)
+    var profiles: List<String>? = null,
     @get:DynamoDbAttribute(PROHIBITIONS)
     @get:DynamoDbConvertedBy(ListOfMapsConverter::class)
     var prohibitions: List<Map<String, Any>>? = null,
     @get:DynamoDbAttribute(TARGET)
     var target: String? = null,
 ) {
+    val id: String get() = sk
+
     fun toEdcPolicyDefinition(objectMapper: ObjectMapper): EdcPolicyDefinition =
         EdcPolicyDefinition.Builder
             .newInstance()
             .apply {
-                id(id)
+                id(sk)
                 createdAt(createdAt)
                 policy(
                     Policy.Builder
@@ -67,6 +76,7 @@ data class PolicyDefinition(
                             extensibleProperties(extensibleProperties)
                             inheritsFrom(inheritsFrom)
                             permissions(permissions?.map { objectMapper.convertValue(it, Permission::class.java) })
+                            profiles(profiles ?: emptyList())
                             type(PolicyType.valueOf(policyType))
                             prohibitions(prohibitions?.map { objectMapper.convertValue(it, Prohibition::class.java) })
                             target(target)
@@ -81,21 +91,20 @@ data class PolicyDefinition(
         const val CREATED_AT = "createdAt"
         const val DUTIES = "duties"
         const val EXTENSIBLE_PROPERTIES = "extensibleProperties"
-        const val ID = "id"
         const val INHERITS_FROM = "inheritsFrom"
         const val PERMISSIONS = "permissions"
         const val POLICY_TYPE = "policyType"
         const val PRIVATE_PROPERTIES = "privateProperties"
+        const val PROFILES = "profiles"
         const val PROHIBITIONS = "prohibitions"
         const val TARGET = "target"
-
-        const val TABLE_NAME = "PolicyDefinitions"
     }
 }
 
 fun EdcPolicyDefinition.toDdbPolicyDefinition(objectMapper: ObjectMapper): PolicyDefinition =
     PolicyDefinition(
-        id = id,
+        pk = EntityType.POLICY_DEFINITION,
+        sk = id,
         createdAt = createdAt,
         assignee = policy.assignee,
         assigner = policy.assigner,
@@ -105,6 +114,7 @@ fun EdcPolicyDefinition.toDdbPolicyDefinition(objectMapper: ObjectMapper): Polic
         permissions = policy.permissions.map { objectMapper.convertValueToMapStringAny(it) },
         policyType = policy.type.toString(),
         privateProperties = privateProperties,
+        profiles = policy.profiles?.let { if (it.isEmpty()) null else it },
         prohibitions = policy.prohibitions.map { objectMapper.convertValueToMapStringAny(it) },
         target = policy.target,
     )

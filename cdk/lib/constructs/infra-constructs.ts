@@ -38,6 +38,7 @@ import { DeploymentProfile } from "../config/environments";
 
 export interface InfraConstructsProps {
   readonly certificate?: ICertificate;
+  readonly connectorName: string;
   readonly containerInsights?: boolean;
   readonly controlPlanePortMapping: ControlPlanePortMapping;
   readonly dataPlanePortMapping: DataPlanePortMapping;
@@ -45,6 +46,7 @@ export interface InfraConstructsProps {
   readonly hostedZone?: IHostedZone;
   readonly managementApiPrincipals: IPrincipal[];
   readonly observabilityApiPrincipals: IPrincipal[];
+  readonly participantId: string;
   readonly profile: DeploymentProfile;
   readonly vpcIpAddresses: string;
 }
@@ -53,7 +55,8 @@ export class InfraConstructs extends Construct {
   readonly api: EdcApi;
   readonly controlPlaneImage: DockerImageAsset;
   readonly dataPlaneImage: DockerImageAsset;
-  readonly ddbTables: TableV2[];
+  readonly ddbTable: TableV2;
+  readonly ddbTableName: string;
   readonly ecsCluster: ICluster;
   readonly nlbOutputs: EdcNlbOutputs;
   readonly s3Bucket: IBucket;
@@ -76,13 +79,16 @@ export class InfraConstructs extends Construct {
       platform: Platform.LINUX_ARM64,
     });
 
-    // Create DynamoDB tables for EDC
+    // Create DynamoDB table for EDC
 
+    const ddbTableName = `${props.participantId}-${props.connectorName}`;
     const ddb = new EdcDdb(scope, "EdcDdb", {
       encryptionKey: undefined,
       removalPolicy: props.edcStateRemovalPolicy,
+      tableName: ddbTableName,
     });
-    this.ddbTables = ddb.tables;
+    this.ddbTable = ddb.table;
+    this.ddbTableName = ddbTableName;
 
     // Create S3 bucket for data plane
 

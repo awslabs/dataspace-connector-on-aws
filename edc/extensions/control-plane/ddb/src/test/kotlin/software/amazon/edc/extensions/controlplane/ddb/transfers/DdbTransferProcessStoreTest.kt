@@ -12,39 +12,32 @@ import org.eclipse.edc.query.CriterionOperatorRegistryImpl
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema
 import software.amazon.edc.extensions.common.ddb.types.Lease
+import software.amazon.edc.extensions.controlplane.ddb.TestTableHelper
 import software.amazon.edc.extensions.controlplane.ddb.types.TransferProcess
 import java.time.Duration
 
 class DdbTransferProcessStoreTest : TransferProcessStoreTestBase() {
-    private val client =
-        DynamoDbEnhancedClient
-            .builder()
-            .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
-            .build()
-    private val leaseTable =
-        client
-            .table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
-            .apply { createTable() }
-    private val transferProcessTable =
-        client
-            .table(TransferProcess.TABLE_NAME, TableSchema.fromBean(TransferProcess::class.java))
-            .apply { createTable() }
+    private val ddbClient = DynamoDBEmbedded.create().dynamoDbClient()
+    private val client = DynamoDbEnhancedClient.builder().dynamoDbClient(ddbClient).build()
+
+    init {
+        ddbClient.createTable(TestTableHelper.createRequest())
+    }
 
     private val transferProcessStore =
         DdbTransferProcessStore(
             clock = clock,
             leaseHolder = CONNECTOR_NAME,
-            leaseTable = leaseTable,
+            leaseTable = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(Lease::class.java)),
             criterionOperatorRegistry = CriterionOperatorRegistryImpl.ofDefaults(),
             objectMapper =
-                jacksonObjectMapper()
-                    .apply {
-                        registerSubtypes(
-                            TestFunctions.TestProvisionedResource::class.java,
-                            TestFunctions.TestResourceDef::class.java,
-                        )
-                    },
-            table = transferProcessTable,
+                jacksonObjectMapper().apply {
+                    registerSubtypes(
+                        TestFunctions.TestProvisionedResource::class.java,
+                        TestFunctions.TestResourceDef::class.java,
+                    )
+                },
+            table = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(TransferProcess::class.java)),
         )
 
     override fun getTransferProcessStore(): TransferProcessStore = transferProcessStore

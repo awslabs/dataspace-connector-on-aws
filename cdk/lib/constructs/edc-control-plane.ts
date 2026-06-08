@@ -26,6 +26,7 @@ import { DeploymentProfile } from "../config/environments";
 export interface EdcControlPlaneProps {
   readonly cluster: ICluster;
   readonly cpu: number;
+  readonly ddbTableName: string;
   readonly dspCallbackAddress: string;
   readonly edcIamEnvVars: { [key: string]: string };
   readonly image: ContainerImage;
@@ -74,6 +75,7 @@ export class EdcControlPlane extends Construct {
     taskDefinition.addContainer("ControlPlaneContainer", {
       containerName: containerName,
       environment: {
+        "edc.ddb.table.name": props.ddbTableName,
         "edc.dsp.callback.address": props.dspCallbackAddress,
         "edc.hostname": props.nlbOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",

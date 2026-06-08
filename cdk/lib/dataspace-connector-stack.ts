@@ -20,6 +20,7 @@ import { DeploymentProfile } from "./config/environments";
 
 export interface DataspaceConnectorStackProps extends StackProps {
   readonly certificateArn?: string;
+  readonly connectorName: string;
   readonly containerInsights: boolean;
   readonly controlPlaneCpu: number;
   readonly controlPlaneMemoryLimitMiB: number;
@@ -69,6 +70,7 @@ export class DataspaceConnectorStack extends Stack {
 
     const infraConstructs = new InfraConstructs(this, "Infra", {
       certificate: certificate,
+      connectorName: props.connectorName,
       containerInsights: props.containerInsights,
       controlPlanePortMapping: props.controlPlanePortMapping,
       dataPlanePortMapping: props.dataPlanePortMapping,
@@ -76,6 +78,7 @@ export class DataspaceConnectorStack extends Stack {
       hostedZone: hostedZone,
       managementApiPrincipals: props.managementApiPrincipals,
       observabilityApiPrincipals: props.observabilityApiPrincipals,
+      participantId: props.edcIam["tractusx.edc.participant.bpn"],
       profile: props.profile,
       vpcIpAddresses: props.vpcIpAddresses,
     });
@@ -88,7 +91,8 @@ export class DataspaceConnectorStack extends Stack {
       dataPlaneCpu: props.dataPlaneCpu,
       dataPlaneMemoryLimitMiB: props.dataPlaneMemoryLimitMiB,
       dataPlanePortMapping: props.dataPlanePortMapping,
-      ddbTables: infraConstructs.ddbTables,
+      ddbTable: infraConstructs.ddbTable,
+      ddbTableName: infraConstructs.ddbTableName,
       edcIamEnvVars: props.edcIam,
       infraConstructs: infraConstructs,
       profile: props.profile,

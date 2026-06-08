@@ -10,13 +10,18 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttri
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbConvertedBy
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
 
 @DynamoDbBean
 data class AccessToken(
-    @get:DynamoDbAttribute(ID)
     @get:DynamoDbPartitionKey
-    var id: String = "",
+    @get:DynamoDbAttribute("pk")
+    var pk: String = EntityType.ACCESS_TOKEN,
+    @get:DynamoDbSortKey
+    @get:DynamoDbAttribute("sk")
+    var sk: String = "",
     @get:DynamoDbAttribute(ADDITIONAL_PROPERTIES)
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var additionalProperties: Map<String, Any> = emptyMap(),
@@ -27,9 +32,11 @@ data class AccessToken(
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var dataAddress: Map<String, Any> = emptyMap(),
 ) {
+    val id: String get() = sk
+
     fun toEdcAccessTokenData(): AccessTokenData =
         AccessTokenData(
-            id,
+            sk,
             ClaimToken.Builder
                 .newInstance()
                 .claims(claimToken)
@@ -45,15 +52,13 @@ data class AccessToken(
         const val ADDITIONAL_PROPERTIES = "additionalProperties"
         const val CLAIM_TOKEN = "claimToken"
         const val DATA_ADDRESS = "dataAddress"
-        const val ID = "id"
-
-        const val TABLE_NAME = "AccessTokens"
     }
 }
 
 fun AccessTokenData.toDdbAccessToken(): AccessToken =
     AccessToken(
-        id = id,
+        pk = EntityType.ACCESS_TOKEN,
+        sk = id,
         additionalProperties = additionalProperties,
         claimToken = claimToken.claims,
         dataAddress = dataAddress.properties,

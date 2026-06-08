@@ -57,6 +57,7 @@ export const DataspaceConnectorStackConfig: DataspaceConnectorStackProps = {
   // certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id>",
   // domainName: "edc.example.com",
   // hostedZoneId: "Z0123456789ABCDEFGHIJ",
+  connectorName: "default",
   containerInsights: true,
   controlPlaneCpu: 256,
   controlPlaneMemoryLimitMiB: 1024,
