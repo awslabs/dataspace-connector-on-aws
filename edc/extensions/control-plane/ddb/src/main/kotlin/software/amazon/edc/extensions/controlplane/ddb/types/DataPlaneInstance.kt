@@ -72,7 +72,7 @@ data class DataPlaneInstance(
                 pending(pending)
                 properties(properties)
                 state(state)
-                stateCount(state)
+                stateCount(stateCount)
                 stateTimestamp(stateTimestamp)
                 updatedAt(updatedAt)
                 url(url)

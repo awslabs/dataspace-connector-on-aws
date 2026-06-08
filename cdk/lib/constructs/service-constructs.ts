@@ -94,7 +94,6 @@ export class ServiceConstructs extends Construct {
       "dynamodb:GetItem",
       "dynamodb:PutItem",
       "dynamodb:Query",
-      "dynamodb:Scan",
       "dynamodb:UpdateItem",
     ];
 
