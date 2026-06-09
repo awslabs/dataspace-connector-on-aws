@@ -10,12 +10,7 @@ paths:
     get:
       operationId: getProtocolVersions
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: &id001
-            type: string
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: header
           name: Authorization
           schema:
@@ -41,11 +36,7 @@ paths:
     get:
       operationId: getDataset
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -79,11 +70,7 @@ paths:
     post:
       operationId: requestCatalog
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: Authorization
           in: header
           required: false
@@ -136,11 +123,7 @@ paths:
     post:
       operationId: initialContractOffer
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: Authorization
           in: header
           required: false
@@ -186,11 +169,7 @@ paths:
     post:
       operationId: initialContractRequest
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: Authorization
           in: header
           required: false
@@ -236,11 +215,7 @@ paths:
     get:
       operationId: getNegotiation
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -274,11 +249,7 @@ paths:
     post:
       operationId: createAgreement
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -332,11 +303,7 @@ paths:
     post:
       operationId: verifyAgreement
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -390,11 +357,7 @@ paths:
     post:
       operationId: createEvent
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -448,11 +411,7 @@ paths:
     post:
       operationId: providerOffer
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -506,11 +465,7 @@ paths:
     post:
       operationId: contractRequest
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -564,11 +519,7 @@ paths:
     post:
       operationId: terminateNegotiation
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -622,11 +573,7 @@ paths:
     post:
       operationId: initiateTransferProcess
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: Authorization
           in: header
           required: false
@@ -672,11 +619,7 @@ paths:
     get:
       operationId: getTransferProcess
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -710,11 +653,7 @@ paths:
     post:
       operationId: transferProcessCompletion
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -768,11 +707,7 @@ paths:
     post:
       operationId: transferProcessStart
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -826,11 +761,7 @@ paths:
     post:
       operationId: transferProcessSuspension
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -884,11 +815,7 @@ paths:
     post:
       operationId: transferProcessTermination
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -942,11 +869,7 @@ paths:
     get:
       operationId: getDataset
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -980,11 +903,7 @@ paths:
     post:
       operationId: requestCatalog
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: Authorization
           in: header
           required: false
@@ -1037,11 +956,7 @@ paths:
     post:
       operationId: initialContractOffer
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: Authorization
           in: header
           required: false
@@ -1087,11 +1002,7 @@ paths:
     post:
       operationId: initialContractRequest
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: Authorization
           in: header
           required: false
@@ -1137,11 +1048,7 @@ paths:
     get:
       operationId: getNegotiation
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -1175,11 +1082,7 @@ paths:
     post:
       operationId: createAgreement
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -1233,11 +1136,7 @@ paths:
     post:
       operationId: verifyAgreement
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -1291,11 +1190,7 @@ paths:
     post:
       operationId: createEvent
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -1349,11 +1244,7 @@ paths:
     post:
       operationId: providerOffer
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -1407,11 +1298,7 @@ paths:
     post:
       operationId: contractRequest
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -1465,11 +1352,7 @@ paths:
     post:
       operationId: terminateNegotiation
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -1523,11 +1406,7 @@ paths:
     post:
       operationId: initiateTransferProcess
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: Authorization
           in: header
           required: false
@@ -1573,11 +1452,7 @@ paths:
     get:
       operationId: getTransferProcess
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -1611,11 +1486,7 @@ paths:
     post:
       operationId: transferProcessCompletion
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -1669,11 +1540,7 @@ paths:
     post:
       operationId: transferProcessStart
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -1727,11 +1594,7 @@ paths:
     post:
       operationId: transferProcessSuspension
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -1785,11 +1648,7 @@ paths:
     post:
       operationId: transferProcessTermination
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -1843,11 +1702,7 @@ paths:
     get:
       operationId: getDataset
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -1876,11 +1731,7 @@ paths:
     post:
       operationId: requestCatalog
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: header
           name: Authorization
           schema:
@@ -1927,11 +1778,7 @@ paths:
     post:
       operationId: initialContractOffer
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: header
           name: Authorization
           schema:
@@ -1974,11 +1821,7 @@ paths:
     post:
       operationId: initialContractRequest
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: header
           name: Authorization
           schema:
@@ -2021,11 +1864,7 @@ paths:
     get:
       operationId: getNegotiation
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2054,11 +1893,7 @@ paths:
     post:
       operationId: createAgreement
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2107,11 +1942,7 @@ paths:
     post:
       operationId: verifyAgreement
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2160,11 +1991,7 @@ paths:
     post:
       operationId: createEvent
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2213,11 +2040,7 @@ paths:
     post:
       operationId: providerOffer
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2266,11 +2089,7 @@ paths:
     post:
       operationId: contractRequest
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2319,11 +2138,7 @@ paths:
     post:
       operationId: terminateNegotiation
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2372,11 +2187,7 @@ paths:
     post:
       operationId: initiateTransferProcess
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: header
           name: Authorization
           schema:
@@ -2419,11 +2230,7 @@ paths:
     get:
       operationId: getTransferProcess
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2452,11 +2259,7 @@ paths:
     post:
       operationId: transferProcessCompletion
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2505,11 +2308,7 @@ paths:
     post:
       operationId: transferProcessStart
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2558,11 +2357,7 @@ paths:
     post:
       operationId: transferProcessSuspension
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2611,11 +2406,7 @@ paths:
     post:
       operationId: transferProcessTermination
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2660,3 +2451,12 @@ paths:
         type: http_proxy
         uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/transfers/{id}/termination
         integrationTarget: ${albArn}
+components:
+  parameters:
+    ConnectorId:
+      name: connectorId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Connector identifier for path-based routing

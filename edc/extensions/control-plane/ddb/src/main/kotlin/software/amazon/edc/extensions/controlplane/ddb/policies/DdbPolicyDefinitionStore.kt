@@ -13,6 +13,7 @@ import org.eclipse.edc.spi.result.StoreResult
 import org.eclipse.edc.store.ReflectionBasedQueryResolver
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.edc.extensions.common.ddb.EntityType
+import software.amazon.edc.extensions.common.ddb.utility.ddbReadLimit
 import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
 import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.common.ddb.utility.registerConstraintSubtypes
@@ -37,6 +38,7 @@ class DdbPolicyDefinitionStore(
                 .query(queryRequestFromPk(EntityType.POLICY_DEFINITION))
                 .flatMap { it.items() }
                 .asSequence()
+                .take(ddbReadLimit(querySpec))
                 .map { it.toEdcPolicyDefinition(objectMapper) }
                 .asStream(),
             querySpec,

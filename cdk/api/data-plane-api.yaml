@@ -36,12 +36,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: &id001
-            type: string
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
     get:
       description: Send `GET` data query to the Data Plane.
       operationId: get
@@ -65,11 +60,7 @@ paths:
         uri: http://${loadBalancerDnsName}/{connectorId}/api/public/{any}
         integrationTarget: ${albArn}
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
     head:
       description: Send `HEAD` data query to the Data Plane.
       operationId: head
@@ -92,11 +83,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
     patch:
       description: Send `PATCH` data query to the Data Plane.
       operationId: patch
@@ -119,11 +106,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
     post:
       description: Send `POST` data query to the Data Plane.
       operationId: post
@@ -146,11 +129,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
     put:
       description: Send `PUT` data query to the Data Plane.
       operationId: put
@@ -173,8 +152,13 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
+components:
+  parameters:
+    ConnectorId:
+      name: connectorId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Connector identifier for path-based routing

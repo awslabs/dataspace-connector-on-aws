@@ -89,6 +89,7 @@ export class EdcDataPlane extends Construct {
     taskDefinition.addContainer("DataPlaneContainer", {
       containerName: containerName,
       environment: {
+        "edc.control.endpoint": `http://${props.albOutputs.dnsName}:${props.dataPlanePortMapping.control}/${props.connectorId}/api/control`,
         "edc.dataplane.api.public.baseurl": props.apiPublicUrl,
         "edc.dataplane.state-machine.iteration-wait-millis":
           props.stateMachineIterationMillis,

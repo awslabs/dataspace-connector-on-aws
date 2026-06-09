@@ -8,6 +8,7 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
 import software.amazon.edc.extensions.common.ddb.EntityType
+import software.amazon.edc.extensions.common.ddb.TTL_BUFFER_SECONDS
 import java.time.Clock
 
 @DynamoDbBean
@@ -31,8 +32,8 @@ data class Lease(
 
     fun isExpired(clock: Clock): Boolean = leasedAt + leaseDuration < clock.millis()
 
-    /** Compute TTL: lease expiry + 1 hour buffer, in epoch seconds */
-    fun withTtl(): Lease = copy(ttl = (leasedAt + leaseDuration) / 1000 + 3600)
+    /** Compute TTL: lease expiry + buffer, in epoch seconds */
+    fun withTtl(): Lease = copy(ttl = (leasedAt + leaseDuration) / 1000 + TTL_BUFFER_SECONDS)
 
     companion object {
         const val LEASED_AT = "leasedAt"

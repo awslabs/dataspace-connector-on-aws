@@ -13,6 +13,7 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbParti
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
+import software.amazon.edc.extensions.common.ddb.TTL_BUFFER_SECONDS
 
 @DynamoDbBean
 data class AccessToken(
@@ -64,5 +65,5 @@ fun AccessTokenData.toDdbAccessToken(tokenExpirySeconds: Long): AccessToken =
         additionalProperties = additionalProperties,
         claimToken = claimToken.claims,
         dataAddress = dataAddress.properties,
-        ttl = System.currentTimeMillis() / 1000 + tokenExpirySeconds + 3600,
+        ttl = System.currentTimeMillis() / 1000 + tokenExpirySeconds + TTL_BUFFER_SECONDS,
     )

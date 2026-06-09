@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Stack, StackProps } from "aws-cdk-lib";
+import { RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
 import { Construct } from "constructs";
 
 import {
@@ -12,7 +12,7 @@ import {
 } from "aws-cdk-lib/aws-elasticloadbalancingv2";
 
 import { ContainerImage } from "aws-cdk-lib/aws-ecs";
-import { Bucket } from "aws-cdk-lib/aws-s3";
+import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 
@@ -55,6 +55,9 @@ export class ConnectorStack extends Stack {
 
     // Per-connector S3 bucket
     const s3Bucket = new Bucket(this, "DataPlaneBucket", {
+      autoDeleteObjects: config.edcStateRemovalPolicy === RemovalPolicy.DESTROY,
+      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
+      encryption: BucketEncryption.S3_MANAGED,
       enforceSSL: true,
       removalPolicy: config.edcStateRemovalPolicy,
     });
@@ -169,15 +172,12 @@ export class ConnectorStack extends Stack {
       new PolicyStatement({
         actions: [
           "logs:CreateLogStream",
-          "logs:CreateLogGroup",
-          "logs:Describe*",
-          "logs:Get*",
-          "logs:Filter*",
-          "logs:List*",
-          "logs:Put*",
+          "logs:PutLogEvents",
         ],
         effect: Effect.ALLOW,
-        resources: [`${logsArn}:*`],
+        resources: [
+          `${logsArn}:log-group:DataspaceConnector-${connectorId}*:*`,
+        ],
       }),
       new PolicyStatement({
         actions: [

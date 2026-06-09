@@ -33,4 +33,4 @@ npm run clean
 npm install
 
 cdk bootstrap
-cdk deploy --all
+cdk deploy --all --require-approval never

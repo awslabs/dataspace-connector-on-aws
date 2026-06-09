@@ -16,6 +16,7 @@ import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDa
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
+import software.amazon.edc.extensions.common.ddb.utility.ddbReadLimit
 import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
 import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
@@ -123,6 +124,7 @@ class DdbTransferProcessStore(
                 .query(queryRequestFromPk(EntityType.TRANSFER_PROCESS))
                 .flatMap { it.items() }
                 .asSequence()
+                .take(ddbReadLimit(querySpec))
                 .sortedBy { it.id }
                 .map { it.toEdcTransferProcess(objectMapper) }
                 .asStream(),

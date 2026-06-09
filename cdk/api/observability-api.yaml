@@ -10,6 +10,8 @@ paths:
     get:
       description: Performs a liveness probe to determine whether the runtime is working properly.
       operationId: checkHealth
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
       responses:
         "200":
           content:
@@ -30,17 +32,12 @@ paths:
         integrationTarget: ${albArn}
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
-      parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: &id001
-            type: string
-          description: Connector identifier for path-based routing
   /{connectorId}/check/liveness:
     get:
       description: Performs a liveness probe to determine whether the runtime is working properly.
       operationId: getLiveness
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
       responses:
         "200":
           content:
@@ -61,16 +58,12 @@ paths:
         integrationTarget: ${albArn}
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
-      parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
   /{connectorId}/check/readiness:
     get:
       description: Performs a readiness probe to determine whether the runtime is able to accept requests.
       operationId: getReadiness
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
       responses:
         "200":
           content:
@@ -91,16 +84,12 @@ paths:
         integrationTarget: ${albArn}
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
-      parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
   /{connectorId}/check/startup:
     get:
       description: Performs a startup probe to determine whether the runtime has completed startup.
       operationId: getStartup
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
       responses:
         "200":
           content:
@@ -121,13 +110,15 @@ paths:
         integrationTarget: ${albArn}
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
-      parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
 components:
+  parameters:
+    ConnectorId:
+      name: connectorId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Connector identifier for path-based routing
   schemas:
     Failure:
       type: object

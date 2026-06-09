@@ -5,7 +5,12 @@ import { App, Tags } from "aws-cdk-lib";
 
 import { SharedInfraStack } from "./shared-infra-stack";
 import { ConnectorStack } from "./connector-stack";
-import { DEPLOYMENT_CONFIG, validateConnectorId } from "./config/environments";
+
+import {
+  connectorPriority,
+  DEPLOYMENT_CONFIG,
+  validateConnectorId,
+} from "./config/environments";
 
 const app = new App();
 
@@ -17,8 +22,20 @@ const sharedInfra = new SharedInfraStack(
   },
 );
 
-DEPLOYMENT_CONFIG.connectors.forEach((connectorConfig, index) => {
+// Detect priority collisions at synth time
+const priorities = new Map<number, string>();
+
+DEPLOYMENT_CONFIG.connectors.forEach((connectorConfig) => {
   validateConnectorId(connectorConfig.connectorId);
+  const priority = connectorPriority(connectorConfig.connectorId);
+  const existing = priorities.get(priority);
+  if (existing) {
+    throw new Error(
+      `Priority collision: connectors "${existing}" and "${connectorConfig.connectorId}" both hash to priority ${priority}. Rename one connector to resolve.`,
+    );
+  }
+  priorities.set(priority, connectorConfig.connectorId);
+
   const stack = new ConnectorStack(
     app,
     `DataspaceConnector-${connectorConfig.connectorId}`,
@@ -26,7 +43,7 @@ DEPLOYMENT_CONFIG.connectors.forEach((connectorConfig, index) => {
       connectorConfig,
       sharedInfra,
       sharedInfraConfig: DEPLOYMENT_CONFIG.sharedInfra,
-      priority: index + 1,
+      priority,
     },
   );
   stack.addDependency(sharedInfra);

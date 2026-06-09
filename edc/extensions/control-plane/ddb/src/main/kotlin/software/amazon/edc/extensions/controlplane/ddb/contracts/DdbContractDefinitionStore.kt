@@ -14,6 +14,7 @@ import org.eclipse.edc.spi.result.StoreResult
 import org.eclipse.edc.store.ReflectionBasedQueryResolver
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.edc.extensions.common.ddb.EntityType
+import software.amazon.edc.extensions.common.ddb.utility.ddbReadLimit
 import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
 import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.controlplane.ddb.types.ContractDefinition
@@ -36,6 +37,7 @@ class DdbContractDefinitionStore(
                 .query(queryRequestFromPk(EntityType.CONTRACT_DEFINITION))
                 .flatMap { it.items() }
                 .asSequence()
+                .take(ddbReadLimit(querySpec))
                 .map { it.toEdcContractDefinition(objectMapper) }
                 .asStream(),
             querySpec,

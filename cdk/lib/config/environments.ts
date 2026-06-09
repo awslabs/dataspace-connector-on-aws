@@ -64,6 +64,20 @@ export function validateConnectorId(connectorId: string): void {
   }
 }
 
+/**
+ * Derives a deterministic ALB listener rule priority from a connectorId.
+ * Uses a simple hash to produce a value in [1, 50000] that is independent
+ * of array ordering — safe for GitOps where connector configs are discovered
+ * dynamically (e.g. from per-connector YAML files).
+ */
+export function connectorPriority(connectorId: string): number {
+  let hash = 0;
+  for (const ch of connectorId) {
+    hash = ((hash << 5) - hash + ch.charCodeAt(0)) | 0;
+  }
+  return (Math.abs(hash) % 49999) + 1;
+}
+
 export interface ConnectorConfig {
   readonly connectorId: string;
   readonly controlPlaneCpu: number;

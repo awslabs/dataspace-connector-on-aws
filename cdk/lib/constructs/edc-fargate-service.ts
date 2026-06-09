@@ -33,7 +33,7 @@ export class EdcFargateService extends FargateService {
         props.profile === "development"
           ? [{ capacityProvider: "FARGATE_SPOT", weight: 1 }]
           : undefined,
-      circuitBreaker: { enable: true },
+      circuitBreaker: { enable: true, rollback: true },
       cluster: props.cluster,
       maxHealthyPercent: props.maxHealthyPercent || 200,
       minHealthyPercent: props.minHealthyPercent || 100,

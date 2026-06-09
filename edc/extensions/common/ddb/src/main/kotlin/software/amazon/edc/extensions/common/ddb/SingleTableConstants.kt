@@ -25,3 +25,6 @@ object EntityType {
 
 /** Environment variable / EDC config key for the DynamoDB table name. */
 const val EDC_DDB_TABLE_NAME_SETTING = "edc.ddb.table.name"
+
+/** Buffer added to TTL epoch (in seconds) to ensure DynamoDB deletes items after they've fully expired. */
+const val TTL_BUFFER_SECONDS = 3600L

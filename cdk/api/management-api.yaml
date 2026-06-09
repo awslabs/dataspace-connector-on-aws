@@ -46,12 +46,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: &id001
-            type: string
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/assets/{id}:
     delete:
       description:
@@ -59,11 +54,7 @@ paths:
         ZONE: Note that deleting assets can have unexpected results, especially for contract offers that have been sent out or ongoing or contract negotiations."
       operationId: removeAssetV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -114,11 +105,7 @@ paths:
       description: Gets an asset with the given ID
       operationId: getAssetV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -165,11 +152,7 @@ paths:
     post:
       operationId: callProvisionWebhook
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: processId
           required: true
@@ -203,11 +186,7 @@ paths:
       description: Gets a contract agreement for a contract negotiation with the given ID
       operationId: getAgreementForNegotiationV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -295,11 +274,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/contractdefinitions/request:
     post:
       description: Returns all contract definitions according to a query
@@ -340,21 +315,13 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/contractagreements/{id}:
     get:
       description: Gets an contract agreement with the given ID
       operationId: getAgreementByIdV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -404,11 +371,7 @@ paths:
       description: Gets the EDR data address with the given transfer process ID
       operationId: getEdrEntryDataAddressV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: transferProcessId
           in: path
           required: true
@@ -491,11 +454,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/secrets:
     post:
       description: Creates a new secret.
@@ -542,11 +501,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
     put:
       description: "Updates a secret with the given ID if it exists. If the secret is not found, no further action is taken. "
       operationId: updateSecretV3
@@ -582,11 +537,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/transferprocesses/{id}/suspend:
     post:
       description:
@@ -594,11 +545,7 @@ paths:
         a long time, so clients must poll the /{id}/state endpoint to track the state.
       operationId: suspendTransferProcessV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -699,11 +646,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
     put:
       description: Updated a contract definition with the given ID. The supplied JSON structure must be a valid JSON-LD object
       operationId: updateContractDefinitionV3
@@ -745,11 +688,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/policydefinitions/request:
     post:
       description: Returns all policy definitions according to a query
@@ -790,21 +729,13 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/secrets/{id}:
     delete:
       description: Removes a secret with the given ID if possible.
       operationId: removeSecretV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -847,11 +778,7 @@ paths:
       description: Gets a secret with the given ID
       operationId: getSecretV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -898,11 +825,7 @@ paths:
     post:
       operationId: deprovision
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: flowId
           in: path
           required: true
@@ -981,11 +904,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
     put:
       description:
         "Updates an asset with the given ID if it exists. If the asset is not found, no further action is taken. DANGER ZONE: Note that updating assets can have unexpected results, especially
@@ -1023,21 +942,13 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/transferprocesses/{id}/state:
     get:
       description: Gets the state of a transfer process with the given ID
       operationId: getTransferProcessStateV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -1120,11 +1031,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/policydefinitions/{id}:
     delete:
       description:
@@ -1132,11 +1039,7 @@ paths:
         which case an error is returned. DANGER ZONE: Note that deleting policy definitions can have unexpected results, do this at your own risk!"
       operationId: deletePolicyDefinitionV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -1187,11 +1090,7 @@ paths:
       description: Gets a policy definition with the given ID
       operationId: getPolicyDefinitionV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -1238,11 +1137,7 @@ paths:
       description: Updates an existing Policy, If the Policy is not found, an error is reported
       operationId: updatePolicyDefinitionV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -1324,11 +1219,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/edrs/request:
     post:
       tags:
@@ -1369,11 +1260,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/catalog/request:
     post:
       operationId: requestCatalogV3
@@ -1403,11 +1290,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/transferprocesses/{id}/terminate:
     post:
       description:
@@ -1415,11 +1298,7 @@ paths:
         take a long time, so clients must poll the /{id}/state endpoint to track the state.
       operationId: terminateTransferProcessV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -1481,11 +1360,7 @@ paths:
       description: Creates an execution plane for an existing Policy, If the Policy is not found, an error is reported
       operationId: createExecutionPlaneV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -1528,11 +1403,7 @@ paths:
       description: Terminates the contract negotiation.
       operationId: terminateNegotiationV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -1586,11 +1457,7 @@ paths:
         received. This may take a long time, so clients must poll the /{id}/state endpoint to track the state.
       operationId: deprovisionTransferProcessV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -1659,20 +1526,12 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/{flowId}/{resourceId}/provision:
     post:
       operationId: provision
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: flowId
           in: path
           required: true
@@ -1739,11 +1598,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/transferprocesses/request:
     post:
       description: Returns all transfer process according to a query
@@ -1784,21 +1639,13 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/transferprocesses/{id}:
     get:
       description: Gets an transfer process with the given ID
       operationId: getTransferProcessV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -1848,11 +1695,7 @@ paths:
         been sent out or ongoing or contract negotiations."
       operationId: deleteContractDefinitionV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -1895,11 +1738,7 @@ paths:
       description: Gets an contract definition with the given ID
       operationId: getContractDefinitionV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -1949,11 +1788,7 @@ paths:
       description: Removes an EDR entry given the transfer process ID
       operationId: removeEdrEntryV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: transferProcessId
           in: path
           required: true
@@ -1999,11 +1834,7 @@ paths:
       description: Refreshes and returns the EDR data address with the given transfer process ID
       operationId: refreshEdrV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: transferProcessId
           in: path
           required: true
@@ -2053,11 +1884,7 @@ paths:
         This may take a long time, so clients must poll the /{id}/state endpoint to track the state.
       operationId: resumeTransferProcessV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2145,21 +1972,13 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/contractagreements/{id}/negotiation:
     get:
       description: Gets a contract negotiation with the given contract agreement ID
       operationId: getNegotiationByAgreementIdV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2209,11 +2028,7 @@ paths:
       description: Validates an existing Policy, If the Policy is not found, an error is reported
       operationId: validatePolicyDefinitionV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - name: id
           in: path
           required: true
@@ -2250,11 +2065,7 @@ paths:
     post:
       operationId: callDeprovisionWebhook
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: processId
           required: true
@@ -2328,21 +2139,13 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/contractnegotiations/{id}:
     delete:
       description: Deletes the contract negotiation with the given ID. Only terminated negotiations without agreement will be deleted
       operationId: deleteNegotiationV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2393,11 +2196,7 @@ paths:
       description: Gets a contract negotiation with the given ID
       operationId: getNegotiationV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2445,11 +2244,7 @@ paths:
       description: Gets the state of a contract negotiation with the given ID
       operationId: getNegotiationStateV3
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2526,11 +2321,7 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v4alpha/connectordiscovery/dspversionparams:
     post:
       tags:
@@ -2587,8 +2378,13 @@ paths:
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
-        - name: connectorId
-          in: path
-          required: true
-          schema: *id001
-          description: Connector identifier for path-based routing
+        - $ref: "#/components/parameters/ConnectorId"
+components:
+  parameters:
+    ConnectorId:
+      name: connectorId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Connector identifier for path-based routing
