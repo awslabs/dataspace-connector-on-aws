@@ -30,39 +30,81 @@ class DdbEdrEntryIndexTest : EndpointDataReferenceEntryIndexTestBase() {
 
     init {
         ddbClient.createTable(
-            CreateTableRequest.builder()
+            CreateTableRequest
+                .builder()
                 .tableName(TABLE_NAME)
                 .billingMode(BillingMode.PAY_PER_REQUEST)
                 .keySchema(
-                    KeySchemaElement.builder().attributeName("pk").keyType(KeyType.HASH).build(),
-                    KeySchemaElement.builder().attributeName("sk").keyType(KeyType.RANGE).build(),
-                )
-                .attributeDefinitions(
-                    AttributeDefinition.builder().attributeName("pk").attributeType(ScalarAttributeType.S).build(),
-                    AttributeDefinition.builder().attributeName("sk").attributeType(ScalarAttributeType.S).build(),
-                    AttributeDefinition.builder().attributeName("gsiStatePk").attributeType(ScalarAttributeType.S).build(),
-                    AttributeDefinition.builder().attributeName("stateTimestamp").attributeType(ScalarAttributeType.N).build(),
-                    AttributeDefinition.builder().attributeName("correlationId").attributeType(ScalarAttributeType.S).build(),
-                )
-                .globalSecondaryIndexes(
-                    GlobalSecondaryIndex.builder()
+                    KeySchemaElement
+                        .builder()
+                        .attributeName("pk")
+                        .keyType(KeyType.HASH)
+                        .build(),
+                    KeySchemaElement
+                        .builder()
+                        .attributeName("sk")
+                        .keyType(KeyType.RANGE)
+                        .build(),
+                ).attributeDefinitions(
+                    AttributeDefinition
+                        .builder()
+                        .attributeName("pk")
+                        .attributeType(ScalarAttributeType.S)
+                        .build(),
+                    AttributeDefinition
+                        .builder()
+                        .attributeName("sk")
+                        .attributeType(ScalarAttributeType.S)
+                        .build(),
+                    AttributeDefinition
+                        .builder()
+                        .attributeName("gsiStatePk")
+                        .attributeType(ScalarAttributeType.S)
+                        .build(),
+                    AttributeDefinition
+                        .builder()
+                        .attributeName("stateTimestamp")
+                        .attributeType(ScalarAttributeType.N)
+                        .build(),
+                    AttributeDefinition
+                        .builder()
+                        .attributeName("correlationId")
+                        .attributeType(ScalarAttributeType.S)
+                        .build(),
+                ).globalSecondaryIndexes(
+                    GlobalSecondaryIndex
+                        .builder()
                         .indexName("gsi-state")
                         .keySchema(
-                            KeySchemaElement.builder().attributeName("gsiStatePk").keyType(KeyType.HASH).build(),
-                            KeySchemaElement.builder().attributeName("stateTimestamp").keyType(KeyType.RANGE).build(),
-                        )
-                        .projection(Projection.builder().projectionType(ProjectionType.ALL).build())
+                            KeySchemaElement
+                                .builder()
+                                .attributeName("gsiStatePk")
+                                .keyType(KeyType.HASH)
+                                .build(),
+                            KeySchemaElement
+                                .builder()
+                                .attributeName("stateTimestamp")
+                                .keyType(KeyType.RANGE)
+                                .build(),
+                        ).projection(Projection.builder().projectionType(ProjectionType.ALL).build())
                         .build(),
-                    GlobalSecondaryIndex.builder()
+                    GlobalSecondaryIndex
+                        .builder()
                         .indexName("gsi-correlationId")
                         .keySchema(
-                            KeySchemaElement.builder().attributeName("correlationId").keyType(KeyType.HASH).build(),
-                            KeySchemaElement.builder().attributeName("pk").keyType(KeyType.RANGE).build(),
-                        )
-                        .projection(Projection.builder().projectionType(ProjectionType.ALL).build())
+                            KeySchemaElement
+                                .builder()
+                                .attributeName("correlationId")
+                                .keyType(KeyType.HASH)
+                                .build(),
+                            KeySchemaElement
+                                .builder()
+                                .attributeName("pk")
+                                .keyType(KeyType.RANGE)
+                                .build(),
+                        ).projection(Projection.builder().projectionType(ProjectionType.ALL).build())
                         .build(),
-                )
-                .build(),
+                ).build(),
         )
     }
 

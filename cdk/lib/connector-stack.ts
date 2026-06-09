@@ -46,10 +46,11 @@ export class ConnectorStack extends Stack {
     const connectorId = config.connectorId;
     const profile = config.profile ?? infraConfig.profile;
 
-    // Per-connector DDB tables
+    // Per-connector DDB table (single-table design)
     const ddb = new EdcDdb(this, "EdcDdb", {
       encryptionKey: undefined,
       removalPolicy: config.edcStateRemovalPolicy,
+      tableName: connectorId,
     });
 
     // Per-connector S3 bucket
@@ -211,11 +212,10 @@ export class ConnectorStack extends Stack {
           "dynamodb:GetItem",
           "dynamodb:PutItem",
           "dynamodb:Query",
-          "dynamodb:Scan",
           "dynamodb:UpdateItem",
         ],
         effect: Effect.ALLOW,
-        resources: ddb.tables.map((t) => t.tableArn + "*"),
+        resources: [ddb.table.tableArn, ddb.table.tableArn + "/index/*"],
       }),
     ];
 
@@ -235,6 +235,7 @@ export class ConnectorStack extends Stack {
       cluster: infra.ecsCluster,
       connectorId,
       cpu: config.controlPlaneCpu,
+      ddbTableName: ddb.table.tableName,
       dspCallbackAddress,
       edcIamEnvVars: config.edcIam,
       image: ContainerImage.fromDockerImageAsset(infra.controlPlaneImage),
@@ -255,6 +256,7 @@ export class ConnectorStack extends Stack {
       controlPlanePortMapping: infraConfig.controlPlanePortMapping,
       cpu: config.dataPlaneCpu,
       dataPlanePortMapping: infraConfig.dataPlanePortMapping,
+      ddbTableName: ddb.table.tableName,
       edcIamEnvVars: config.edcIam,
       image: ContainerImage.fromDockerImageAsset(infra.dataPlaneImage),
       memoryLimitMiB: config.dataPlaneMemoryLimitMiB,

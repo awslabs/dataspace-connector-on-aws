@@ -30,9 +30,10 @@ class DdbDataPlaneStoreTest : DataPlaneStoreTestBase() {
             criterionOperatorRegistry = CriterionOperatorRegistryImpl.ofDefaults(),
             leaseHolder = CONNECTOR_NAME,
             leaseTable = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(Lease::class.java)),
-            objectMapper = jacksonObjectMapper().apply {
-                configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-            },
+            objectMapper =
+                jacksonObjectMapper().apply {
+                    configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                },
             table = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(DataFlow::class.java)),
         )
 

@@ -74,7 +74,7 @@ abstract class AbstractLeasableEntityDao(
                 leasedAt = now,
                 leasedBy = leaseHolder,
                 leaseDuration = duration.toMillis(),
-            ),
+            ).withTtl(),
         )
         return id
     }

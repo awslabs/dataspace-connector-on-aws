@@ -24,6 +24,7 @@ class DdbAccessTokenDataStoreTest : AccessTokenDataTestBase() {
         DdbAccessTokenDataStore(
             criterionOperatorRegistry = CriterionOperatorRegistryImpl.ofDefaults(),
             table = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(AccessToken::class.java)),
+            tokenExpirySeconds = 300,
         )
 
     override fun getStore(): AccessTokenDataStore = accessTokenIndex

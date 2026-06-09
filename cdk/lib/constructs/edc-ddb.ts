@@ -38,6 +38,7 @@ export class EdcDdb extends Construct {
         pointInTimeRecoveryEnabled: true,
       },
       removalPolicy: props.removalPolicy,
+      timeToLiveAttribute: "ttl",
     });
   }
 }

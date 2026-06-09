@@ -58,7 +58,11 @@ class DataPlaneDdbExtension : ServiceExtension {
 
         context.registerService(
             AccessTokenDataStore::class.java,
-            DdbAccessTokenDataStore(criterionOperatorRegistry, accessTokenTable),
+            DdbAccessTokenDataStore(
+                criterionOperatorRegistry,
+                accessTokenTable,
+                context.getSetting("edc.dataplane.token.expiry.seconds", 300).toLong(),
+            ),
         )
 
         context.registerService(

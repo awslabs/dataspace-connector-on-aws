@@ -21,12 +21,13 @@ import software.amazon.edc.extensions.dataplane.ddb.types.toDdbAccessToken
 class DdbAccessTokenDataStore(
     private val criterionOperatorRegistry: CriterionOperatorRegistry,
     private val table: DynamoDbTable<AccessToken>,
+    private val tokenExpirySeconds: Long,
 ) : AccessTokenDataStore {
     override fun getById(id: String): AccessTokenData? = table.getItem(keyFromPkSk(EntityType.ACCESS_TOKEN, id))?.toEdcAccessTokenData()
 
     override fun store(accessTokenData: AccessTokenData): StoreResult<Void> =
         if (getById(accessTokenData.id()) == null) {
-            table.putItem(accessTokenData.toDdbAccessToken())
+            table.putItem(accessTokenData.toDdbAccessToken(tokenExpirySeconds))
             StoreResult.success()
         } else {
             StoreResult.alreadyExists("AccessTokenData with ID '${accessTokenData.id}' already exists.")
@@ -36,7 +37,7 @@ class DdbAccessTokenDataStore(
         if (getById(accessTokenData.id()) == null) {
             StoreResult.notFound("Access token with ID ${accessTokenData.id} does not exist!")
         } else {
-            table.updateItem(accessTokenData.toDdbAccessToken())
+            table.updateItem(accessTokenData.toDdbAccessToken(tokenExpirySeconds))
             StoreResult.success()
         }
 

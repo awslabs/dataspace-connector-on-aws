@@ -24,10 +24,15 @@ data class Lease(
     var leasedBy: String = "",
     @get:DynamoDbAttribute(LEASE_DURATION)
     var leaseDuration: Long = 60000,
+    @get:DynamoDbAttribute("ttl")
+    var ttl: Long? = null,
 ) {
     val leaseId: String get() = sk
 
     fun isExpired(clock: Clock): Boolean = leasedAt + leaseDuration < clock.millis()
+
+    /** Compute TTL: lease expiry + 1 hour buffer, in epoch seconds */
+    fun withTtl(): Lease = copy(ttl = (leasedAt + leaseDuration) / 1000 + 3600)
 
     companion object {
         const val LEASED_AT = "leasedAt"

@@ -113,7 +113,8 @@ data class DataFlow(
                 stateTimestamp(stateTimestamp)
                 traceContext(traceContext)
                 updatedAt(updatedAt)
-            }.build().also { flow ->
+            }.build()
+            .also { flow ->
                 resourceDefinitions?.takeIf { it.isNotEmpty() }?.let { defs ->
                     flow.addResourceDefinitions(defs.map { objectMapper.convertValue(it, ProvisionResource::class.java) })
                 }

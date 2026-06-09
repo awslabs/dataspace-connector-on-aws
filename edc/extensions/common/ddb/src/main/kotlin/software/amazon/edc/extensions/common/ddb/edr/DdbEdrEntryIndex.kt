@@ -22,8 +22,7 @@ class DdbEdrEntryIndex(
     private val criterionOperatorRegistry: CriterionOperatorRegistry,
     private val table: DynamoDbTable<EdrEntry>,
 ) : EndpointDataReferenceEntryIndex {
-    override fun findById(id: String): EndpointDataReferenceEntry? =
-        table.getItem(keyFromPkSk(EntityType.EDR_ENTRY, id))?.toEdcType()
+    override fun findById(id: String): EndpointDataReferenceEntry? = table.getItem(keyFromPkSk(EntityType.EDR_ENTRY, id))?.toEdcType()
 
     override fun query(querySpec: QuerySpec): StoreResult<MutableList<EndpointDataReferenceEntry>> {
         val predicate = querySpec.filterExpression.toPredicate<Any>(criterionOperatorRegistry)

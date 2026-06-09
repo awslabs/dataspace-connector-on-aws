@@ -31,6 +31,8 @@ data class AccessToken(
     @get:DynamoDbAttribute(DATA_ADDRESS)
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var dataAddress: Map<String, Any> = emptyMap(),
+    @get:DynamoDbAttribute("ttl")
+    var ttl: Long? = null,
 ) {
     val id: String get() = sk
 
@@ -55,11 +57,12 @@ data class AccessToken(
     }
 }
 
-fun AccessTokenData.toDdbAccessToken(): AccessToken =
+fun AccessTokenData.toDdbAccessToken(tokenExpirySeconds: Long): AccessToken =
     AccessToken(
         pk = EntityType.ACCESS_TOKEN,
         sk = id,
         additionalProperties = additionalProperties,
         claimToken = claimToken.claims,
         dataAddress = dataAddress.properties,
+        ttl = System.currentTimeMillis() / 1000 + tokenExpirySeconds + 3600,
     )

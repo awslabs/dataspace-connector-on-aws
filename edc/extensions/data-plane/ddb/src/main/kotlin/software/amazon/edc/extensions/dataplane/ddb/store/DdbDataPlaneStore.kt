@@ -7,17 +7,13 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.eclipse.edc.connector.dataplane.spi.store.DataPlaneStore
 import org.eclipse.edc.spi.query.Criterion
 import org.eclipse.edc.spi.query.CriterionOperatorRegistry
-import org.eclipse.edc.spi.query.QuerySpec
-import org.eclipse.edc.spi.query.SortOrder
 import org.eclipse.edc.spi.result.StoreResult
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
-import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
-import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
 import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
 import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
