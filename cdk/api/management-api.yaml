@@ -2,8 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 openapi: 3.0.1
+info:
+  title: EDC API
+  version: "1.0"
 paths:
-  /${connectorId}/v3/assets/request:
+  /{connectorId}/v3/assets/request:
     post:
       description: Request all assets according to a particular query
       operationId: requestAssetsV3
@@ -38,8 +41,10 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/assets/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/assets/request
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
@@ -47,7 +52,7 @@ paths:
           schema: &id001
             type: string
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/assets/{id}:
+  /{connectorId}/v3/assets/{id}:
     delete:
       description:
         "Removes an asset with the given ID if possible. Deleting an asset is only possible if that asset is not yet referenced by a contract agreement, in which case an error is returned. DANGER
@@ -102,7 +107,8 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/assets/{id}
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/assets/{id}
         integrationTarget: ${albArn}
     get:
       description: Gets an asset with the given ID
@@ -152,9 +158,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/assets/{id}
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/assets/{id}
         integrationTarget: ${albArn}
-  /${connectorId}/callback/{processId}/provision:
+  /{connectorId}/callback/{processId}/provision:
     post:
       operationId: callProvisionWebhook
       parameters:
@@ -187,9 +194,11 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/callback/{processId}/provision
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/callback/{processId}/provision
         integrationTarget: ${albArn}
-  /${connectorId}/v3/contractnegotiations/{id}/agreement:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/v3/contractnegotiations/{id}/agreement:
     get:
       description: Gets a contract agreement for a contract negotiation with the given ID
       operationId: getAgreementForNegotiationV3
@@ -238,9 +247,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractnegotiations/{id}/agreement
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractnegotiations/{id}/agreement
         integrationTarget: ${albArn}
-  /${connectorId}/v3/contractnegotiations:
+  /{connectorId}/v3/contractnegotiations:
     post:
       description:
         Initiates a contract negotiation for a given offer and with the given counter part. Please note that successfully invoking this endpoint only means that the negotiation was initiated.
@@ -280,15 +290,17 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractnegotiations
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractnegotiations
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/contractdefinitions/request:
+  /{connectorId}/v3/contractdefinitions/request:
     post:
       description: Returns all contract definitions according to a query
       operationId: queryContractDefinitionsV3
@@ -323,15 +335,17 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractdefinitions/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractdefinitions/request
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/contractagreements/{id}:
+  /{connectorId}/v3/contractagreements/{id}:
     get:
       description: Gets an contract agreement with the given ID
       operationId: getAgreementByIdV3
@@ -380,9 +394,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractagreements/{id}
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractagreements/{id}
         integrationTarget: ${albArn}
-  /${connectorId}/v3/edrs/{transferProcessId}/dataaddress:
+  /{connectorId}/v3/edrs/{transferProcessId}/dataaddress:
     get:
       tags:
         - EDR Cache V3
@@ -431,11 +446,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/edrs/{transferProcessId}/dataaddress
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/edrs/{transferProcessId}/dataaddress
         requestParameters:
           integration.request.path.transferProcessId: method.request.path.transferProcessId
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/v3/contractnegotiations/request:
+  /{connectorId}/v3/contractnegotiations/request:
     post:
       description: Returns all contract negotiations according to a query
       operationId: queryNegotiationsV3
@@ -470,15 +486,17 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractnegotiations/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractnegotiations/request
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/secrets:
+  /{connectorId}/v3/secrets:
     post:
       description: Creates a new secret.
       operationId: createSecretV3
@@ -519,8 +537,10 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/secrets
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/secrets
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
@@ -557,15 +577,17 @@ paths:
         httpMethod: PUT
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/secrets
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/secrets
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/transferprocesses/{id}/suspend:
+  /{connectorId}/v3/transferprocesses/{id}/suspend:
     post:
       description:
         Requests the suspension of a transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received. This may take
@@ -628,9 +650,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/transferprocesses/{id}/suspend
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/transferprocesses/{id}/suspend
         integrationTarget: ${albArn}
-  /${connectorId}/v3/contractdefinitions:
+  /{connectorId}/v3/contractdefinitions:
     post:
       description: Creates a new contract definition
       operationId: createContractDefinitionV3
@@ -671,8 +694,10 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractdefinitions
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractdefinitions
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
@@ -715,15 +740,17 @@ paths:
         httpMethod: PUT
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractdefinitions
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractdefinitions
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/policydefinitions/request:
+  /{connectorId}/v3/policydefinitions/request:
     post:
       description: Returns all policy definitions according to a query
       operationId: queryPolicyDefinitionsV3
@@ -758,15 +785,17 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/policydefinitions/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/policydefinitions/request
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/secrets/{id}:
+  /{connectorId}/v3/secrets/{id}:
     delete:
       description: Removes a secret with the given ID if possible.
       operationId: removeSecretV3
@@ -811,7 +840,8 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/secrets/{id}
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/secrets/{id}
         integrationTarget: ${albArn}
     get:
       description: Gets a secret with the given ID
@@ -861,9 +891,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/secrets/{id}
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/secrets/{id}
         integrationTarget: ${albArn}
-  /${connectorId}/{flowId}/{resourceId}/deprovision:
+  /{connectorId}/{flowId}/{resourceId}/deprovision:
     post:
       operationId: deprovision
       parameters:
@@ -898,12 +929,13 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/{flowId}/{resourceId}/deprovision
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/{flowId}/{resourceId}/deprovision
         requestParameters:
           integration.request.path.flowId: method.request.path.flowId
           integration.request.path.resourceId: method.request.path.resourceId
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/v3/assets:
+  /{connectorId}/v3/assets:
     post:
       description: Creates a new asset together with a data address
       operationId: createAssetV3
@@ -944,8 +976,10 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/assets
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/assets
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
@@ -984,15 +1018,17 @@ paths:
         httpMethod: PUT
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/assets
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/assets
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/transferprocesses/{id}/state:
+  /{connectorId}/v3/transferprocesses/{id}/state:
     get:
       description: Gets the state of a transfer process with the given ID
       operationId: getTransferProcessStateV3
@@ -1041,9 +1077,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/transferprocesses/{id}/state
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/transferprocesses/{id}/state
         integrationTarget: ${albArn}
-  /${connectorId}/v3/contractagreements/request:
+  /{connectorId}/v3/contractagreements/request:
     post:
       description: Gets all contract agreements according to a particular query
       operationId: queryAgreementsV3
@@ -1078,15 +1115,17 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractagreements/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractagreements/request
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/policydefinitions/{id}:
+  /{connectorId}/v3/policydefinitions/{id}:
     delete:
       description:
         "Removes a policy definition with the given ID if possible. Deleting a policy definition is only possible if that policy definition is not yet referenced by a contract definition, in
@@ -1141,7 +1180,8 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/policydefinitions/{id}
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/policydefinitions/{id}
         integrationTarget: ${albArn}
     get:
       description: Gets a policy definition with the given ID
@@ -1191,7 +1231,8 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/policydefinitions/{id}
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/policydefinitions/{id}
         integrationTarget: ${albArn}
     put:
       description: Updates an existing Policy, If the Policy is not found, an error is reported
@@ -1240,9 +1281,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/policydefinitions/{id}
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/policydefinitions/{id}
         integrationTarget: ${albArn}
-  /${connectorId}/v3/edrs:
+  /{connectorId}/v3/edrs:
     post:
       tags:
         - EDR Cache V3
@@ -1277,15 +1319,17 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/edrs
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/edrs
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/edrs/request:
+  /{connectorId}/v3/edrs/request:
     post:
       tags:
         - EDR Cache V3
@@ -1320,15 +1364,17 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/edrs/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/edrs/request
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/catalog/request:
+  /{connectorId}/v3/catalog/request:
     post:
       operationId: requestCatalogV3
       requestBody:
@@ -1352,15 +1398,17 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/catalog/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/catalog/request
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/transferprocesses/{id}/terminate:
+  /{connectorId}/v3/transferprocesses/{id}/terminate:
     post:
       description:
         Requests the termination of a transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received. This may
@@ -1423,9 +1471,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/transferprocesses/{id}/terminate
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/transferprocesses/{id}/terminate
         integrationTarget: ${albArn}
-  /${connectorId}/v3/policydefinitions/{id}/evaluationplan:
+  /{connectorId}/v3/policydefinitions/{id}/evaluationplan:
     post:
       tags:
         - Policy Definition v3
@@ -1469,11 +1518,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/policydefinitions/{id}/evaluationplan
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/policydefinitions/{id}/evaluationplan
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/v3/contractnegotiations/{id}/terminate:
+  /{connectorId}/v3/contractnegotiations/{id}/terminate:
     post:
       description: Terminates the contract negotiation.
       operationId: terminateNegotiationV3
@@ -1526,9 +1576,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractnegotiations/{id}/terminate
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractnegotiations/{id}/terminate
         integrationTarget: ${albArn}
-  /${connectorId}/v3/transferprocesses/{id}/deprovision:
+  /{connectorId}/v3/transferprocesses/{id}/deprovision:
     post:
       description:
         Requests the deprovisioning of resources associated with a transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully
@@ -1578,9 +1629,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/transferprocesses/{id}/deprovision
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/transferprocesses/{id}/deprovision
         integrationTarget: ${albArn}
-  /${connectorId}/v3/dataplanes:
+  /{connectorId}/v3/dataplanes:
     get:
       description: Returns a list of all currently registered data plane instances
       operationId: getAllDataPlaneInstancesV3
@@ -1602,15 +1654,17 @@ paths:
         httpMethod: GET
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/dataplanes
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/dataplanes
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/{flowId}/{resourceId}/provision:
+  /{connectorId}/{flowId}/{resourceId}/provision:
     post:
       operationId: provision
       parameters:
@@ -1650,12 +1704,13 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/{flowId}/{resourceId}/provision
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/{flowId}/{resourceId}/provision
         requestParameters:
           integration.request.path.flowId: method.request.path.flowId
           integration.request.path.resourceId: method.request.path.resourceId
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/v3/catalog/dataset/request:
+  /{connectorId}/v3/catalog/dataset/request:
     post:
       operationId: getDatasetV3
       requestBody:
@@ -1679,15 +1734,17 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/catalog/dataset/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/catalog/dataset/request
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/transferprocesses/request:
+  /{connectorId}/v3/transferprocesses/request:
     post:
       description: Returns all transfer process according to a query
       operationId: queryTransferProcessesV3
@@ -1722,15 +1779,17 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/transferprocesses/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/transferprocesses/request
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/transferprocesses/{id}:
+  /{connectorId}/v3/transferprocesses/{id}:
     get:
       description: Gets an transfer process with the given ID
       operationId: getTransferProcessV3
@@ -1779,9 +1838,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/transferprocesses/{id}
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/transferprocesses/{id}
         integrationTarget: ${albArn}
-  /${connectorId}/v3/contractdefinitions/{id}:
+  /{connectorId}/v3/contractdefinitions/{id}:
     delete:
       description:
         "Removes a contract definition with the given ID if possible. DANGER ZONE: Note that deleting contract definitions can have unexpected results, especially for contract offers that have
@@ -1828,7 +1888,8 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractdefinitions/{id}
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractdefinitions/{id}
         integrationTarget: ${albArn}
     get:
       description: Gets an contract definition with the given ID
@@ -1878,9 +1939,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractdefinitions/{id}
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractdefinitions/{id}
         integrationTarget: ${albArn}
-  /${connectorId}/v3/edrs/{transferProcessId}:
+  /{connectorId}/v3/edrs/{transferProcessId}:
     delete:
       tags:
         - EDR Cache V3
@@ -1925,11 +1987,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/edrs/{transferProcessId}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/edrs/{transferProcessId}
         requestParameters:
           integration.request.path.transferProcessId: method.request.path.transferProcessId
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/v3/edrs/{transferProcessId}/refresh:
+  /{connectorId}/v3/edrs/{transferProcessId}/refresh:
     post:
       tags:
         - EDR Cache V3
@@ -1978,11 +2041,12 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/edrs/{transferProcessId}/refresh
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/edrs/{transferProcessId}/refresh
         requestParameters:
           integration.request.path.transferProcessId: method.request.path.transferProcessId
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/v3/transferprocesses/{id}/resume:
+  /{connectorId}/v3/transferprocesses/{id}/resume:
     post:
       description:
         Requests the resumption of a suspended transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received.
@@ -2032,9 +2096,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/transferprocesses/{id}/resume
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/transferprocesses/{id}/resume
         integrationTarget: ${albArn}
-  /${connectorId}/v3/policydefinitions:
+  /{connectorId}/v3/policydefinitions:
     post:
       description: Creates a new policy definition
       operationId: createPolicyDefinitionV3
@@ -2075,15 +2140,17 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/policydefinitions
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/policydefinitions
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/contractagreements/{id}/negotiation:
+  /{connectorId}/v3/contractagreements/{id}/negotiation:
     get:
       description: Gets a contract negotiation with the given contract agreement ID
       operationId: getNegotiationByAgreementIdV3
@@ -2132,9 +2199,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractagreements/{id}/negotiation
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractagreements/{id}/negotiation
         integrationTarget: ${albArn}
-  /${connectorId}/v3/policydefinitions/{id}/validate:
+  /{connectorId}/v3/policydefinitions/{id}/validate:
     post:
       tags:
         - Policy Definition v3
@@ -2173,11 +2241,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/policydefinitions/{id}/validate
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/policydefinitions/{id}/validate
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/callback/{processId}/deprovision:
+  /{connectorId}/callback/{processId}/deprovision:
     post:
       operationId: callDeprovisionWebhook
       parameters:
@@ -2210,9 +2279,11 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/callback/{processId}/deprovision
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/callback/{processId}/deprovision
         integrationTarget: ${albArn}
-  /${connectorId}/v3/transferprocesses:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/v3/transferprocesses:
     post:
       description:
         Initiates a data transfer with the given parameters. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received. This
@@ -2252,15 +2323,17 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/transferprocesses
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/transferprocesses
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v3/contractnegotiations/{id}:
+  /{connectorId}/v3/contractnegotiations/{id}:
     delete:
       description: Deletes the contract negotiation with the given ID. Only terminated negotiations without agreement will be deleted
       operationId: deleteNegotiationV3
@@ -2313,7 +2386,8 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractnegotiations/{id}
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractnegotiations/{id}
         integrationTarget: ${albArn}
     get:
       description: Gets a contract negotiation with the given ID
@@ -2363,9 +2437,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractnegotiations/{id}
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractnegotiations/{id}
         integrationTarget: ${albArn}
-  /${connectorId}/v3/contractnegotiations/{id}/state:
+  /{connectorId}/v3/contractnegotiations/{id}/state:
     get:
       description: Gets the state of a contract negotiation with the given ID
       operationId: getNegotiationStateV3
@@ -2414,9 +2489,10 @@ paths:
         connectionType: VPC_LINK
         requestParameters:
           integration.request.path.id: method.request.path.id
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v3/contractnegotiations/{id}/state
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractnegotiations/{id}/state
         integrationTarget: ${albArn}
-  /${connectorId}/v1alpha/catalog/query:
+  /{connectorId}/v1alpha/catalog/query:
     post:
       tags:
         - Federated Catalog
@@ -2445,15 +2521,17 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v1alpha/catalog/query
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v1alpha/catalog/query
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
           required: true
           schema: *id001
           description: Connector identifier for path-based routing
-  /${connectorId}/v4alpha/connectordiscovery/dspversionparams:
+  /{connectorId}/v4alpha/connectordiscovery/dspversionparams:
     post:
       tags:
         - Connector Discovery
@@ -2504,8 +2582,10 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/management/v4alpha/connectordiscovery/dspversionparams
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v4alpha/connectordiscovery/dspversionparams
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path

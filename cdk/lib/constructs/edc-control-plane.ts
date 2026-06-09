@@ -88,8 +88,7 @@ export class EdcControlPlane extends Construct {
         "edc.dsp.callback.address": props.dspCallbackAddress,
         "edc.hostname": props.albOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",
-        "edc.iam.sts.oauth.client.secret.alias":
-          `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`,
+        "edc.iam.sts.oauth.client.secret.alias": `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`,
         "edc.negotiation.consumer.state-machine.iteration-wait-millis":
           props.stateMachineIterationMillis,
         "edc.negotiation.provider.state-machine.iteration-wait-millis":
@@ -102,10 +101,8 @@ export class EdcControlPlane extends Construct {
         "edc.vault.aws.region": Stack.of(this).region,
 
         // This declares the aliases to use in AWS Secrets Manager for consumer pull scenarios
-        "edc.transfer.proxy.token.signer.privatekey.alias":
-          `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_SIGNER_PRIVATE_KEY}`,
-        "edc.transfer.proxy.token.verifier.publickey.alias":
-          `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY}`,
+        "edc.transfer.proxy.token.signer.privatekey.alias": `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_SIGNER_PRIVATE_KEY}`,
+        "edc.transfer.proxy.token.verifier.publickey.alias": `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY}`,
 
         ...props.edcIamEnvVars,
         "edc.participant.id": props.edcIamEnvVars["edc.iam.issuer.id"],

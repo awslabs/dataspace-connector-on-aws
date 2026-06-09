@@ -54,10 +54,11 @@ export class SharedInfraStack extends Stack {
 
     const config = props.config;
 
-    // VPC
+    // VPC — ALB requires minimum 2 AZs; use single NAT in dev to save cost
     this.vpc = new Vpc(this, "Vpc", {
       ipAddresses: IpAddresses.cidr(config.vpcIpAddresses),
-      maxAzs: config.profile === "development" ? 1 : 2,
+      maxAzs: 2,
+      natGateways: config.profile === "development" ? 1 : 2,
     });
     this.vpc.addGatewayEndpoint("S3Endpoint", {
       service: GatewayVpcEndpointAwsService.S3,

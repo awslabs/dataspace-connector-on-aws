@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 openapi: 3.0.1
+info:
+  title: EDC API
+  version: "1.0"
 tags:
   - description:
       The public API of the Data Plane is a data proxy enabling a data consumer to actively querydata from the provider data source (e.g. backend Rest API, internal database...) through its Data
@@ -10,7 +13,7 @@ tags:
       set of arbitrary query parameters, path parameters and request body are supported (in the limits fixed by the HTTP server) and can also conveyed to the actual data source.
     name: Data Plane public API
 paths:
-  /${connectorId}/{any}:
+  /{connectorId}/{any}:
     delete:
       description: Send `DELETE` data query to the Data Plane.
       operationId: delete
@@ -28,8 +31,10 @@ paths:
         httpMethod: DELETE
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/public/{any}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/public/{any}
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
@@ -54,9 +59,10 @@ paths:
         httpMethod: GET
         requestParameters:
           integration.request.path.any: method.request.path.any
+          integration.request.path.connectorId: method.request.path.connectorId
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/public/{any}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/public/{any}
         integrationTarget: ${albArn}
       parameters:
         - name: connectorId
@@ -81,8 +87,10 @@ paths:
         httpMethod: HEAD
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/public/{any}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/public/{any}
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
@@ -106,8 +114,10 @@ paths:
         httpMethod: PATCH
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/public/{any}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/public/{any}
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
@@ -131,8 +141,10 @@ paths:
         httpMethod: POST
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/public/{any}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/public/{any}
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path
@@ -156,8 +168,10 @@ paths:
         httpMethod: PUT
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/public/{any}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/public/{any}
         integrationTarget: ${albArn}
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - name: connectorId
           in: path

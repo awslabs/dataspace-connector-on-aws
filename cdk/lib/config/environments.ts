@@ -108,7 +108,7 @@ export const DEPLOYMENT_CONFIG: DeploymentConfig = {
       // new ArnPrincipal("arn:aws:iam::<account-id>:role/<role-name>"),
     ],
     profile: "development",
-    vpcIpAddresses: "10.0.10.0/24",
+    vpcIpAddresses: "10.0.0.0/20",
   },
   connectors: [
     {

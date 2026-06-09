@@ -188,7 +188,7 @@ After creation, confirm:
 ### Step 4.1: Browse the Catalog
 
 Ask the user:
-> "What's the DSP endpoint of the provider connector you want to browse? (e.g., `https://<api-id>.execute-api.<region>.amazonaws.com/protocol`)
+> "What's the DSP endpoint of the provider connector you want to browse? (e.g., `https://<api-id>.execute-api.<region>.amazonaws.com/protocol/<connectorId>`)
 > And what's their participant ID (BPNL)?"
 
 ```python
@@ -307,19 +307,26 @@ This is the recommended validation path. It exercises the full AWS-native data f
 
 ### Step 5.1: Discover Stack Resources
 
-Retrieve the S3 bucket name, DSP endpoint, and BPNL. The bucket name and DSP endpoint come from CloudFormation outputs (they contain CDK-generated suffixes):
+Retrieve the S3 bucket name, DSP endpoint, and BPNL. The bucket name comes from the connector stack, API endpoints from the shared infra stack:
 
 ```bash
-aws cloudformation describe-stacks --stack-name DataspaceConnectorStack --region <region> \
+aws cloudformation describe-stacks --stack-name DataspaceConnectorSharedInfraStack --region <region> \
+    --query 'Stacks[0].Outputs' --output json
+```
+
+Also get connector-specific outputs:
+
+```bash
+aws cloudformation describe-stacks --stack-name DataspaceConnector-default --region <region> \
     --query 'Stacks[0].Outputs' --output json
 ```
 
 Extract (the output keys have CDK-generated hash suffixes — match by prefix):
 - Key starting with `EdcDataPlaneBucketName` → S3 bucket name
-- Key starting with `EdcApiDspApiEndpoint` → DSP endpoint URL
-- Key starting with `EdcApiManagementApiEndpoint` → Management API URL (for reference)
+- Key starting with `EdcApiDspApiEndpoint` → DSP endpoint base URL. Append the connector ID to form the full DSP address (e.g., `https://xxx.execute-api.region.amazonaws.com/protocol/default`)
+- Key starting with `EdcApiManagementApiEndpoint` → Management API base URL. Append the connector ID for requests (e.g., `.../management/default`)
 
-Read the `PARTICIPANT_ID` from `cdk/lib/config/environments.ts` (the `tractusx.edc.participant.bpn` field in the `edcIam` object) for the connector's BPNL. Use this as the `counter_party_id` for catalog requests and as the `assigner` for contract negotiations.
+Read the `connectorId` and `PARTICIPANT_ID` from `cdk/lib/config/environments.ts` (the `connectorId` field and `tractusx.edc.participant.bpn` field in the connector's `edcIam` object) for the connector's BPNL. Use the BPNL as the `counter_party_id` for catalog requests and as the `assigner` for contract negotiations.
 
 If the user already has these values from a prior deployment, use them directly.
 
@@ -540,8 +547,8 @@ aws logs describe-log-groups --region <region> --output json \
 ```
 
 This returns two log group names like:
-- `DataspaceConnectorStack-ControlPlaneLogGroup<suffix>`
-- `DataspaceConnectorStack-DataPlaneLogGroup<suffix>`
+- `DataspaceConnector-default-ControlPlaneLogGroup<suffix>`
+- `DataspaceConnector-default-DataPlaneLogGroup<suffix>`
 
 Store both — you'll need them for log queries.
 

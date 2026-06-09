@@ -74,14 +74,54 @@ export class ConnectorStack extends Stack {
     const cpPorts = infraConfig.controlPlanePortMapping;
     const dpPorts = infraConfig.dataPlanePortMapping;
 
-    const portConfigs: { name: string; port: number; healthPort: number; plane: "cp" | "dp" }[] = [
-      { name: "CpDefault", port: cpPorts.default, healthPort: cpPorts.default, plane: "cp" },
-      { name: "CpManagement", port: cpPorts.management, healthPort: cpPorts.default, plane: "cp" },
-      { name: "CpProtocol", port: cpPorts.protocol, healthPort: cpPorts.default, plane: "cp" },
-      { name: "CpControl", port: cpPorts.control, healthPort: cpPorts.default, plane: "cp" },
-      { name: "DpDefault", port: dpPorts.default, healthPort: dpPorts.default, plane: "dp" },
-      { name: "DpPublic", port: dpPorts.public, healthPort: dpPorts.default, plane: "dp" },
-      { name: "DpControl", port: dpPorts.control, healthPort: dpPorts.default, plane: "dp" },
+    const portConfigs: {
+      name: string;
+      port: number;
+      healthPort: number;
+      plane: "cp" | "dp";
+    }[] = [
+      {
+        name: "CpDefault",
+        port: cpPorts.default,
+        healthPort: cpPorts.default,
+        plane: "cp",
+      },
+      {
+        name: "CpManagement",
+        port: cpPorts.management,
+        healthPort: cpPorts.default,
+        plane: "cp",
+      },
+      {
+        name: "CpProtocol",
+        port: cpPorts.protocol,
+        healthPort: cpPorts.default,
+        plane: "cp",
+      },
+      {
+        name: "CpControl",
+        port: cpPorts.control,
+        healthPort: cpPorts.default,
+        plane: "cp",
+      },
+      {
+        name: "DpDefault",
+        port: dpPorts.default,
+        healthPort: dpPorts.default,
+        plane: "dp",
+      },
+      {
+        name: "DpPublic",
+        port: dpPorts.public,
+        healthPort: dpPorts.default,
+        plane: "dp",
+      },
+      {
+        name: "DpControl",
+        port: dpPorts.control,
+        healthPort: dpPorts.default,
+        plane: "dp",
+      },
     ];
 
     const targetGroups: { [port: number]: ApplicationTargetGroup } = {};
@@ -101,13 +141,22 @@ export class ConnectorStack extends Stack {
 
       new CfnListenerRule(this, `${pc.name}ListenerRule`, {
         actions: [{ type: "forward", targetGroupArn: tg.targetGroupArn }],
-        conditions: [{ field: "path-pattern", pathPatternConfig: { values: [`/${connectorId}/*`] } }],
+        conditions: [
+          {
+            field: "path-pattern",
+            pathPatternConfig: { values: [`/${connectorId}/*`] },
+          },
+        ],
         listenerArn: infra.listenerArns[pc.port],
         priority: props.priority,
-        transforms: [{
-          type: "url-rewrite",
-          urlRewriteConfig: { rewrites: [{ regex: `^/${connectorId}/(.*)$`, replace: "/$1" }] },
-        }],
+        transforms: [
+          {
+            type: "url-rewrite",
+            urlRewriteConfig: {
+              rewrites: [{ regex: `^/${connectorId}/(.*)$`, replace: "/$1" }],
+            },
+          },
+        ],
       });
     }
 
@@ -138,10 +187,7 @@ export class ConnectorStack extends Stack {
           "secretsmanager:UpdateSecret",
         ],
         effect: Effect.ALLOW,
-        resources: [
-          `${secretArn}:${connectorId}/*`,
-          `${secretArn}:edr--*`,
-        ],
+        resources: [`${secretArn}:${connectorId}/*`, `${secretArn}:edr--*`],
       }),
       new PolicyStatement({
         actions: [

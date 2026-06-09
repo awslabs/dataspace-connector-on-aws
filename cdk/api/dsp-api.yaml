@@ -2,8 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 openapi: 3.0.1
+info:
+  title: EDC API
+  version: "1.0"
 paths:
-  /${connectorId}/.well-known/dspace-version:
+  /{connectorId}/.well-known/dspace-version:
     get:
       operationId: getProtocolVersions
       parameters:
@@ -34,8 +37,7 @@ paths:
             statusCode: 200
             responseTemplates:
               application/json: "{\n  \"Success\": true\n}\n"
-        integrationTarget: ${albArn}
-  /${connectorId}/2024/1/catalog/datasets/{id}:
+  /{connectorId}/2024/1/catalog/datasets/{id}:
     get:
       operationId: getDataset
       parameters:
@@ -68,11 +70,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/catalog/datasets/{id}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/catalog/datasets/{id}
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/catalog/request:
+  /{connectorId}/2024/1/catalog/request:
     post:
       operationId: requestCatalog
       parameters:
@@ -125,9 +128,11 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/catalog/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/catalog/request
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/negotiations/offer:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/2024/1/negotiations/offer:
     post:
       operationId: initialContractOffer
       parameters:
@@ -173,9 +178,11 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/offer
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/negotiations/offer
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/negotiations/request:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/2024/1/negotiations/request:
     post:
       operationId: initialContractRequest
       parameters:
@@ -221,9 +228,11 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/negotiations/request
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/negotiations/{id}:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/2024/1/negotiations/{id}:
     get:
       operationId: getNegotiation
       parameters:
@@ -256,11 +265,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/negotiations/{id}
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/negotiations/{id}/agreement:
+  /{connectorId}/2024/1/negotiations/{id}/agreement:
     post:
       operationId: createAgreement
       parameters:
@@ -313,11 +323,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}/agreement
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/negotiations/{id}/agreement
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/negotiations/{id}/agreement/verification:
+  /{connectorId}/2024/1/negotiations/{id}/agreement/verification:
     post:
       operationId: verifyAgreement
       parameters:
@@ -370,11 +381,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}/agreement/verification
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/negotiations/{id}/agreement/verification
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/negotiations/{id}/events:
+  /{connectorId}/2024/1/negotiations/{id}/events:
     post:
       operationId: createEvent
       parameters:
@@ -427,11 +439,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}/events
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/negotiations/{id}/events
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/negotiations/{id}/offer:
+  /{connectorId}/2024/1/negotiations/{id}/offer:
     post:
       operationId: providerOffer
       parameters:
@@ -484,11 +497,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}/offer
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/negotiations/{id}/offer
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/negotiations/{id}/request:
+  /{connectorId}/2024/1/negotiations/{id}/request:
     post:
       operationId: contractRequest
       parameters:
@@ -541,11 +555,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/negotiations/{id}/request
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/negotiations/{id}/termination:
+  /{connectorId}/2024/1/negotiations/{id}/termination:
     post:
       operationId: terminateNegotiation
       parameters:
@@ -598,11 +613,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/negotiations/{id}/termination
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/negotiations/{id}/termination
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/transfers/request:
+  /{connectorId}/2024/1/transfers/request:
     post:
       operationId: initiateTransferProcess
       parameters:
@@ -648,9 +664,11 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/transfers/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/transfers/request
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/transfers/{id}:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/2024/1/transfers/{id}:
     get:
       operationId: getTransferProcess
       parameters:
@@ -683,11 +701,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/transfers/{id}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/transfers/{id}
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/transfers/{id}/completion:
+  /{connectorId}/2024/1/transfers/{id}/completion:
     post:
       operationId: transferProcessCompletion
       parameters:
@@ -740,11 +759,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/transfers/{id}/completion
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/transfers/{id}/completion
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/transfers/{id}/start:
+  /{connectorId}/2024/1/transfers/{id}/start:
     post:
       operationId: transferProcessStart
       parameters:
@@ -797,11 +817,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/transfers/{id}/start
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/transfers/{id}/start
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/transfers/{id}/suspension:
+  /{connectorId}/2024/1/transfers/{id}/suspension:
     post:
       operationId: transferProcessSuspension
       parameters:
@@ -854,11 +875,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/transfers/{id}/suspension
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/transfers/{id}/suspension
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2024/1/transfers/{id}/termination:
+  /{connectorId}/2024/1/transfers/{id}/termination:
     post:
       operationId: transferProcessTermination
       parameters:
@@ -911,11 +933,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2024/1/transfers/{id}/termination
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/transfers/{id}/termination
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/catalog/datasets/{id}:
+  /{connectorId}/2025-1/catalog/datasets/{id}:
     get:
       operationId: getDataset
       parameters:
@@ -948,11 +971,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/catalog/datasets/{id}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/catalog/datasets/{id}
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/catalog/request:
+  /{connectorId}/2025-1/catalog/request:
     post:
       operationId: requestCatalog
       parameters:
@@ -1005,9 +1029,11 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/catalog/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/catalog/request
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/negotiations/offers:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/2025-1/negotiations/offers:
     post:
       operationId: initialContractOffer
       parameters:
@@ -1053,9 +1079,11 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/offers
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/negotiations/offers
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/negotiations/request:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/2025-1/negotiations/request:
     post:
       operationId: initialContractRequest
       parameters:
@@ -1101,9 +1129,11 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/negotiations/request
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/negotiations/{id}:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/2025-1/negotiations/{id}:
     get:
       operationId: getNegotiation
       parameters:
@@ -1136,11 +1166,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/negotiations/{id}
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/negotiations/{id}/agreement:
+  /{connectorId}/2025-1/negotiations/{id}/agreement:
     post:
       operationId: createAgreement
       parameters:
@@ -1193,11 +1224,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}/agreement
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/negotiations/{id}/agreement
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/negotiations/{id}/agreement/verification:
+  /{connectorId}/2025-1/negotiations/{id}/agreement/verification:
     post:
       operationId: verifyAgreement
       parameters:
@@ -1250,11 +1282,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}/agreement/verification
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/negotiations/{id}/agreement/verification
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/negotiations/{id}/events:
+  /{connectorId}/2025-1/negotiations/{id}/events:
     post:
       operationId: createEvent
       parameters:
@@ -1307,11 +1340,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}/events
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/negotiations/{id}/events
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/negotiations/{id}/offers:
+  /{connectorId}/2025-1/negotiations/{id}/offers:
     post:
       operationId: providerOffer
       parameters:
@@ -1364,11 +1398,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}/offers
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/negotiations/{id}/offers
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/negotiations/{id}/request:
+  /{connectorId}/2025-1/negotiations/{id}/request:
     post:
       operationId: contractRequest
       parameters:
@@ -1421,11 +1456,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/negotiations/{id}/request
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/negotiations/{id}/termination:
+  /{connectorId}/2025-1/negotiations/{id}/termination:
     post:
       operationId: terminateNegotiation
       parameters:
@@ -1478,11 +1514,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/negotiations/{id}/termination
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/negotiations/{id}/termination
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/transfers/request:
+  /{connectorId}/2025-1/transfers/request:
     post:
       operationId: initiateTransferProcess
       parameters:
@@ -1528,9 +1565,11 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/transfers/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/transfers/request
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/transfers/{id}:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/2025-1/transfers/{id}:
     get:
       operationId: getTransferProcess
       parameters:
@@ -1563,11 +1602,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/transfers/{id}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/transfers/{id}
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/transfers/{id}/completion:
+  /{connectorId}/2025-1/transfers/{id}/completion:
     post:
       operationId: transferProcessCompletion
       parameters:
@@ -1620,11 +1660,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/transfers/{id}/completion
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/transfers/{id}/completion
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/transfers/{id}/start:
+  /{connectorId}/2025-1/transfers/{id}/start:
     post:
       operationId: transferProcessStart
       parameters:
@@ -1677,11 +1718,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/transfers/{id}/start
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/transfers/{id}/start
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/transfers/{id}/suspension:
+  /{connectorId}/2025-1/transfers/{id}/suspension:
     post:
       operationId: transferProcessSuspension
       parameters:
@@ -1734,11 +1776,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/transfers/{id}/suspension
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/transfers/{id}/suspension
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/2025-1/transfers/{id}/termination:
+  /{connectorId}/2025-1/transfers/{id}/termination:
     post:
       operationId: transferProcessTermination
       parameters:
@@ -1791,11 +1834,12 @@ paths:
         httpMethod: ANY
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/2025-1/transfers/{id}/termination
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/transfers/{id}/termination
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /${connectorId}/catalog/datasets/{id}:
+  /{connectorId}/catalog/datasets/{id}:
     get:
       operationId: getDataset
       parameters:
@@ -1824,10 +1868,11 @@ paths:
         httpMethod: GET
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/catalog/datasets/{id}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/catalog/datasets/{id}
         integrationTarget: ${albArn}
-  /${connectorId}/catalog/request:
+  /{connectorId}/catalog/request:
     post:
       operationId: requestCatalog
       parameters:
@@ -1874,9 +1919,11 @@ paths:
         connectionType: VPC_LINK
         httpMethod: POST
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/catalog/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/catalog/request
         integrationTarget: ${albArn}
-  /${connectorId}/negotiations/offer:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/negotiations/offer:
     post:
       operationId: initialContractOffer
       parameters:
@@ -1919,9 +1966,11 @@ paths:
         connectionType: VPC_LINK
         httpMethod: POST
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/offer
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/negotiations/offer
         integrationTarget: ${albArn}
-  /${connectorId}/negotiations/request:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/negotiations/request:
     post:
       operationId: initialContractRequest
       parameters:
@@ -1964,9 +2013,11 @@ paths:
         connectionType: VPC_LINK
         httpMethod: POST
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/negotiations/request
         integrationTarget: ${albArn}
-  /${connectorId}/negotiations/{id}:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/negotiations/{id}:
     get:
       operationId: getNegotiation
       parameters:
@@ -1995,10 +2046,11 @@ paths:
         httpMethod: GET
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/negotiations/{id}
         integrationTarget: ${albArn}
-  /${connectorId}/negotiations/{id}/agreement:
+  /{connectorId}/negotiations/{id}/agreement:
     post:
       operationId: createAgreement
       parameters:
@@ -2047,10 +2099,11 @@ paths:
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}/agreement
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/negotiations/{id}/agreement
         integrationTarget: ${albArn}
-  /${connectorId}/negotiations/{id}/agreement/verification:
+  /{connectorId}/negotiations/{id}/agreement/verification:
     post:
       operationId: verifyAgreement
       parameters:
@@ -2099,10 +2152,11 @@ paths:
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}/agreement/verification
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/negotiations/{id}/agreement/verification
         integrationTarget: ${albArn}
-  /${connectorId}/negotiations/{id}/events:
+  /{connectorId}/negotiations/{id}/events:
     post:
       operationId: createEvent
       parameters:
@@ -2151,10 +2205,11 @@ paths:
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}/events
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/negotiations/{id}/events
         integrationTarget: ${albArn}
-  /${connectorId}/negotiations/{id}/offer:
+  /{connectorId}/negotiations/{id}/offer:
     post:
       operationId: providerOffer
       parameters:
@@ -2203,10 +2258,11 @@ paths:
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}/offer
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/negotiations/{id}/offer
         integrationTarget: ${albArn}
-  /${connectorId}/negotiations/{id}/request:
+  /{connectorId}/negotiations/{id}/request:
     post:
       operationId: contractRequest
       parameters:
@@ -2255,10 +2311,11 @@ paths:
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/negotiations/{id}/request
         integrationTarget: ${albArn}
-  /${connectorId}/negotiations/{id}/termination:
+  /{connectorId}/negotiations/{id}/termination:
     post:
       operationId: terminateNegotiation
       parameters:
@@ -2307,10 +2364,11 @@ paths:
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/negotiations/{id}/termination
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/negotiations/{id}/termination
         integrationTarget: ${albArn}
-  /${connectorId}/transfers/request:
+  /{connectorId}/transfers/request:
     post:
       operationId: initiateTransferProcess
       parameters:
@@ -2353,9 +2411,11 @@ paths:
         connectionType: VPC_LINK
         httpMethod: POST
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/transfers/request
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/transfers/request
         integrationTarget: ${albArn}
-  /${connectorId}/transfers/{id}:
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+  /{connectorId}/transfers/{id}:
     get:
       operationId: getTransferProcess
       parameters:
@@ -2384,10 +2444,11 @@ paths:
         httpMethod: GET
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/transfers/{id}
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/transfers/{id}
         integrationTarget: ${albArn}
-  /${connectorId}/transfers/{id}/completion:
+  /{connectorId}/transfers/{id}/completion:
     post:
       operationId: transferProcessCompletion
       parameters:
@@ -2436,10 +2497,11 @@ paths:
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/transfers/{id}/completion
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/transfers/{id}/completion
         integrationTarget: ${albArn}
-  /${connectorId}/transfers/{id}/start:
+  /{connectorId}/transfers/{id}/start:
     post:
       operationId: transferProcessStart
       parameters:
@@ -2488,10 +2550,11 @@ paths:
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/transfers/{id}/start
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/transfers/{id}/start
         integrationTarget: ${albArn}
-  /${connectorId}/transfers/{id}/suspension:
+  /{connectorId}/transfers/{id}/suspension:
     post:
       operationId: transferProcessSuspension
       parameters:
@@ -2540,10 +2603,11 @@ paths:
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/transfers/{id}/suspension
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/transfers/{id}/suspension
         integrationTarget: ${albArn}
-  /${connectorId}/transfers/{id}/termination:
+  /{connectorId}/transfers/{id}/termination:
     post:
       operationId: transferProcessTermination
       parameters:
@@ -2592,6 +2656,7 @@ paths:
         httpMethod: POST
         requestParameters:
           integration.request.path.id: method.request.path.id
+          integration.request.path.connectorId: method.request.path.connectorId
         type: http_proxy
-        uri: http://${loadBalancerDnsName}/${connectorId}/api/protocol/transfers/{id}/termination
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/transfers/{id}/termination
         integrationTarget: ${albArn}

@@ -94,17 +94,14 @@ export class EdcDataPlane extends Construct {
         "edc.dpf.selector.url": `http://${props.albOutputs.dnsName}:${props.controlPlanePortMapping.control}/${props.connectorId}/api/control/v1/dataplanes`,
         "edc.hostname": props.albOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",
-        "edc.iam.sts.oauth.client.secret.alias":
-          `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`,
+        "edc.iam.sts.oauth.client.secret.alias": `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`,
         "edc.runtime.id": props.connectorId,
         "edc.vault.aws.region": Stack.of(this).region,
         "tx.edc.dataplane.token.refresh.endpoint": `${props.apiPublicUrl}token`,
 
         // This declares the aliases to use in AWS Secrets Manager for consumer pull scenarios
-        "edc.transfer.proxy.token.signer.privatekey.alias":
-          `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_SIGNER_PRIVATE_KEY}`,
-        "edc.transfer.proxy.token.verifier.publickey.alias":
-          `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY}`,
+        "edc.transfer.proxy.token.signer.privatekey.alias": `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_SIGNER_PRIVATE_KEY}`,
+        "edc.transfer.proxy.token.verifier.publickey.alias": `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY}`,
 
         ...props.edcIamEnvVars,
         "edc.participant.id": props.edcIamEnvVars["edc.iam.issuer.id"],
@@ -146,7 +143,8 @@ export class EdcDataPlane extends Construct {
       containerPort: props.dataPlanePortMapping.default,
       profile: props.profile,
       securityGroups: [securityGroup],
-      targetGroup: props.albOutputs.targetGroups[props.dataPlanePortMapping.default],
+      targetGroup:
+        props.albOutputs.targetGroups[props.dataPlanePortMapping.default],
       taskDefinition: taskDefinition,
     });
 
