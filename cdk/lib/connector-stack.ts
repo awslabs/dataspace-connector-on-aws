@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
+import { CfnOutput, RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
 import { Construct } from "constructs";
 
 import {
@@ -11,8 +11,13 @@ import {
   TargetType,
 } from "aws-cdk-lib/aws-elasticloadbalancingv2";
 
+import {
+  BlockPublicAccess,
+  Bucket,
+  BucketEncryption,
+} from "aws-cdk-lib/aws-s3";
+
 import { ContainerImage } from "aws-cdk-lib/aws-ecs";
-import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 
@@ -170,10 +175,7 @@ export class ConnectorStack extends Stack {
 
     const policyStatements = [
       new PolicyStatement({
-        actions: [
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-        ],
+        actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
         effect: Effect.ALLOW,
         resources: [
           `${logsArn}:log-group:DataspaceConnector-${connectorId}*:*`,
@@ -267,5 +269,9 @@ export class ConnectorStack extends Stack {
       vpc: infra.vpc,
     });
     dataPlane.node.addDependency(controlPlane);
+
+    new CfnOutput(this, "EdcDataPlaneBucketName", {
+      value: s3Bucket.bucketName,
+    });
   }
 }

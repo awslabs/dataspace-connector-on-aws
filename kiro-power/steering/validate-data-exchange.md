@@ -22,9 +22,13 @@ If this fails, the MCP connection isn't configured. Direct the user to the **dep
 Also discover the CloudWatch log groups for troubleshooting later. The AWS profile and region are needed — check `$AWS_PROFILE` or ask the user, and determine the region from the MCP config or `deploy.sh`:
 
 ```bash
-aws logs describe-log-groups --region <region> --output json \
-    --query 'logGroups[?contains(logGroupName, `ControlPlaneLogGroup`) || contains(logGroupName, `DataPlaneLogGroup`)].logGroupName'
+aws cloudformation list-stack-resources --stack-name DataspaceConnector-default --region <region> \
+    --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].[LogicalResourceId,PhysicalResourceId]' --output json
 ```
+
+This returns the log group physical resource IDs for the current deployment. Match by logical ID prefix:
+- `ControlPlane` → control plane log group
+- `DataPlane` → data plane log group
 
 Store both log group names — they are needed for diagnosing any issues in Phase 8.
 
@@ -539,16 +543,16 @@ The response includes the `errorDetail` field when the negotiation is `TERMINATE
 
 ### Step 8.2: Discover CloudWatch Log Groups
 
-The control plane and data plane each write to their own CloudWatch log group. The names include CDK-generated suffixes, so discover them first:
+The control plane and data plane each write to their own CloudWatch log group. The names include CDK-generated suffixes, so discover them from the stack resources (this avoids picking up stale log groups from prior deployments):
 
 ```bash
-aws logs describe-log-groups --region <region> --output json \
-    --query 'logGroups[?contains(logGroupName, `ControlPlaneLogGroup`) || contains(logGroupName, `DataPlaneLogGroup`)].logGroupName'
+aws cloudformation list-stack-resources --stack-name DataspaceConnector-default --region <region> \
+    --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].[LogicalResourceId,PhysicalResourceId]' --output json
 ```
 
-This returns two log group names like:
-- `DataspaceConnector-default-ControlPlaneLogGroup<suffix>`
-- `DataspaceConnector-default-DataPlaneLogGroup<suffix>`
+This returns entries like:
+- Logical ID containing `ControlPlane` → `DataspaceConnector-default-ControlPlaneLogGroup<suffix>`
+- Logical ID containing `DataPlane` → `DataspaceConnector-default-DataPlaneLogGroup<suffix>`
 
 Store both — you'll need them for log queries.
 
