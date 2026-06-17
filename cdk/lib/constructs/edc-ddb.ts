@@ -5,6 +5,7 @@ import { IKey } from "aws-cdk-lib/aws-kms";
 import { Construct } from "constructs";
 import { RemovalPolicy } from "aws-cdk-lib";
 import { Billing, TableEncryptionV2, TableV2 } from "aws-cdk-lib/aws-dynamodb";
+
 import {
   GSI_CORRELATION_ID,
   GSI_STATE,

@@ -1,0 +1,16 @@
+# Pipeline configuration for Dataspace Connector on AWS
+# See: https://github.com/awslabs/dataspace-connector-on-aws
+
+# App repo and version (Git tag, branch, or commit hash)
+appRepo: awslabs/dataspace-connector-on-aws
+appVersion: main
+
+# Config repository source: "codecommit" (default) or "github"
+configSource: codecommit
+configRepoName: dataspace-connector-config
+
+# Required only for GitHub config repos (CodeStar Connection ARN)
+# connectionArn: "arn:aws:codestar-connections:eu-central-1:123456789012:connection/..."
+
+# Optional manual approval step before deployment
+requireApproval: false

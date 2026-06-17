@@ -1,0 +1,17 @@
+# Shared infrastructure configuration for Dataspace Connector on AWS
+# See: https://github.com/awslabs/dataspace-connector-on-aws
+
+profile: development # "development" (Fargate Spot, 1 NAT) or "production" (On-Demand, 2 NATs)
+vpcIpAddresses: "10.0.0.0/20"
+containerInsights: true
+
+# IAM principals allowed to call the Management and Observability APIs (IAM auth)
+managementApiPrincipals:
+  # - "arn:aws:iam::<account-id>:role/<role-name>"
+observabilityApiPrincipals:
+  # - "arn:aws:iam::<account-id>:role/<role-name>"
+
+# Optional: custom domain for EDC API endpoints
+# certificateArn: "arn:aws:acm:<region>:<account-id>:certificate/<certificate-id>"
+# domainName: "edc.example.com"
+# hostedZoneId: "Z0123456789ABCDEFGHIJ"

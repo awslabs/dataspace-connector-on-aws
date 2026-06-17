@@ -1,31 +1,40 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import { resolve } from "path";
 import { App, Tags } from "aws-cdk-lib";
 
 import { SharedInfraStack } from "./shared-infra-stack";
 import { ConnectorStack } from "./connector-stack";
+import { loadConfigFromYaml } from "./config/config-loader";
 
 import {
   connectorPriority,
+  DeploymentConfig,
   DEPLOYMENT_CONFIG,
   validateConnectorId,
 } from "./config/environments";
 
 const app = new App();
 
+// Config resolution: YAML (from context or ./config/) > environments.ts
+const configPath = app.node.tryGetContext("config-path")
+  ? resolve(app.node.tryGetContext("config-path"))
+  : resolve(__dirname, "../config");
+
+const config: DeploymentConfig =
+  loadConfigFromYaml(configPath) ?? DEPLOYMENT_CONFIG;
+
 const sharedInfra = new SharedInfraStack(
   app,
   "DataspaceConnectorSharedInfraStack",
-  {
-    config: DEPLOYMENT_CONFIG.sharedInfra,
-  },
+  { config: config.sharedInfra },
 );
 
 // Detect priority collisions at synth time
 const priorities = new Map<number, string>();
 
-DEPLOYMENT_CONFIG.connectors.forEach((connectorConfig) => {
+config.connectors.forEach((connectorConfig) => {
   validateConnectorId(connectorConfig.connectorId);
   const priority = connectorPriority(connectorConfig.connectorId);
   const existing = priorities.get(priority);
@@ -42,7 +51,7 @@ DEPLOYMENT_CONFIG.connectors.forEach((connectorConfig) => {
     {
       connectorConfig,
       sharedInfra,
-      sharedInfraConfig: DEPLOYMENT_CONFIG.sharedInfra,
+      sharedInfraConfig: config.sharedInfra,
       priority,
     },
   );
