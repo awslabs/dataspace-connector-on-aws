@@ -42,4 +42,8 @@ if (!deploymentConfig) {
 new PipelineStack(app, "DataspaceConnectorPipelineStack", {
   pipelineConfig,
   deploymentConfig,
+  env: {
+    account: process.env.CDK_DEFAULT_ACCOUNT,
+    region: process.env.CDK_DEFAULT_REGION,
+  },
 });
