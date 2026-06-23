@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Stack, StackProps } from "aws-cdk-lib";
+import { LinuxArmBuildImage, LinuxBuildImage } from "aws-cdk-lib/aws-codebuild";
 import { Repository } from "aws-cdk-lib/aws-codecommit";
 import { PipelineType } from "aws-cdk-lib/aws-codepipeline";
 
@@ -43,21 +44,25 @@ export class PipelineStack extends Stack {
     // Synth step: clone app repo at pinned version, build, synth
     const synth = new CodeBuildStep("Synth", {
       input: configSource,
+      buildEnvironment: {
+        buildImage: LinuxBuildImage.STANDARD_7_0,
+      },
+      installCommands: ["n 24"],
       commands: [
         // Read appVersion from pipeline.yaml
         `APP_VERSION=$(grep 'appVersion:' pipeline.yaml | awk '{print $2}')`,
         `echo "Using app version: $APP_VERSION"`,
         // Clone app repo at specific version
-        `git clone --depth 1 https://github.com/${config.appRepo}.git app`,
+        `git clone https://github.com/${config.appRepo}.git app`,
         `cd app && git checkout "$APP_VERSION"`,
         // Build EDC extensions
         `cd edc && ./gradlew clean shadowJar`,
         // Install CDK dependencies and compile
-        `cd ../cdk && npm ci && npx tsc`,
+        `cd ../cdk && npm ci --ignore-scripts && npx tsc`,
         // Synth with config path pointing to the config repo root
-        `npx cdk synth --app 'node lib/pipeline-app.js' --context config-path=../..`,
+        `npx cdk synth --app 'node dist/pipeline-app.js' --context config-path=../..`,
       ],
-      primaryOutputDirectory: "app/cdk/cdk.out",
+      primaryOutputDirectory: "app/cdk/build/cdk.out",
     });
 
     const pipeline = new CodePipeline(this, "Pipeline", {
@@ -65,6 +70,13 @@ export class PipelineStack extends Stack {
       pipelineType: PipelineType.V2,
       synth,
       selfMutation: true,
+      dockerEnabledForSelfMutation: true,
+      assetPublishingCodeBuildDefaults: {
+        buildEnvironment: {
+          buildImage: LinuxArmBuildImage.AMAZON_LINUX_2023_STANDARD_3_0,
+          privileged: true,
+        },
+      },
     });
 
     // Deploy stage (SharedInfra + all Connectors in parallel)
@@ -105,7 +117,6 @@ export class PipelineStack extends Stack {
   }
 
   private getOrCreateConfigRepo(repoName: string): Repository {
-    // Try importing existing; if not found, create with template content
     return new Repository(this, "ConfigRepo", {
       repositoryName: repoName,
       description:
