@@ -94,14 +94,14 @@ export class PipelineStack extends Stack {
 
     // Orphan cleanup step: destroy stacks for removed connectors
     const expectedConnectors = props.deploymentConfig.connectors
-      .map((c) => `DataspaceConnector-${c.connectorId}`)
+      .map((c) => `Deploy-DataspaceConnector-${c.connectorId}`)
       .join(" ");
 
     stage.addPost(
       new CodeBuildStep("CleanupOrphans", {
         commands: [
           `EXPECTED="${expectedConnectors}"`,
-          `DEPLOYED=$(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE --query "StackSummaries[?starts_with(StackName,'DataspaceConnector-')].StackName" --output text)`,
+          `DEPLOYED=$(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE --query "StackSummaries[?starts_with(StackName,'Deploy-DataspaceConnector-')].StackName" --output text)`,
           `for stack in $DEPLOYED; do if ! echo "$EXPECTED" | grep -qw "$stack"; then echo "Destroying orphaned stack: $stack"; aws cloudformation delete-stack --stack-name "$stack"; aws cloudformation wait stack-delete-complete --stack-name "$stack" --cli-read-timeout 600; fi; done`,
         ],
         rolePolicyStatements: [
