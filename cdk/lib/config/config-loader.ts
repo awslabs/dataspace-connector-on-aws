@@ -36,6 +36,7 @@ export function loadConfigFromYaml(
   const deployment = yaml.load(
     readFileSync(deploymentPath, "utf-8"),
   ) as DeploymentYaml;
+  validateDeploymentYaml(deployment, deploymentPath);
 
   const connectorsDir = join(configPath, "connectors");
   const connectorFiles = existsSync(connectorsDir)
@@ -54,6 +55,7 @@ export function loadConfigFromYaml(
     const raw = yaml.load(
       readFileSync(join(connectorsDir, file), "utf-8"),
     ) as ConnectorYaml;
+    validateConnectorYaml(raw, file);
     return mapConnectorYaml(raw);
   });
 
@@ -104,4 +106,71 @@ function mapConnectorYaml(raw: ConnectorYaml): ConnectorConfig {
     profile: raw.profile,
     stateMachineIterationMillis: raw.stateMachineIterationMillis,
   };
+}
+
+function validateDeploymentYaml(
+  data: DeploymentYaml,
+  filePath: string,
+): void {
+  const required: (keyof DeploymentYaml)[] = [
+    "profile",
+    "vpcIpAddresses",
+    "containerInsights",
+  ];
+  const missing = required.filter(
+    (key) => data[key] === undefined || data[key] === null,
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `${filePath}: missing required fields: ${missing.join(", ")}`,
+    );
+  }
+  if (!["development", "production"].includes(data.profile)) {
+    throw new Error(
+      `${filePath}: profile must be "development" or "production", got "${data.profile}"`,
+    );
+  }
+}
+
+function validateConnectorYaml(data: ConnectorYaml, fileName: string): void {
+  const required: (keyof ConnectorYaml)[] = [
+    "connectorId",
+    "controlPlaneCpu",
+    "controlPlaneMemoryLimitMiB",
+    "dataPlaneCpu",
+    "dataPlaneMemoryLimitMiB",
+    "stateMachineIterationMillis",
+    "edcStateRemovalPolicy",
+    "edcIam",
+  ];
+  const missing = required.filter(
+    (key) => data[key] === undefined || data[key] === null,
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `${fileName}: missing required fields: ${missing.join(", ")}`,
+    );
+  }
+  if (!data.edcIam || typeof data.edcIam !== "object") {
+    throw new Error(`${fileName}: edcIam must be an object`);
+  }
+  const requiredIam = [
+    "trustedIssuer",
+    "stsOauthTokenUrl",
+    "stsOauthClientId",
+    "stsDimUrl",
+    "participantId",
+    "dcpId",
+    "didResolver",
+  ];
+  const missingIam = requiredIam.filter(
+    (key) =>
+      !(key in data.edcIam) ||
+      data.edcIam[key as keyof typeof data.edcIam] === undefined,
+  );
+  if (missingIam.length > 0) {
+    throw new Error(
+      `${fileName}: edcIam missing required fields: ${missingIam.join(", ")}`,
+    );
+  }
 }

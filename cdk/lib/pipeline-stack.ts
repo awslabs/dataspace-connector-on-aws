@@ -1,9 +1,10 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import { resolve } from "path";
 import { Stack, StackProps } from "aws-cdk-lib";
 import { LinuxArmBuildImage, LinuxBuildImage } from "aws-cdk-lib/aws-codebuild";
-import { Repository } from "aws-cdk-lib/aws-codecommit";
+import { Code, Repository } from "aws-cdk-lib/aws-codecommit";
 import { PipelineType } from "aws-cdk-lib/aws-codepipeline";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 
@@ -19,6 +20,8 @@ import {
 import { DeploymentStage } from "./deployment-stage";
 import { DeploymentConfig } from "./config/environments";
 import { PipelineYaml } from "./config/schemas";
+
+const STAGE_ID = "Deploy";
 
 export interface PipelineStackProps extends StackProps {
   readonly pipelineConfig: PipelineYaml;
@@ -50,8 +53,8 @@ export class PipelineStack extends Stack {
       },
       installCommands: ["n 24"],
       commands: [
-        // Read appVersion from pipeline.yaml
-        `APP_VERSION=$(grep 'appVersion:' pipeline.yaml | awk '{print $2}')`,
+        // Read appVersion from pipeline.yaml using a proper YAML parser
+        `APP_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('pipeline.yaml'))['appVersion'])")`,
         `echo "Using app version: $APP_VERSION"`,
         // Clone app repo at specific version
         `git clone https://github.com/${config.appRepo}.git app`,
@@ -81,7 +84,7 @@ export class PipelineStack extends Stack {
     });
 
     // Deploy stage (SharedInfra + all Connectors in parallel)
-    const deployStage = new DeploymentStage(this, "Deploy", {
+    const deployStage = new DeploymentStage(this, STAGE_ID, {
       config: props.deploymentConfig,
     });
 
@@ -94,14 +97,14 @@ export class PipelineStack extends Stack {
 
     // Orphan cleanup step: destroy stacks for removed connectors
     const expectedConnectors = props.deploymentConfig.connectors
-      .map((c) => `Deploy-DataspaceConnector-${c.connectorId}`)
+      .map((c) => `${STAGE_ID}-DataspaceConnector-${c.connectorId}`)
       .join(" ");
 
     stage.addPost(
       new CodeBuildStep("CleanupOrphans", {
         commands: [
           `EXPECTED="${expectedConnectors}"`,
-          `DEPLOYED=$(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE --query "StackSummaries[?starts_with(StackName,'Deploy-DataspaceConnector-')].StackName" --output text)`,
+          `DEPLOYED=$(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE --query "StackSummaries[?starts_with(StackName,'${STAGE_ID}-DataspaceConnector-')].StackName" --output text)`,
           `for stack in $DEPLOYED; do if ! echo "$EXPECTED" | grep -qw "$stack"; then echo "Destroying orphaned stack: $stack"; aws cloudformation delete-stack --stack-name "$stack"; aws cloudformation wait stack-delete-complete --stack-name "$stack" --cli-read-timeout 600; fi; done`,
         ],
         rolePolicyStatements: [
@@ -125,6 +128,10 @@ export class PipelineStack extends Stack {
       repositoryName: repoName,
       description:
         "Configuration repository for Dataspace Connector on AWS deployments",
+      code: Code.fromDirectory(
+        resolve(__dirname, "../config-templates"),
+        "main",
+      ),
     });
   }
 }
