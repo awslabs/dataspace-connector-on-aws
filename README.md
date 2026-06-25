@@ -1,176 +1,313 @@
 # Dataspace Connector on AWS
 
-🚀 Deploy a Dataspace Connector for [Catena-X](https://catena-x.net/) on production-ready AWS infrastructure with a single command.
+🚀 Deploy and manage a fleet of Dataspace Connectors for [Catena-X](https://catena-x.net/) on production-ready AWS infrastructure — from a single connector to hundreds, all managed through configuration.
 
-To participate in secure, sovereign data sharing through the Catena-X data space, member organizations must host a [*Dataspace Connector*](https://eclipse-tractusx.github.io/docs-kits/category/connector-kit). This open-source project comes with just that:
+To participate in secure, sovereign data sharing through the Catena-X data space, member organizations must host a [*Dataspace Connector*](https://eclipse-tractusx.github.io/docs-kits/category/connector-kit). This open-source project provides:
 
-* Production-ready deployment blueprint for data space connectors on AWS, following AWS best practices and Catena-X learnings made since 2023
-* Customization for [Tractus-X EDC](https://github.com/eclipse-tractusx/tractusx-edc), the mature Eclipse Dataspace Components (EDC) connector implementation of the Eclipse Tractus-X project, to leverage available AWS service integrations with [Amazon S3](https://aws.amazon.com/s3/) and [AWS Secrets Manager](https://aws.amazon.com/secrets-manager/)
-* EDC extension for [Amazon DynamoDB](https://aws.amazon.com/dynamodb/) as alternative to a PostgreSQL-compatible database for control plane persistance
-
-The goal is to provide easy access to production-ready connector deployments within minutes, that leverage security, reliability and scale of the AWS Cloud in a cost-efficient manner.
-
-## Quick Start
-
-**Prerequisites:** `corretto@17`, `docker`, `cdk`, `npm` and `node@24`
-
-Configure your deployment in [`cdk/lib/config/environments.ts`](cdk/lib/config/environments.ts) — see [Configuration](#configuration) for all available options.
+* Production-ready multi-connector deployment on AWS infrastructure, following AWS best practices
+* GitOps-driven operations using CDK Pipelines — add or remove connectors by editing YAML files in Git
+* Customization for [Tractus-X EDC](https://github.com/eclipse-tractusx/tractusx-edc), with AWS service integrations for [Amazon S3](https://aws.amazon.com/s3/), [AWS Secrets Manager](https://aws.amazon.com/secrets-manager/), and [Amazon DynamoDB](https://aws.amazon.com/dynamodb/)
+* Cost-optimized serverless infrastructure targeting <$25/month per connector at scale
+* AI-assisted connector management via an included [MCP server](mcp/) and guided [Kiro Power](kiro-power/) workflows for deployment, validation, and operations
 
 > [!IMPORTANT]
-> To use this project, your organization must be onboarded to the Catena-X data space. Instructions on how to get started [can be found here](https://catena-x.net/ecosystem/onboarding/). Additionally, operating a connector in the Catena-X production environment requires your organization to pass a [conformity assessment](https://catena-x.net/ecosystem/certification/) conducted by an accredited Conformity Assessment Body (CAB). "Production-ready" in this project refers to AWS infrastructure quality (high availability, security, observability) — not Catena-X certification status.
-
-```bash
-~ ./deploy.sh
-
-...
-Outputs:
-DataspaceConnectorStack.EdcApiDataPlaneApiEndpoint     = https://<api-id>.execute-api.<aws-region>.amazonaws.com/data/
-DataspaceConnectorStack.EdcApiDspApiEndpoint           = https://<api-id>.execute-api.<aws-region>.amazonaws.com/protocol/
-DataspaceConnectorStack.EdcApiManagementApiEndpoint    = https://<api-id>.execute-api.<aws-region>.amazonaws.com/management/
-DataspaceConnectorStack.EdcApiObservabilityApiEndpoint = https://<api-id>.execute-api.<aws-region>.amazonaws.com/status/
-DataspaceConnectorStack.EdcOauthClientSecretArn        = arn:aws:secretsmanager:<aws-region>:<account-id>:secret:edc.iam.sts.oauth.client.secret
-```
-
-After deployment, navigate to the [AWS Secrets Manager console](https://console.aws.amazon.com/secretsmanager/listsecrets) and update `EdcOauthClientSecretArn`'s value with your OAuth client secret obtained from the Cofinity-X Portal.
-
-✨ That's it! You can now interact with your EDC's management API to start creating contract offers or browse a data space participant's catalog. 
-
-## AI-Assisted Connector Management
-
-This project includes tooling for AI-assisted deployment and operation of your connector:
-
-* **[MCP Server](mcp/)** — A Model Context Protocol server with 15 tools for interacting with the EDC Management API. Create assets, negotiate contracts, transfer data, and troubleshoot issues — all through natural language in any MCP-compatible AI assistant.
-
-* **[Kiro Power](kiro-power/)** — Guided workflows for [Kiro](https://kiro.dev) that walk you through deploying your connector from scratch and validating end-to-end data exchange. Includes step-by-step steering files for deployment configuration, MCP setup, and S3 loopback testing.
-
-## Deployment Profiles
-
-The stack supports two deployment profiles via the `profile` setting in [`environments.ts`](cdk/lib/config/environments.ts):
-
-| Setting | `development` | `production` |
-|---------|--------------|--------------|
-| VPC Availability Zones | 1 (single NAT Gateway, single EIP) | 2 (HA with 2 NAT Gateways, 2 EIPs) |
-| Fargate capacity | Spot (70% cheaper, 2-min interruption warning) | On-Demand |
-| Log retention | 7 days | 30 days |
-
-### Estimated Monthly Cost (eu-central-1, idle connector)
-
-| Resource | `production` | `development` |
-|----------|-------------|---------------|
-| Fargate (Control + Data Plane, Graviton) | ~$18 | ~$6 (Spot) |
-| NAT Gateway | ~$76 (×2) | ~$38 (×1) |
-| Elastic IP | ~$7 (×2) | ~$4 (×1) |
-| Network Load Balancer | ~$19 | ~$19 |
-| Other (DynamoDB, API GW, S3, Secrets, Logs) | ~$1 | ~$1 |
-| **Total** | **~$120/month** | **~$67/month** |
-
-These are rough estimates for a single idle connector in eu-central-1. Actual costs depend on data transfer volume, API request frequency, and Spot pricing fluctuations. See [AWS Pricing Calculator](https://calculator.aws/) for detailed estimates. Setting `containerInsights: false` saves an additional ~$3–5/month by disabling ECS Container Insights metrics collection.
-
-The `development` profile is recommended for testing, development, and non-critical workloads. Use `production` for connectors that serve data to third-party consumers and require high availability.
+> To use this project, your organization must be onboarded to the Catena-X data space. Instructions on how to get started [can be found here](https://catena-x.net/ecosystem/onboarding/). Additionally, operating a connector in the Catena-X production environment requires your organization to pass a [conformity assessment](https://catena-x.net/ecosystem/certification/) conducted by an accredited Conformity Assessment Body (CAB). "Production-ready" in this project refers to AWS infrastructure (fault tolerance, security, observability) — not Catena-X certification status.
 
 ## Architecture
 
 ![architecture diagram](img/dataspace-connector-on-aws-architecture.png)
 
+*Note: This architecture diagram is currently outdated.*
+
+## Quick Start
+
+### Prerequisites
+
+* Java 17 (Amazon Corretto recommended)
+* Docker or [Finch](https://github.com/runfinch/finch) container runtime
+* Node.js 24+
+* AWS CDK CLI (`npm install -g aws-cdk`)
+* AWS CLI configured with credentials for your target account
+
+### Option A: Local Deploy (Single Command)
+
+Configure your deployment in [`cdk/lib/config/environments.ts`](cdk/lib/config/environments.ts), then:
+
+```bash
+export AWS_PROFILE=<your-profile>
+export AWS_REGION=eu-central-1
+./deploy-local.sh
+```
+
+This builds the EDC extensions, synthesizes CloudFormation, bootstraps the account, and deploys all stacks.
+
+**Output:**
+```
+DataspaceConnectorSharedInfraStack.EdcApiManagementApiEndpoint    = https://<id>.execute-api.<region>.amazonaws.com/management/
+DataspaceConnectorSharedInfraStack.EdcApiDspApiEndpoint           = https://<id>.execute-api.<region>.amazonaws.com/protocol/
+DataspaceConnectorSharedInfraStack.EdcApiDataPlaneApiEndpoint     = https://<id>.execute-api.<region>.amazonaws.com/data/
+DataspaceConnectorSharedInfraStack.EdcApiObservabilityApiEndpoint = https://<id>.execute-api.<region>.amazonaws.com/status/
+```
+
+After deployment, store your OAuth client secret in AWS Secrets Manager:
+```bash
+aws secretsmanager put-secret-value \
+    --secret-id "<connectorId>/edc.iam.sts.oauth.client.secret" \
+    --secret-string '<your-oauth-client-secret>' \
+    --region $AWS_REGION --profile $AWS_PROFILE
+```
+
+### Option B: GitOps Deploy (CDK Pipelines)
+
+For hands-off, Git-driven deployments — add or remove connectors by editing YAML files. See [Pipeline Deployment](#pipeline-deployment-gitops) below.
+
+## Configuration
+
+### Local Deploy (`environments.ts`)
+
+All configuration lives in [`cdk/lib/config/environments.ts`](cdk/lib/config/environments.ts). The file exports a `DEPLOYMENT_CONFIG` object with two sections:
+
+**`sharedInfra`** — VPC, ALB, API Gateway, ECS cluster settings:
+
+| Field | Description |
+|-------|-------------|
+| `profile` | `"development"` (single NAT, Fargate Spot) or `"production"` (dual NAT, On-Demand) |
+| `vpcIpAddresses` | VPC CIDR block (e.g., `"10.0.0.0/20"`) |
+| `containerInsights` | Enable ECS Container Insights |
+| `managementApiPrincipals` | IAM principals allowed to call the Management API |
+| `observabilityApiPrincipals` | IAM principals allowed to call the Health API |
+| `certificateArn` / `domainName` / `hostedZoneId` | Optional: custom domain for API endpoints |
+
+**`connectors`** — Array of connector configurations:
+
+| Field | Description |
+|-------|-------------|
+| `connectorId` | Unique ID (lowercase alphanumeric + hyphens, 2–60 chars) |
+| `profile` | Optional per-connector override (`"development"` or `"production"`) |
+| `controlPlaneCpu` / `controlPlaneMemoryLimitMiB` | Control Plane sizing (256 CPU / 1024 MB recommended) |
+| `dataPlaneCpu` / `dataPlaneMemoryLimitMiB` | Data Plane sizing (256 CPU / 512 MB recommended) |
+| `stateMachineIterationMillis` | EDC state machine polling interval in ms |
+| `edcStateRemovalPolicy` | `RemovalPolicy.DESTROY` (dev) or `RemovalPolicy.RETAIN` (prod) |
+| `edcIam` | Catena-X identity credentials from the Cofinity-X Portal |
+
+### EDC Identity (`edcIam`)
+
+These values are obtained from the [Cofinity-X Portal](https://portal.cofinity-x.com/) → "Configure Your Connector" dialog. Each connector requires its own set of credentials.
+
+| Field | Description |
+|-------|-------------|
+| `TRUSTED_ISSUER` | DID of the trusted credential issuer |
+| `DCP_STS_OAUTH_TOKEN_URL` | Token endpoint of the DIM instance |
+| `DCP_STS_OAUTH_CLIENT_ID` | Technical user client ID (one per connector) |
+| `DCP_STS_DIM_URL` | Base URL of your DIM instance |
+| `PARTICIPANT_ID` | Your organization's Business Partner Number (BPN) |
+| `DCP_ID` | Your connector's Decentralized Identifier (DID) |
+| `DID_RESOLVER` | BPN/DID Resolution Service (BDRS) URL |
+
+### Custom Domain
+
+When all three optional fields (`certificateArn`, `domainName`, `hostedZoneId`) are provided in `sharedInfra`, the stack creates an API Gateway custom domain with TLS 1.2, a Route 53 A record, and maps EDC APIs as base paths (`/status`, `/management`, `/protocol`, `/data`). The default `execute-api` endpoints are disabled. The ACM certificate must be in `us-east-1` regardless of stack region (API Gateway requirement for edge-optimized endpoints).
+
+## Pipeline Deployment (GitOps)
+
+For automated, Git-driven deployments, this project includes an optional CDK Pipelines stack. When enabled:
+
+1. A CodeCommit configuration repository is created automatically (or you connect your own GitHub repo)
+2. To deploy a new connector, add a YAML file describing it — the pipeline picks up the change and provisions the infrastructure
+3. To decommission a connector, delete its YAML file — the pipeline detects the removal and tears down the corresponding stack
+4. To upgrade the connector software version, update the `appVersion` field in `pipeline.yaml` — the pipeline rebuilds and redeploys all connectors with the new version
+
+### Setup
+
+**1. Deploy the pipeline stack:**
+
+```bash
+export AWS_PROFILE=<your-profile>
+export AWS_REGION=eu-central-1
+./deploy-pipeline.sh
+```
+
+This creates a CodeCommit repository called `dataspace-connector-config` pre-populated with template YAML files.
+
+**2. Clone the config repo:**
+
+```bash
+git clone codecommit::eu-central-1://<your-profile>@dataspace-connector-config
+```
+
+**3. Edit the YAML files** with your configuration (see schema below).
+
+**4. Commit and push** to trigger the first pipeline deployment:
+
+```bash
+git add -A && git commit -m "Initial configuration" && git push origin main
+```
+
+After this, all subsequent changes flow through Git pushes to the config repository.
+
+### Config Repository Structure
+
+```
+your-config-repo/
+├── pipeline.yaml              # Pipeline settings
+├── deployment.yaml            # Shared infrastructure config
+└── connectors/
+    ├── connector-alpha.yaml   # One file per connector
+    ├── connector-bravo.yaml
+    └── connector-charlie.yaml
+```
+
+### `pipeline.yaml`
+
+```yaml
+appRepo: awslabs/dataspace-connector-on-aws   # App source (public GitHub)
+appVersion: 2.0.0                             # Git tag, branch, or commit hash
+configSource: codecommit                      # "codecommit" (auto-created) or "github"
+configRepoName: dataspace-connector-config    # Repository name
+# connectionArn: "arn:aws:codestar-connections:..."  # Required for GitHub
+requireApproval: false                        # Optional manual gate before deploy
+```
+
+### `deployment.yaml`
+
+```yaml
+profile: development
+vpcIpAddresses: "10.0.0.0/20"
+containerInsights: true
+managementApiPrincipals:
+  - "arn:aws:iam::<account-id>:role/<role-name>"
+observabilityApiPrincipals:
+  - "arn:aws:iam::<account-id>:role/<role-name>"
+```
+
+### `connectors/connector-<id>.yaml`
+
+```yaml
+connectorId: alpha
+profile: production                     # Optional override
+controlPlaneCpu: 256
+controlPlaneMemoryLimitMiB: 1024
+dataPlaneCpu: 256
+dataPlaneMemoryLimitMiB: 512
+stateMachineIterationMillis: "10000"
+edcStateRemovalPolicy: DESTROY          # DESTROY or RETAIN
+edcIam:
+  trustedIssuer: "did:web:..."
+  stsOauthTokenUrl: "https://..."
+  stsOauthClientId: "..."
+  stsDimUrl: "https://..."
+  participantId: "BPNL..."
+  dcpId: "did:web:..."
+  didResolver: "https://..."
+```
+
+### Adding a Connector
+
+1. Create `connectors/connector-<id>.yaml` with your connector's credentials
+2. Commit and push to the config repo
+3. The pipeline automatically deploys a new connector stack
+4. **One-time manual step:** After the first deployment completes, store your OAuth client secret:
+   ```bash
+   aws secretsmanager put-secret-value \
+       --secret-id "<connectorId>/edc.iam.sts.oauth.client.secret" \
+       --secret-string '<your-oauth-client-secret>' \
+       --region <region>
+   ```
+   This is only required once per connector. Subsequent pipeline runs do not overwrite the secret value.
+
+### Removing a Connector
+
+1. Delete `connectors/connector-<id>.yaml`
+2. Commit and push
+3. The pipeline's cleanup step automatically destroys the orphaned stack
+
+> [!NOTE]
+> If the connector was configured with `edcStateRemovalPolicy: RETAIN`, the DynamoDB table and S3 bucket will **not** be deleted when the stack is destroyed — they are retained as orphaned resources for data preservation. You must delete them manually via the AWS console or CLI if they are no longer needed.
+
+### Teardown
+
+To completely remove all deployed resources, follow these steps in order:
+
+**1. Remove all connector YAML files** from the config repo and push. This triggers the pipeline's cleanup step, which destroys all connector stacks.
+
+**2. Delete the shared infrastructure stack:**
+
+```bash
+aws cloudformation delete-stack --stack-name Deploy-DataspaceConnectorSharedInfraStack --region <region>
+```
+
+**3. Delete the pipeline stack** (removes the pipeline and CodeCommit repo):
+
+```bash
+aws cloudformation delete-stack --stack-name DataspaceConnectorPipelineStack --region <region>
+```
+
+## Deployment Profiles
+
+| Setting | `development` | `production` |
+|---------|--------------|--------------|
+| VPC | 2 AZs, 1 NAT Gateway | 2 AZs, 2 NAT Gateways (HA) |
+| Fargate | Spot (70% cheaper) | On-Demand |
+| Log retention | 7 days | 30 days |
+
+### Estimated Monthly Cost (eu-central-1)
+
+| Connectors | `development` | `production` |
+|-----------|---------------|--------------|
+| 1 | ~$50/month | ~$80/month |
+| 10 | ~$10/connector | ~$15/connector |
+| 100 | ~$7/connector | ~$12/connector |
+
+Baseline infrastructure cost drops significantly at scale because VPC, NAT Gateway, and ALB are shared. Per-connector cost is primarily Fargate compute + DynamoDB on-demand.
+
+## AI-Assisted Connector Management
+
+This project includes tooling for AI-assisted deployment and operation:
+
+* **[MCP Server](mcp/)** — A Model Context Protocol server with 18 tools for interacting with the EDC Management API. Create assets, negotiate contracts, transfer data, and troubleshoot — all through natural language.
+
+* **[Kiro Power](kiro-power/)** — Guided workflows for [Kiro](https://kiro.dev) that walk you through deploying your connector and validating end-to-end data exchange, including S3 loopback testing.
+
+## Considerations
+
+* **API Gateway payload limit:** 10 MB per request (REST API). Does not affect Consumer Pull scenarios or S3-backed data transfers.
+* **Fargate Spot availability:** In `development` profile, Spot capacity constraints may cause deployment delays during updates. Retry or use `production` profile for guaranteed placement.
+* **Connector ID constraints:** Must be 2–60 characters, lowercase alphanumeric + hyphens, cannot start/end with a hyphen. Used in ALB paths, DynamoDB table names, Secrets Manager prefixes, and CloudFormation stack names.
+
 ## Learn More
 
 * [Minimum Viable Dataspace on AWS](https://github.com/aws-samples/minimum-viable-dataspace-for-catenax)
 * [AWS-specific service integrations for EDC](https://github.com/eclipse-edc/Technology-Aws)
-* [AWS joins Catena-X, underscoring commitment to transparency and collaboration in the global Automotive and Manufacturing Industries](https://aws.amazon.com/blogs/industries/aws-joins-catena-x/)
+* [AWS joins Catena-X](https://aws.amazon.com/blogs/industries/aws-joins-catena-x/)
 * [Rapidly experimenting with Catena-X data space technology on AWS](https://aws.amazon.com/blogs/industries/rapidly-experimenting-with-catena-x-data-space-technology-on-aws/)
-
-## Configuration
-
-All configuration is in [`cdk/lib/config/environments.ts`](cdk/lib/config/environments.ts). The file exports two objects: `edcIam` (Catena-X identity) and `DataspaceConnectorStackConfig` (AWS infrastructure).
-
-### EDC Identity Configuration (`edcIam`)
-
-These values are obtained from the [Cofinity-X Portal](https://portal.beta.cofinity-x.com/) after onboarding your organization to the Catena-X data space. The field names match the portal's "Configure Your Connector" dialog — copy-paste values directly.
-
-| Field | Portal Label | Description |
-|-------|-------------|-------------|
-| `TRUSTED_ISSUER` | trusted_issuer | DID of the trusted credential issuer (the Catena-X operator) |
-| `DCP_STS_OAUTH_TOKEN_URL` | dcp.sts.oauth.token_url | Token endpoint of the Decentralized Identity Management (DIM) instance |
-| `DCP_STS_OAUTH_CLIENT_ID` | dcp.sts.oauth.client.id | Technical user client ID for the specific connector (one per connector) |
-| `DCP_STS_DIM_URL` | dcp.sts.dim.url | Base URL of your Decentralized Identity Management instance |
-| `PARTICIPANT_ID` | participant_id | Your organization's Business Partner Number (BPN) |
-| `DCP_ID` | dcp.id | Your connector's Decentralized Identifier (DID) |
-| `DID_RESOLVER` | DID Resolver | BPN/DID Resolution Service (BDRS) URL for resolving participant identities |
-
-> [!NOTE]
-> The OAuth client secret (`dcp.sts.oauth.client.secret_alias` in the portal) is stored in AWS Secrets Manager, not in code. After deployment, update the secret `edc.iam.sts.oauth.client.secret` via the AWS console.
-
-### Infrastructure Configuration (`DataspaceConnectorStackConfig`)
-
-| Field | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `profile` | Yes | — | Deployment profile: `"development"` (single AZ, Spot, lower cost) or `"production"` (multi-AZ, On-Demand, HA). See [Deployment Profiles](#deployment-profiles). |
-| `containerInsights` | Yes | `true` | ECS Container Insights. Set to `false` to disable. |
-| `controlPlaneCpu` | Yes | — | CPU units for the Control Plane task (256 = 0.25 vCPU) |
-| `controlPlaneMemoryLimitMiB` | Yes | — | Memory in MiB for the Control Plane task (1024 recommended) |
-| `stateMachineIterationMillis` | Yes | `"10000"` | Polling interval for all EDC state machine processors (ms). Lower values detect state changes faster but increase DynamoDB reads. |
-| `controlPlanePortMapping` | Yes | — | Port mapping for the Control Plane. Use `CONTROL_PLANE_PORT_MAPPING_DEFAULT`. |
-| `dataPlaneCpu` | Yes | — | CPU units for the Data Plane task (256 = 0.25 vCPU) |
-| `dataPlaneMemoryLimitMiB` | Yes | — | Memory in MiB for the Data Plane task (512 recommended) |
-| `dataPlanePortMapping` | Yes | — | Port mapping for the Data Plane. Use `DATA_PLANE_PORT_MAPPING_DEFAULT`. |
-| `edcIam` | Yes | — | EDC identity configuration object (see table above) |
-| `edcStateRemovalPolicy` | Yes | — | CloudFormation removal policy for DynamoDB tables and S3. Use `RemovalPolicy.DESTROY` for dev, `RemovalPolicy.RETAIN` for prod. |
-| `managementApiPrincipals` | Yes | — | IAM principals allowed to call the Management API (array of `ArnPrincipal`). |
-| `observabilityApiPrincipals` | Yes | — | IAM principals allowed to call the Observability/Health API. |
-| `vpcIpAddresses` | Yes | — | CIDR block for the VPC (e.g., `"10.0.10.0/24"`). |
-| `certificateArn` | No | — | ACM certificate ARN in `us-east-1` for custom domain. Requires `domainName` and `hostedZoneId`. |
-| `domainName` | No | — | Custom domain for EDC APIs (e.g., `"edc.example.com"`). |
-| `hostedZoneId` | No | — | Route 53 hosted zone ID for the custom domain. |
-
-### Custom Domain
-
-When all three optional fields (`certificateArn`, `domainName`, `hostedZoneId`) are provided, the stack creates an API Gateway custom domain with TLS 1.2, a Route 53 A record, and maps EDC APIs as base paths (`/status`, `/management`, `/protocol`, `/data`). The default `execute-api` endpoints are disabled. The ACM certificate must be in `us-east-1` regardless of stack region (API Gateway requirement for edge-optimized endpoints).
-
-## Considerations
-
-The maximum payload size for [Amazon API Gateway](https://aws.amazon.com/api-gateway/) REST APIs is 10 MB (see [service quotas](https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-execution-service-limits-table.html)). This means a single EDC data transfer can't exceed 10 MB when data is pushed to the EDC's data plane API behind API Gateway.
-
-This does not apply to [*Consumer Pull*](https://eclipse-edc.github.io/documentation/for-adopters/control-plane/#flow-types) scenarios. A potential mitigation is to store larger objects on Amazon S3, using [presigned URLs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ShareObjectPreSignedURL.html) to only push a temporary link to requested data to a consumer.
+* [Eclipse Tractus-X EDC](https://github.com/eclipse-tractusx/tractusx-edc)
 
 ## EDC Extensions and Service Options
 
-The EDC connector consists of two main components: a **Control Plane** that manages data sharing agreements and policies, and a **Data Plane** that handles the actual data transfer. By default, EDC requires you to deploy and manage supporting infrastructure like databases and secret stores yourself. AWS offers managed alternatives that reduce operational complexity and provide enterprise-grade security and reliability out of the box.
-
-This deployment leverages AWS serverless services where possible, to minimize operational heavy-lifting while maintaining EDC's full functionality.
+The EDC connector consists of two main components: a **Control Plane** that manages data sharing agreements and policies, and a **Data Plane** that handles the actual data transfer. This deployment leverages AWS serverless services to minimize operational overhead while maintaining full EDC functionality.
 
 ### Control Plane
 
-**Secrets Management:**
-Stores private keys, certificates, and API credentials for secure communication and data plane authentication.
-* **[AWS Secrets Manager](https://aws.amazon.com/secrets-manager/)** (used in this deployment) - Fully managed secrets management service
-* **Vault** (self-managed alternative) - Requires separate deployment and maintenance
-
-**Database:**
-Stores contract negotiations, agreements, policies, transfer processes, and asset metadata.
-* **[Amazon DynamoDB](https://aws.amazon.com/dynamodb/)** (used in this deployment) - Serverless NoSQL database with pay-per-request pricing
-* **[Amazon Aurora PostgreSQL](https://aws.amazon.com/rds/aurora/)** (managed alternative) - Fully managed relational database for PostgreSQL
-* **PostgreSQL** (self-managed alternative) - Requires separate deployment and maintenance
+| Capability | This Deployment | Alternatives |
+|-----------|----------------|--------------|
+| Secrets Management | [AWS Secrets Manager](https://aws.amazon.com/secrets-manager/) | Vault (self-managed) |
+| Database | [Amazon DynamoDB](https://aws.amazon.com/dynamodb/) (single-table design) | [Amazon Aurora PostgreSQL](https://aws.amazon.com/rds/aurora/), PostgreSQL (self-managed) |
 
 ### Data Plane
 
-**Secrets Management:**
-Stores credentials needed to access data sources and destinations during transfer operations.
-* **AWS Secrets Manager** (used in this deployment)
-* **Vault** (self-managed alternative)
-
-**Data Transfer:**
-* **[Amazon S3](https://aws.amazon.com/s3/)** - Object storage with presigned URL support
-* **Amazon DynamoDB** - NoSQL database as data source/destination
-* **HTTP/HTTPS** (default EDC protocol) - Direct data transfer via HTTP endpoints
+| Capability | This Deployment | Alternatives |
+|-----------|----------------|--------------|
+| Secrets Management | AWS Secrets Manager | Vault (self-managed) |
+| Data Transfer | [Amazon S3](https://aws.amazon.com/s3/), HTTP/HTTPS | DynamoDB, custom backends |
 
 ## Backlog / Ideas 💡
 
-* Allow for deployment of multiple EDC connectors per architecture cell, e.g. by passing a config array in `environments.ts`
-* Allow for deployment of Digital Twin Registry (DTR) or entire [Tractus-X Hausanschluss](https://github.com/eclipse-tractusx/tractus-x-umbrella/blob/main/docs/user/common/guides/hausanschluss-bundles.md)
-* Configurable switch between DynamoDB and Aurora PostgreSQL for control plane persistance
+* Deployment of Digital Twin Registry (DTR) or entire [Tractus-X Hausanschluss](https://github.com/eclipse-tractusx/tractus-x-umbrella/blob/main/docs/user/common/guides/hausanschluss-bundles.md)
+* Configurable switch between DynamoDB and Aurora PostgreSQL for control plane persistence
 * Include examples for EDC assets, such as OAuth 2.0 and S3
 * Configurable control and data plane auto-scaling on ECS Service level
-* Create data plane extension to serve DynamoDB data as EDC asset
+* Data plane extension to serve DynamoDB data as EDC asset
+* Scale-to-zero for idle consumer-only connectors
 
 ## Security
 

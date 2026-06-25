@@ -23,7 +23,7 @@ echo $CDK_DOCKER
 ```
 
 - If it's already set and contains `finch` (e.g., `finch` or `/path/to/finch`), no action needed.
-- If it's empty, uncomment `export CDK_DOCKER=finch` in `deploy.sh`.
+- If it's empty, uncomment `export CDK_DOCKER=finch` in `deploy-local.sh`.
 
 2. Check whether the Finch VM is running:
 
@@ -52,7 +52,7 @@ Also check the user's AWS profile:
 echo $AWS_PROFILE
 ```
 
-If set, store it — it will be needed for MCP configuration in Phase 7 and for running `deploy.sh`. If not set, ask the user:
+If set, store it — it will be needed for MCP configuration in Phase 7 and for running `deploy-local.sh`. If not set, ask the user:
 > "Which AWS CLI profile should be used for this deployment? (Run `aws configure list-profiles` to see available profiles.)"
 
 IMPORTANT: Once the profile is known (whether from `$AWS_PROFILE` or the user), re-run the identity check with that profile to get the correct ARN for the deployment account:
@@ -70,7 +70,7 @@ Use the ARN from THIS output (not the earlier unqualified check) for IAM princip
 Ask the user:
 > "Which AWS region would you like to deploy to? The default is `eu-central-1`."
 
-If the user picks a different region, they will need to set `AWS_REGION` before running `deploy.sh`:
+If the user picks a different region, they will need to set `AWS_REGION` before running `deploy-local.sh`:
 - The script defaults to `eu-central-1` but respects the `AWS_REGION` environment variable if set
 
 Store the chosen region — it will be needed for MCP configuration later.
@@ -152,14 +152,14 @@ Only modify if the user explicitly asks.
 Tell the user:
 > "Configuration is complete. I'll now run the deployment. This will build the EDC Java artifacts, install CDK dependencies, bootstrap your AWS account (if needed), and deploy the CloudFormation stacks. This typically takes 10-15 minutes."
 
-IMPORTANT: `deploy.sh` is a long-running process (10-15+ minutes). Start it as a background process so you can monitor progress without blocking. The script requires `AWS_PROFILE` and `AWS_REGION` as environment variables — if either is missing, it will prompt interactively, which blocks agent-driven deployments.
+IMPORTANT: `deploy-local.sh` is a long-running process (10-15+ minutes). Start it as a background process so you can monitor progress without blocking. The script requires `AWS_PROFILE` and `AWS_REGION` as environment variables — if either is missing, it will prompt interactively, which blocks agent-driven deployments.
 
 ALWAYS export BOTH variables before running the script:
 
 ```bash
 export AWS_PROFILE=<deployment-profile>
 export AWS_REGION=<chosen-region>
-./deploy.sh
+./deploy-local.sh
 ```
 
 Use the profile identified in Phase 1 and the region chosen in Phase 2 (default: `eu-central-1`).
