@@ -10,22 +10,22 @@ import org.eclipse.edc.connector.controlplane.contract.spi.testfixtures.offer.st
 import org.eclipse.edc.query.CriterionOperatorRegistryImpl
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema
+import software.amazon.edc.extensions.controlplane.ddb.TestTableHelper
 import software.amazon.edc.extensions.controlplane.ddb.types.ContractDefinition
 
 class DdbContractDefinitionStoreTest : ContractDefinitionStoreTestBase() {
-    private val client =
-        DynamoDbEnhancedClient
-            .builder()
-            .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
-            .build()
+    private val ddbClient = DynamoDBEmbedded.create().dynamoDbClient()
+    private val client = DynamoDbEnhancedClient.builder().dynamoDbClient(ddbClient).build()
+
+    init {
+        ddbClient.createTable(TestTableHelper.createRequest())
+    }
+
     private val contractDefinitionStore =
         DdbContractDefinitionStore(
             criterionOperatorRegistry = CriterionOperatorRegistryImpl.ofDefaults(),
             objectMapper = ObjectMapper(),
-            table =
-                client
-                    .table(ContractDefinition.TABLE_NAME, TableSchema.fromBean(ContractDefinition::class.java))
-                    .apply { createTable() },
+            table = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(ContractDefinition::class.java)),
         )
 
     override fun getContractDefinitionStore(): ContractDefinitionStore = contractDefinitionStore

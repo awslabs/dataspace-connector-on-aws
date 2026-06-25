@@ -8,14 +8,19 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttri
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbConvertedBy
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
 import org.eclipse.edc.connector.controlplane.asset.spi.domain.Asset as EdcAsset
 
 @DynamoDbBean
 data class Asset(
-    @get:DynamoDbAttribute(ID)
     @get:DynamoDbPartitionKey
-    var assetId: String = "",
+    @get:DynamoDbAttribute("pk")
+    var pk: String = EntityType.ASSET,
+    @get:DynamoDbSortKey
+    @get:DynamoDbAttribute("sk")
+    var sk: String = "",
     @get:DynamoDbAttribute(CREATED_AT)
     var createdAt: Long = 0L,
     @get:DynamoDbAttribute(DATA_ADDRESS)
@@ -28,11 +33,13 @@ data class Asset(
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var properties: Map<String, Any> = emptyMap(),
 ) {
+    val assetId: String get() = sk
+
     fun toEdcAsset(): EdcAsset =
         EdcAsset.Builder
             .newInstance()
             .apply {
-                id(assetId)
+                id(sk)
                 createdAt(createdAt)
                 dataAddress(
                     DataAddress.Builder
@@ -45,19 +52,17 @@ data class Asset(
             }.build()
 
     companion object {
-        const val ID = "id"
         const val CREATED_AT = "createdAt"
         const val DATA_ADDRESS = "dataAddress"
         const val PRIVATE_PROPERTIES = "privateProperties"
         const val PROPERTIES = "properties"
-
-        const val TABLE_NAME = "Assets"
     }
 }
 
 fun EdcAsset.toDdbAsset(): Asset =
     Asset(
-        assetId = id,
+        pk = EntityType.ASSET,
+        sk = id,
         createdAt = createdAt,
         dataAddress = dataAddress?.properties ?: emptyMap(),
         privateProperties = privateProperties ?: emptyMap(),

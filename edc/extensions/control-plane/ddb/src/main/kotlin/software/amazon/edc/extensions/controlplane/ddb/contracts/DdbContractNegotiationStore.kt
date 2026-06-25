@@ -12,6 +12,7 @@ import org.eclipse.edc.spi.query.SortOrder
 import org.eclipse.edc.spi.result.StoreResult
 import org.eclipse.edc.store.ReflectionBasedQueryResolver
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
@@ -19,11 +20,13 @@ import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.extractStringValue
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
+import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import software.amazon.edc.extensions.common.ddb.utility.hasProperty
-import software.amazon.edc.extensions.common.ddb.utility.keyFromId
-import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromNumber
+import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.common.ddb.utility.registerConstraintSubtypes
-import software.amazon.edc.extensions.common.ddb.utility.toScanRequest
+import software.amazon.edc.extensions.common.ddb.utility.toPredicate
 import software.amazon.edc.extensions.controlplane.ddb.types.ContractAgreement
 import software.amazon.edc.extensions.controlplane.ddb.types.ContractNegotiation
 import software.amazon.edc.extensions.controlplane.ddb.types.toDdbContractAgreement
@@ -36,7 +39,7 @@ import org.eclipse.edc.connector.controlplane.contract.spi.types.negotiation.Con
 
 class DdbContractNegotiationStore(
     clock: Clock,
-    criterionOperatorRegistry: CriterionOperatorRegistry,
+    private val criterionOperatorRegistry: CriterionOperatorRegistry,
     leaseHolder: String,
     leaseTable: DynamoDbTable<Lease>,
     private val contractAgreementTable: DynamoDbTable<ContractAgreement>,
@@ -50,12 +53,12 @@ class DdbContractNegotiationStore(
     ContractNegotiationStore {
     private val negotiationQueryResolver =
         ReflectionBasedQueryResolver(EdcContractNegotiation::class.java, criterionOperatorRegistry)
-    private val stateIndex = contractNegotiationTable.index(ContractNegotiation.INDEX_STATE)
+    private val stateIndex = contractNegotiationTable.index(ContractNegotiation.GSI_STATE)
 
     override fun findById(id: String): EdcContractNegotiation? {
         val contractNegotiation = getContractNegotiation(id) ?: return null
         val contractAgreement = contractNegotiation.agreementId?.let { getContractAgreement(it) }
-        return getContractNegotiation(id)?.toEdcContractNegotiation(objectMapper, contractAgreement)
+        return contractNegotiation.toEdcContractNegotiation(objectMapper, contractAgreement)
     }
 
     override fun nextNotLeased(
@@ -75,15 +78,21 @@ class DdbContractNegotiationStore(
         val items: Sequence<ContractNegotiation> =
             if (stateValues != null) {
                 stateValues
-                    .flatMap { state -> stateIndex.query(queryRequestFromNumber(state)).flatMap { page -> page.items() } }
-                    .asSequence()
+                    .flatMap { state ->
+                        stateIndex
+                            .query(queryRequestFromId(gsiStatePk(EntityType.CONTRACT_NEGOTIATION, state)))
+                            .flatMap { page -> page.items() }
+                    }.asSequence()
                     .let { seq -> if (typeFilter != null) seq.filter { it.type == typeFilter } else seq }
             } else {
-                contractNegotiationTable.scan(querySpec.toScanRequest()).items().asSequence()
+                contractNegotiationTable
+                    .query(queryRequestFromPk(EntityType.CONTRACT_NEGOTIATION))
+                    .flatMap { it.items() }
+                    .asSequence()
             }
         return items
             .filterNot { hasActiveLease(it) }
-            .sortedBy { it.id } // Required by EDC tests
+            .sortedBy { it.id }
             .sortedWith(querySpec.getGenericPropertyComparator())
             .map {
                 acquireLease(it)
@@ -102,7 +111,6 @@ class DdbContractNegotiationStore(
             val agreement = contractNegotiation.agreementId?.let { getContractAgreement(it) }
             StoreResult.success(contractNegotiation.toEdcContractNegotiation(objectMapper, agreement))
         } catch (e: IllegalStateException) {
-//            log().error("ContractNegotiation $id is already leased!", e)
             StoreResult.alreadyLeased("ContractNegotiation with ID $id is already leased!")
         }
     }
@@ -110,13 +118,9 @@ class DdbContractNegotiationStore(
     override fun save(contractNegotiation: EdcContractNegotiation) {
         val leaseId = getContractNegotiation(contractNegotiation.id)?.let { acquireLease(it) }
         try {
-            val ddbContractNegotiation = contractNegotiation.toDdbContractNegotiation(objectMapper, leaseId)
-//            log().info("Save: contractNegotiation=$ddbContractNegotiation")
             contractNegotiationTable.putItem(contractNegotiation.toDdbContractNegotiation(objectMapper, leaseId))
             if (contractNegotiation.contractAgreement != null) {
-                val ddbContractAgreement = contractNegotiation.contractAgreement.toDdbContractAgreement(objectMapper)
-//                log().info("Save: contractAgreement=$ddbContractAgreement")
-                contractAgreementTable.putItem(ddbContractAgreement)
+                contractAgreementTable.putItem(contractNegotiation.contractAgreement.toDdbContractAgreement(objectMapper))
             }
         } finally {
             if (leaseId != null) {
@@ -139,20 +143,19 @@ class DdbContractNegotiationStore(
             )
         }
         if (hasLease(negotiationId)) {
-            return StoreResult.alreadyLeased(
+            throw IllegalStateException(
                 "ContractNegotiation with ID $negotiationId cannot be deleted because it is currently leased!",
             )
         }
-        contractNegotiationTable.deleteItem(keyFromId(negotiationId))
+        contractNegotiationTable.deleteItem(keyFromPkSk(EntityType.CONTRACT_NEGOTIATION, negotiationId))
         return StoreResult.success()
     }
 
     override fun queryNegotiations(querySpec: QuerySpec): Stream<EdcContractNegotiation> {
-        // This must support nested objects, so we'll need to fetch everything and feed it into the query resolver.
         val all =
             contractNegotiationTable
-                .scan()
-                .items()
+                .query(queryRequestFromPk(EntityType.CONTRACT_NEGOTIATION))
+                .flatMap { it.items() }
                 .asSequence()
                 .map {
                     it.toEdcContractNegotiation(
@@ -167,12 +170,13 @@ class DdbContractNegotiationStore(
         if (querySpec.sortField != null && !EdcContractAgreement::class.hasProperty(querySpec.sortField)) {
             throw IllegalArgumentException("Sort field ${querySpec.sortField} is not valid for contract agreements!")
         }
-        val scanRequest = querySpec.toScanRequest()
+        val predicate = querySpec.filterExpression.toPredicate<Any>(criterionOperatorRegistry)
         return contractAgreementTable
-            .scan(scanRequest)
-            .items()
+            .query(queryRequestFromPk(EntityType.CONTRACT_AGREEMENT))
+            .flatMap { it.items() }
             .asSequence()
             .map { it.toEdcContractAgreement(objectMapper) }
+            .filter { predicate.test(it) }
             .sortedWith(querySpec.getGenericPropertyComparator())
             .applyOffsetAndLimit(querySpec)
             .asStream()
@@ -184,9 +188,11 @@ class DdbContractNegotiationStore(
         contractNegotiationTable.updateItem(leasable as ContractNegotiation)
     }
 
-    private fun getContractAgreement(id: String): ContractAgreement? = contractAgreementTable.getItem(keyFromId(id))
+    private fun getContractAgreement(id: String): ContractAgreement? =
+        contractAgreementTable.getItem(keyFromPkSk(EntityType.CONTRACT_AGREEMENT, id))
 
-    private fun getContractNegotiation(id: String): ContractNegotiation? = contractNegotiationTable.getItem(keyFromId(id))
+    private fun getContractNegotiation(id: String): ContractNegotiation? =
+        contractNegotiationTable.getItem(keyFromPkSk(EntityType.CONTRACT_NEGOTIATION, id))
 
     init {
         objectMapper.registerConstraintSubtypes()

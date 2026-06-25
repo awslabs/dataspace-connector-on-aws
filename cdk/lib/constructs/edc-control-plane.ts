@@ -17,20 +17,30 @@ import {
   LogDriver,
 } from "aws-cdk-lib/aws-ecs";
 
-import { EdcNlbOutputs } from "./edc-nlb";
+import { IApplicationTargetGroup } from "aws-cdk-lib/aws-elasticloadbalancingv2";
+
+export interface AlbOutputs {
+  readonly dnsName: string;
+  readonly securityGroupId: string;
+  readonly targetGroups: { [port: number]: IApplicationTargetGroup };
+}
+
 import { EDC_SECRETS_MANAGER_ALIASES } from "../config/environments";
 import { EdcFargateService } from "./edc-fargate-service";
 import { ControlPlanePortMapping } from "../config/port-mappings";
 import { DeploymentProfile } from "../config/environments";
 
 export interface EdcControlPlaneProps {
+  readonly albOutputs: AlbOutputs;
   readonly cluster: ICluster;
+  readonly connectorId: string;
   readonly cpu: number;
+  readonly ddbTableName: string;
   readonly dspCallbackAddress: string;
   readonly edcIamEnvVars: { [key: string]: string };
   readonly image: ContainerImage;
   readonly memoryLimitMiB: number;
-  readonly nlbOutputs: EdcNlbOutputs;
+  readonly secretPrefix: string;
   readonly stateMachineIterationMillis: string;
   readonly portMapping: ControlPlanePortMapping;
   readonly profile: DeploymentProfile;
@@ -50,7 +60,7 @@ export class EdcControlPlane extends Construct {
     });
     Object.values(props.portMapping).forEach((port) =>
       securityGroup.addIngressRule(
-        Peer.securityGroupId(props.nlbOutputs.securityGroupId),
+        Peer.securityGroupId(props.albOutputs.securityGroupId),
         Port.tcp(port),
       ),
     );
@@ -74,11 +84,11 @@ export class EdcControlPlane extends Construct {
     taskDefinition.addContainer("ControlPlaneContainer", {
       containerName: containerName,
       environment: {
+        "edc.ddb.table.name": props.ddbTableName,
         "edc.dsp.callback.address": props.dspCallbackAddress,
-        "edc.hostname": props.nlbOutputs.dnsName,
+        "edc.hostname": props.albOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",
-        "edc.iam.sts.oauth.client.secret.alias":
-          EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS,
+        "edc.iam.sts.oauth.client.secret.alias": `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`,
         "edc.negotiation.consumer.state-machine.iteration-wait-millis":
           props.stateMachineIterationMillis,
         "edc.negotiation.provider.state-machine.iteration-wait-millis":
@@ -87,14 +97,12 @@ export class EdcControlPlane extends Construct {
           props.stateMachineIterationMillis,
         "edc.transfer.state-machine.iteration-wait-millis":
           props.stateMachineIterationMillis,
-        "edc.runtime.id": id,
+        "edc.runtime.id": props.connectorId,
         "edc.vault.aws.region": Stack.of(this).region,
 
         // This declares the aliases to use in AWS Secrets Manager for consumer pull scenarios
-        "edc.transfer.proxy.token.signer.privatekey.alias":
-          EDC_SECRETS_MANAGER_ALIASES.TOKEN_SIGNER_PRIVATE_KEY,
-        "edc.transfer.proxy.token.verifier.publickey.alias":
-          EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY,
+        "edc.transfer.proxy.token.signer.privatekey.alias": `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_SIGNER_PRIVATE_KEY}`,
+        "edc.transfer.proxy.token.verifier.publickey.alias": `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY}`,
 
         ...props.edcIamEnvVars,
         "edc.participant.id": props.edcIamEnvVars["edc.iam.issuer.id"],
@@ -132,14 +140,26 @@ export class EdcControlPlane extends Construct {
       }),
     });
 
-    new EdcFargateService(this, "ControlPlaneFargateService", {
+    const service = new EdcFargateService(this, "ControlPlaneFargateService", {
       cluster: props.cluster,
       containerName: containerName,
+      containerPort: props.portMapping.default,
       profile: props.profile,
       securityGroups: [securityGroup],
-      targetGroups: props.nlbOutputs.controlPlaneTargetGroups,
+      targetGroup: props.albOutputs.targetGroups[props.portMapping.default],
       taskDefinition: taskDefinition,
     });
+
+    // Register on all other CP target groups
+    for (const port of Object.values(props.portMapping)) {
+      if (port === props.portMapping.default) continue;
+      const tg = props.albOutputs.targetGroups[port];
+      if (tg) {
+        tg.addTarget(
+          service.loadBalancerTarget({ containerName, containerPort: port }),
+        );
+      }
+    }
 
     this.taskRole = taskDefinition.taskRole;
   }

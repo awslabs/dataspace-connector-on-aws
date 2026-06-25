@@ -8,16 +8,23 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbConvertedBy
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondarySortKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
 import software.amazon.edc.extensions.common.ddb.types.Leasable
+import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import java.time.Instant
 import org.eclipse.edc.connector.dataplane.selector.spi.instance.DataPlaneInstance as EdcDataPlaneInstance
 
 @DynamoDbBean
 data class DataPlaneInstance(
-    @get:DynamoDbAttribute(ID)
     @get:DynamoDbPartitionKey
-    var id: String = "",
+    @get:DynamoDbAttribute("pk")
+    var pk: String = EntityType.DATA_PLANE_INSTANCE,
+    @get:DynamoDbSortKey
+    @get:DynamoDbAttribute("sk")
+    var sk: String = "",
     @get:DynamoDbAttribute(LEASE_ID)
     override var leaseId: String? = null,
     @get:DynamoDbAttribute(ALLOWED_SOURCE_TYPES)
@@ -28,7 +35,9 @@ data class DataPlaneInstance(
     var createdAt: Long = 0,
     @get:DynamoDbAttribute(ERROR_DETAIL)
     var errorDetail: String? = null,
-    // Default value used by EDC version of this class
+    @get:DynamoDbAttribute(GSI_STATE_PK)
+    @get:DynamoDbSecondaryPartitionKey(indexNames = [GSI_STATE])
+    var gsiStatePk: String? = null,
     @get:DynamoDbAttribute(LAST_ACTIVE)
     var lastActive: Long = Instant.now().toEpochMilli(),
     @get:DynamoDbAttribute(PENDING)
@@ -37,22 +46,24 @@ data class DataPlaneInstance(
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var properties: Map<String, Any>? = null,
     @get:DynamoDbAttribute(STATE)
-    @get:DynamoDbSecondaryPartitionKey(indexNames = [INDEX_STATE])
     var state: Int = 0,
     @get:DynamoDbAttribute(STATE_COUNT)
     var stateCount: Int = 0,
     @get:DynamoDbAttribute(STATE_TIMESTAMP)
+    @get:DynamoDbSecondarySortKey(indexNames = [GSI_STATE])
     var stateTimestamp: Long = 0,
     @get:DynamoDbAttribute(UPDATED_AT)
     var updatedAt: Long = 0,
     @get:DynamoDbAttribute(URL)
     var url: String? = null,
 ) : Leasable {
+    val id: String get() = sk
+
     fun toEdcDataPlaneInstance(): EdcDataPlaneInstance =
         EdcDataPlaneInstance.Builder
             .newInstance()
             .apply {
-                id(id)
+                id(sk)
                 allowedSourceTypes(allowedSourceTypes)
                 allowedTransferType(allowedTransferTypes)
                 createdAt(createdAt)
@@ -61,7 +72,7 @@ data class DataPlaneInstance(
                 pending(pending)
                 properties(properties)
                 state(state)
-                stateCount(state)
+                stateCount(stateCount)
                 stateTimestamp(stateTimestamp)
                 updatedAt(updatedAt)
                 url(url)
@@ -72,7 +83,7 @@ data class DataPlaneInstance(
         const val ALLOWED_TRANSFER_TYPES = "allowedTransferTypes"
         const val CREATED_AT = "createdAt"
         const val ERROR_DETAIL = "errorDetail"
-        const val ID = "id"
+        const val GSI_STATE_PK = "gsiStatePk"
         const val LAST_ACTIVE = "lastActive"
         const val LEASE_ID = "leaseId"
         const val PENDING = "pending"
@@ -83,19 +94,20 @@ data class DataPlaneInstance(
         const val UPDATED_AT = "updatedAt"
         const val URL = "url"
 
-        const val INDEX_STATE = "index-state"
-        const val TABLE_NAME = "DataPlaneInstances"
+        const val GSI_STATE = "gsi-state"
     }
 }
 
 fun EdcDataPlaneInstance.toDdbDataPlaneInstance(leaseId: String? = null): DataPlaneInstance =
     DataPlaneInstance(
-        id = id,
+        pk = EntityType.DATA_PLANE_INSTANCE,
+        sk = id,
         leaseId = leaseId,
         allowedSourceTypes = allowedSourceTypes?.let { if (it.isEmpty()) null else it },
         allowedTransferTypes = allowedTransferTypes?.let { if (it.isEmpty()) null else it },
         createdAt = createdAt,
         errorDetail = errorDetail,
+        gsiStatePk = gsiStatePk(EntityType.DATA_PLANE_INSTANCE, state),
         lastActive = lastActive,
         pending = isPending,
         properties = properties,

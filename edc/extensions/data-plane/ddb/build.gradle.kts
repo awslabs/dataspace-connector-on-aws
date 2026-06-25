@@ -17,7 +17,13 @@ dependencies {
     implementation(libs.edc.spi.store.edr)
 
     testImplementation(libs.aws.dynamodb.local)
+    testImplementation(libs.edc.lib.query)
+    testImplementation(libs.jackson.module.kotlin)
     testImplementation(libs.junit.jupiter)
 
     testImplementation(testFixtures(libs.edc.spi.dataplane))
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }

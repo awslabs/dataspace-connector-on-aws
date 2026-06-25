@@ -12,10 +12,11 @@ import org.eclipse.edc.runtime.metamodel.annotation.Provides
 import org.eclipse.edc.spi.query.CriterionOperatorRegistry
 import org.eclipse.edc.spi.system.ServiceExtension
 import org.eclipse.edc.spi.system.ServiceExtensionContext
+import org.eclipse.edc.spi.types.TypeManager
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient
-import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
+import software.amazon.edc.extensions.common.ddb.EDC_DDB_TABLE_NAME_SETTING
 import software.amazon.edc.extensions.common.ddb.edr.DdbEdrEntryIndex
 import software.amazon.edc.extensions.common.ddb.types.EdrEntry
 import software.amazon.edc.extensions.common.ddb.types.Lease
@@ -38,42 +39,49 @@ class DataPlaneDdbExtension : ServiceExtension {
     @Inject
     private lateinit var criterionOperatorRegistry: CriterionOperatorRegistry
 
-    private lateinit var ddbClient: DynamoDbEnhancedClient
-    private lateinit var leaseTable: DynamoDbTable<Lease>
-
-    private lateinit var accessTokenDataStoreImpl: DdbAccessTokenDataStore
-    private lateinit var dataPlaneStoreImpl: DataPlaneStore
+    @Inject
+    private lateinit var typeManager: TypeManager
 
     override fun initialize(context: ServiceExtensionContext) {
-        val monitor = context.monitor
-        monitor.info("Initializing Data Plane DynamoDB Extension!")
-//        log().info("Initializing Data Plane DynamoDB Extension!")
-        ddbClient = DynamoDbEnhancedClient.builder().dynamoDbClient(DynamoDbClient.create()).build()
-        leaseTable = ddbClient.table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
+        val tableName = context.getSetting(EDC_DDB_TABLE_NAME_SETTING, "")
+        require(tableName.isNotBlank()) { "Setting '$EDC_DDB_TABLE_NAME_SETTING' must be configured!" }
 
-        accessTokenDataStoreImpl =
+        val monitor = context.monitor
+        monitor.info("Initializing Data Plane DynamoDB Extension with table: $tableName")
+
+        val ddbClient = DynamoDbEnhancedClient.builder().dynamoDbClient(DynamoDbClient.create()).build()
+
+        val leaseTable = ddbClient.table(tableName, TableSchema.fromBean(Lease::class.java))
+        val accessTokenTable = ddbClient.table(tableName, TableSchema.fromBean(AccessToken::class.java))
+        val dataFlowTable = ddbClient.table(tableName, TableSchema.fromBean(DataFlow::class.java))
+        val edrEntryTable = ddbClient.table(tableName, TableSchema.fromBean(EdrEntry::class.java))
+
+        context.registerService(
+            AccessTokenDataStore::class.java,
             DdbAccessTokenDataStore(
                 criterionOperatorRegistry,
-                ddbClient.table(AccessToken.TABLE_NAME, TableSchema.fromBean(AccessToken::class.java)),
-            )
-        context.registerService(AccessTokenDataStore::class.java, accessTokenDataStoreImpl)
+                accessTokenTable,
+                context.getSetting("edc.dataplane.token.expiry.seconds", 300).toLong(),
+            ),
+        )
 
-        dataPlaneStoreImpl =
+        context.registerService(
+            DataPlaneStore::class.java,
             DdbDataPlaneStore(
                 clock = clock,
+                criterionOperatorRegistry = criterionOperatorRegistry,
                 leaseTable = leaseTable,
                 leaseHolder = context.runtimeId,
-                table = ddbClient.table(DataFlow.TABLE_NAME, TableSchema.fromBean(DataFlow::class.java)),
-            )
-        context.registerService(DataPlaneStore::class.java, dataPlaneStoreImpl)
+                objectMapper = typeManager.mapper,
+                table = dataFlowTable,
+            ),
+        )
 
-        val edrIndex =
-            DdbEdrEntryIndex(
-                ddbClient.table(EdrEntry.TABLE_NAME, TableSchema.fromBean(EdrEntry::class.java)),
-            )
-        context.registerService(EndpointDataReferenceEntryIndex::class.java, edrIndex)
+        context.registerService(
+            EndpointDataReferenceEntryIndex::class.java,
+            DdbEdrEntryIndex(criterionOperatorRegistry, edrEntryTable),
+        )
 
         monitor.info("Data Plane DynamoDB Extension initialization complete!")
-//        log().info("Data Plane DynamoDB Extension initialization complete!")
     }
 }

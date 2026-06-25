@@ -12,7 +12,10 @@ import org.eclipse.edc.spi.query.QuerySpec
 import org.eclipse.edc.spi.result.StoreResult
 import org.eclipse.edc.store.ReflectionBasedQueryResolver
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
-import software.amazon.edc.extensions.common.ddb.utility.keyFromId
+import software.amazon.edc.extensions.common.ddb.EntityType
+import software.amazon.edc.extensions.common.ddb.utility.ddbReadLimit
+import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.common.ddb.utility.registerConstraintSubtypes
 import software.amazon.edc.extensions.controlplane.ddb.types.PolicyDefinition
 import software.amazon.edc.extensions.controlplane.ddb.types.toDdbPolicyDefinition
@@ -32,9 +35,10 @@ class DdbPolicyDefinitionStore(
     override fun findAll(querySpec: QuerySpec): Stream<EdcPolicyDefinition> =
         queryResolver.query(
             table
-                .scan()
-                .items()
+                .query(queryRequestFromPk(EntityType.POLICY_DEFINITION))
+                .flatMap { it.items() }
                 .asSequence()
+                .take(ddbReadLimit(querySpec))
                 .map { it.toEdcPolicyDefinition(objectMapper) }
                 .asStream(),
             querySpec,
@@ -63,7 +67,7 @@ class DdbPolicyDefinitionStore(
         return StoreResult.success(table.deleteItem(policyDefinition).toEdcPolicyDefinition(objectMapper))
     }
 
-    private fun getPolicyDefinition(id: String): PolicyDefinition? = table.getItem(keyFromId(id))
+    private fun getPolicyDefinition(id: String): PolicyDefinition? = table.getItem(keyFromPkSk(EntityType.POLICY_DEFINITION, id))
 
     init {
         objectMapper.registerConstraintSubtypes()

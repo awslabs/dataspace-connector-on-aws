@@ -22,9 +22,13 @@ If this fails, the MCP connection isn't configured. Direct the user to the **dep
 Also discover the CloudWatch log groups for troubleshooting later. The AWS profile and region are needed — check `$AWS_PROFILE` or ask the user, and determine the region from the MCP config or `deploy.sh`:
 
 ```bash
-aws logs describe-log-groups --region <region> --output json \
-    --query 'logGroups[?contains(logGroupName, `ControlPlaneLogGroup`) || contains(logGroupName, `DataPlaneLogGroup`)].logGroupName'
+aws cloudformation list-stack-resources --stack-name DataspaceConnector-default --region <region> \
+    --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].[LogicalResourceId,PhysicalResourceId]' --output json
 ```
+
+This returns the log group physical resource IDs for the current deployment. Match by logical ID prefix:
+- `ControlPlane` → control plane log group
+- `DataPlane` → data plane log group
 
 Store both log group names — they are needed for diagnosing any issues in Phase 8.
 
@@ -188,7 +192,7 @@ After creation, confirm:
 ### Step 4.1: Browse the Catalog
 
 Ask the user:
-> "What's the DSP endpoint of the provider connector you want to browse? (e.g., `https://<api-id>.execute-api.<region>.amazonaws.com/protocol`)
+> "What's the DSP endpoint of the provider connector you want to browse? (e.g., `https://<api-id>.execute-api.<region>.amazonaws.com/protocol/<connectorId>`)
 > And what's their participant ID (BPNL)?"
 
 ```python
@@ -307,19 +311,26 @@ This is the recommended validation path. It exercises the full AWS-native data f
 
 ### Step 5.1: Discover Stack Resources
 
-Retrieve the S3 bucket name, DSP endpoint, and BPNL. The bucket name and DSP endpoint come from CloudFormation outputs (they contain CDK-generated suffixes):
+Retrieve the S3 bucket name, DSP endpoint, and BPNL. The bucket name comes from the connector stack, API endpoints from the shared infra stack:
 
 ```bash
-aws cloudformation describe-stacks --stack-name DataspaceConnectorStack --region <region> \
+aws cloudformation describe-stacks --stack-name DataspaceConnectorSharedInfraStack --region <region> \
+    --query 'Stacks[0].Outputs' --output json
+```
+
+Also get connector-specific outputs:
+
+```bash
+aws cloudformation describe-stacks --stack-name DataspaceConnector-default --region <region> \
     --query 'Stacks[0].Outputs' --output json
 ```
 
 Extract (the output keys have CDK-generated hash suffixes — match by prefix):
 - Key starting with `EdcDataPlaneBucketName` → S3 bucket name
-- Key starting with `EdcApiDspApiEndpoint` → DSP endpoint URL
-- Key starting with `EdcApiManagementApiEndpoint` → Management API URL (for reference)
+- Key starting with `EdcApiDspApiEndpoint` → DSP endpoint base URL. Append the connector ID to form the full DSP address (e.g., `https://xxx.execute-api.region.amazonaws.com/protocol/default`)
+- Key starting with `EdcApiManagementApiEndpoint` → Management API base URL. Append the connector ID for requests (e.g., `.../management/default`)
 
-Read the `PARTICIPANT_ID` from `cdk/lib/config/environments.ts` (the `tractusx.edc.participant.bpn` field in the `edcIam` object) for the connector's BPNL. Use this as the `counter_party_id` for catalog requests and as the `assigner` for contract negotiations.
+Read the `connectorId` and `PARTICIPANT_ID` from `cdk/lib/config/environments.ts` (the `connectorId` field and `tractusx.edc.participant.bpn` field in the connector's `edcIam` object) for the connector's BPNL. Use the BPNL as the `counter_party_id` for catalog requests and as the `assigner` for contract negotiations.
 
 If the user already has these values from a prior deployment, use them directly.
 
@@ -532,16 +543,16 @@ The response includes the `errorDetail` field when the negotiation is `TERMINATE
 
 ### Step 8.2: Discover CloudWatch Log Groups
 
-The control plane and data plane each write to their own CloudWatch log group. The names include CDK-generated suffixes, so discover them first:
+The control plane and data plane each write to their own CloudWatch log group. The names include CDK-generated suffixes, so discover them from the stack resources (this avoids picking up stale log groups from prior deployments):
 
 ```bash
-aws logs describe-log-groups --region <region> --output json \
-    --query 'logGroups[?contains(logGroupName, `ControlPlaneLogGroup`) || contains(logGroupName, `DataPlaneLogGroup`)].logGroupName'
+aws cloudformation list-stack-resources --stack-name DataspaceConnector-default --region <region> \
+    --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].[LogicalResourceId,PhysicalResourceId]' --output json
 ```
 
-This returns two log group names like:
-- `DataspaceConnectorStack-ControlPlaneLogGroup<suffix>`
-- `DataspaceConnectorStack-DataPlaneLogGroup<suffix>`
+This returns entries like:
+- Logical ID containing `ControlPlane` → `DataspaceConnector-default-ControlPlaneLogGroup<suffix>`
+- Logical ID containing `DataPlane` → `DataspaceConnector-default-DataPlaneLogGroup<suffix>`
 
 Store both — you'll need them for log queries.
 

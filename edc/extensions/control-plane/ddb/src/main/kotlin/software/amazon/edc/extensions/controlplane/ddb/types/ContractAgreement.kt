@@ -9,20 +9,23 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttri
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbConvertedBy
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
+import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
 import software.amazon.edc.extensions.common.ddb.utility.convertValueToMapStringAny
 import org.eclipse.edc.connector.controlplane.contract.spi.types.agreement.ContractAgreement as EdcContractAgreement
 
 @DynamoDbBean
 data class ContractAgreement(
-    @get:DynamoDbAttribute(ID)
     @get:DynamoDbPartitionKey
-    var id: String = "",
+    @get:DynamoDbAttribute("pk")
+    var pk: String = EntityType.CONTRACT_AGREEMENT,
+    @get:DynamoDbSortKey
+    @get:DynamoDbAttribute("sk")
+    var sk: String = "",
     @get:DynamoDbAttribute(SIGNING_DATE)
     var signingDate: Long = 0,
     @get:DynamoDbAttribute(ASSET_ID)
-    @get:DynamoDbSecondaryPartitionKey(indexNames = [INDEX_ASSET_ID])
     var assetId: String = "",
     @get:DynamoDbAttribute(CONSUMER_AGENT_ID)
     var consumerAgentId: String? = null,
@@ -36,11 +39,13 @@ data class ContractAgreement(
     @get:DynamoDbAttribute(START_DATE)
     var startDate: Long? = null,
 ) {
+    val id: String get() = sk
+
     fun toEdcContractAgreement(objectMapper: ObjectMapper): EdcContractAgreement =
         EdcContractAgreement.Builder
             .newInstance()
             .apply {
-                id(id)
+                id(sk)
                 contractSigningDate(signingDate)
                 assetId(assetId)
                 consumerId(consumerAgentId)
@@ -52,20 +57,17 @@ data class ContractAgreement(
         const val ASSET_ID = "assetId"
         const val CONSUMER_AGENT_ID = "consumerAgentId"
         const val END_DATE = "endDate"
-        const val ID = "id"
         const val POLICY = "policy"
         const val PROVIDER_AGENT_ID = "providerAgentId"
         const val SIGNING_DATE = "signingDate"
         const val START_DATE = "startDate"
-
-        const val INDEX_ASSET_ID = "index-assetId"
-        const val TABLE_NAME = "ContractAgreements"
     }
 }
 
 fun EdcContractAgreement.toDdbContractAgreement(objectMapper: ObjectMapper): ContractAgreement =
     ContractAgreement(
-        id = id,
+        pk = EntityType.CONTRACT_AGREEMENT,
+        sk = id,
         signingDate = contractSigningDate,
         assetId = assetId,
         consumerAgentId = consumerId,

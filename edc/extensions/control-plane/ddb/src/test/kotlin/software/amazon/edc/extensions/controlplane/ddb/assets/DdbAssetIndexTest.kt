@@ -13,16 +13,19 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema
+import software.amazon.edc.extensions.controlplane.ddb.TestTableHelper
 import software.amazon.edc.extensions.controlplane.ddb.types.Asset
 import software.amazon.edc.extensions.controlplane.ddb.types.toDdbAsset
 
 class DdbAssetIndexTest : AssetIndexTestBase() {
-    private val client =
-        DynamoDbEnhancedClient
-            .builder()
-            .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
-            .build()
-    private val table = client.table(Asset.TABLE_NAME, TableSchema.fromBean(Asset::class.java)).apply { createTable() }
+    private val ddbClient = DynamoDBEmbedded.create().dynamoDbClient()
+    private val client = DynamoDbEnhancedClient.builder().dynamoDbClient(ddbClient).build()
+
+    init {
+        ddbClient.createTable(TestTableHelper.createRequest())
+    }
+
+    private val table = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(Asset::class.java))
     private val assetIndex =
         DdbAssetIndex(
             criterionOperatorRegistry =

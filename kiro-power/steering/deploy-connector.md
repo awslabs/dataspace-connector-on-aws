@@ -23,7 +23,7 @@ echo $CDK_DOCKER
 ```
 
 - If it's already set and contains `finch` (e.g., `finch` or `/path/to/finch`), no action needed.
-- If it's empty, uncomment `export CDK_DOCKER=finch` in `deploy.sh`.
+- If it's empty, uncomment `export CDK_DOCKER=finch` in `deploy-local.sh`.
 
 2. Check whether the Finch VM is running:
 
@@ -52,7 +52,7 @@ Also check the user's AWS profile:
 echo $AWS_PROFILE
 ```
 
-If set, store it — it will be needed for MCP configuration in Phase 7 and for running `deploy.sh`. If not set, ask the user:
+If set, store it — it will be needed for MCP configuration in Phase 7 and for running `deploy-local.sh`. If not set, ask the user:
 > "Which AWS CLI profile should be used for this deployment? (Run `aws configure list-profiles` to see available profiles.)"
 
 IMPORTANT: Once the profile is known (whether from `$AWS_PROFILE` or the user), re-run the identity check with that profile to get the correct ARN for the deployment account:
@@ -70,7 +70,7 @@ Use the ARN from THIS output (not the earlier unqualified check) for IAM princip
 Ask the user:
 > "Which AWS region would you like to deploy to? The default is `eu-central-1`."
 
-If the user picks a different region, they will need to set `AWS_REGION` before running `deploy.sh`:
+If the user picks a different region, they will need to set `AWS_REGION` before running `deploy-local.sh`:
 - The script defaults to `eu-central-1` but respects the `AWS_REGION` environment variable if set
 
 Store the chosen region — it will be needed for MCP configuration later.
@@ -81,7 +81,7 @@ Store the chosen region — it will be needed for MCP configuration later.
 
 The user needs to fill in their Catena-X membership details in `cdk/lib/config/environments.ts`.
 
-First, check whether the `edcIam` object already has values populated (i.e., fields are not empty strings `""`). If values are already present, show the user the current configuration and ask:
+First, check whether the `edcIam` object inside the first connector entry (`DEPLOYMENT_CONFIG.connectors[0].edcIam`) already has values populated (i.e., fields are not empty strings `""`). If values are already present, show the user the current configuration and ask:
 > "The Catena-X identity fields in `environments.ts` are already populated. Would you like to keep the existing values or reconfigure?"
 
 If the user wants to keep existing values, skip to Phase 4.
@@ -98,7 +98,7 @@ In a fresh clone, the `edcIam` object has 7 fields all set to empty strings (`""
 | `DCP_ID` | "What is your organization's DID?" (starts with `did:web:` — used as both issuer ID and participant ID) |
 | `DID_RESOLVER` | "What is your BDRS server URL?" (e.g., `https://bdrs.beta.cofinity-x.com/api/directory`) |
 
-Collect all values from the user, then update the `edcIam` object in `cdk/lib/config/environments.ts` with the provided values.
+Collect all values from the user, then update the `edcIam` object in `DEPLOYMENT_CONFIG.connectors[0]` in `cdk/lib/config/environments.ts` with the provided values.
 
 ---
 
@@ -106,7 +106,7 @@ Collect all values from the user, then update the `edcIam` object in `cdk/lib/co
 
 The user needs to configure IAM access and optionally adjust resource sizing.
 
-First, check whether `managementApiPrincipals` and `observabilityApiPrincipals` in `environments.ts` already contain uncommented `ArnPrincipal` entries. If so, show the user the current values and ask:
+First, check whether `managementApiPrincipals` and `observabilityApiPrincipals` in `DEPLOYMENT_CONFIG.sharedInfra` in `environments.ts` already contain uncommented `ArnPrincipal` entries. If so, show the user the current values and ask:
 > "IAM principals are already configured. Would you like to keep the existing values or update them?"
 
 If the user wants to keep existing values, skip to the Optional sections below.
@@ -150,16 +150,16 @@ Only modify if the user explicitly asks.
 ## Phase 5: Deploy
 
 Tell the user:
-> "Configuration is complete. I'll now run the deployment. This will build the EDC Java artifacts, install CDK dependencies, bootstrap your AWS account (if needed), and deploy the CloudFormation stack. This typically takes 10-15 minutes."
+> "Configuration is complete. I'll now run the deployment. This will build the EDC Java artifacts, install CDK dependencies, bootstrap your AWS account (if needed), and deploy the CloudFormation stacks. This typically takes 10-15 minutes."
 
-IMPORTANT: `deploy.sh` is a long-running process (10-15+ minutes). Start it as a background process so you can monitor progress without blocking. The script requires `AWS_PROFILE` and `AWS_REGION` as environment variables — if either is missing, it will prompt interactively, which blocks agent-driven deployments.
+IMPORTANT: `deploy-local.sh` is a long-running process (10-15+ minutes). Start it as a background process so you can monitor progress without blocking. The script requires `AWS_PROFILE` and `AWS_REGION` as environment variables — if either is missing, it will prompt interactively, which blocks agent-driven deployments.
 
 ALWAYS export BOTH variables before running the script:
 
 ```bash
 export AWS_PROFILE=<deployment-profile>
 export AWS_REGION=<chosen-region>
-./deploy.sh
+./deploy-local.sh
 ```
 
 Use the profile identified in Phase 1 and the region chosen in Phase 2 (default: `eu-central-1`).
@@ -174,13 +174,14 @@ This script:
 1. Builds the EDC control plane and data plane JARs (`./gradlew clean shadowJar`)
 2. Installs CDK dependencies (`npm install`)
 3. Bootstraps the AWS account (`cdk bootstrap`)
-4. Deploys the stack (`cdk deploy`)
+4. Deploys all stacks (`cdk deploy --all`)
 
-After deployment succeeds, the CDK output will contain the API endpoints. Extract and store these values (output keys have CDK-generated hash suffixes — match by prefix):
+After deployment succeeds, the CDK output will contain the API endpoints. The deployment creates two stacks: `DataspaceConnectorSharedInfraStack` (shared infrastructure) and `DataspaceConnector-<connectorId>` (per-connector resources). Extract and store these values from the shared infra stack outputs (output keys have CDK-generated hash suffixes — match by prefix):
 - Key starting with `EdcApiManagementApiEndpoint` — needed for MCP configuration
 - Key starting with `EdcApiDspApiEndpoint` — the DSP endpoint for catalog requests
 - Key starting with `EdcApiDataPlaneApiEndpoint` — data plane endpoint
-- `EdcOauthClientSecretArn` — Secrets Manager ARN for the OAuth secret
+
+The connector stack (`DataspaceConnector-<connectorId>`) creates a Secrets Manager secret named `<connectorId>/edc.iam.sts.oauth.client.secret` for the OAuth client secret.
 
 ---
 
@@ -190,12 +191,12 @@ Tell the user:
 > "Deployment is complete. There's one manual step: you need to store your OAuth client secret in AWS Secrets Manager."
 
 Provide the direct console link:
-> "Navigate to the AWS Secrets Manager console and update the secret at `EdcOauthClientSecretArn` (shown in the deployment output) with your OAuth client secret from the Cofinity-X Portal."
+> "Navigate to the AWS Secrets Manager console and update the secret named `<connectorId>/edc.iam.sts.oauth.client.secret` with your OAuth client secret from the Cofinity-X Portal."
 
 Alternatively, they can use the CLI:
 ```bash
 aws secretsmanager put-secret-value \
-    --secret-id "<EdcOauthClientSecretArn from output>" \
+    --secret-id "<connectorId>/edc.iam.sts.oauth.client.secret" \
     --secret-string '<oauth-client-secret>' \
     --region <chosen-region> \
     --profile <deployment-profile>
@@ -209,7 +210,7 @@ IMPORTANT: The `--secret-string` value MUST be wrapped in single quotes (`'`), n
 
 Automatically configure the MCP server using values already collected during this workflow. Do NOT prompt the user — all required values are known:
 
-- `EDC_MANAGEMENT_URL` = the `EdcApiManagementApiEndpoint` from CDK output (Phase 5)
+- `EDC_MANAGEMENT_URL` = the `EdcApiManagementApiEndpoint` from CDK output (Phase 5) + the connector ID appended (e.g., `https://xxx.execute-api.region.amazonaws.com/management/default`). The connector ID is the `connectorId` from the connector config in `environments.ts`.
 - `AWS_REGION` = the region chosen in Phase 2
 - `AWS_PROFILE` = the AWS CLI profile the user used for deployment (from `$AWS_PROFILE` environment variable, or ask the user if not set)
 - `--directory` = the absolute path to the `mcp/` subdirectory of this project (resolve from the workspace root)
@@ -228,7 +229,7 @@ Write or merge the `dataspace-connector-on-aws` server entry into `.kiro/setting
         "dataspace-connector-mcp"
       ],
       "env": {
-        "EDC_MANAGEMENT_URL": "<management-api-endpoint-from-cdk-output>",
+        "EDC_MANAGEMENT_URL": "<management-api-endpoint-from-cdk-output>/<connectorId>",
         "EDC_USE_AWS_IAM": "true",
         "AWS_REGION": "<region-from-phase-2>",
         "AWS_PROFILE": "<aws-profile-from-user>"
@@ -256,7 +257,7 @@ Then validate the DSP endpoint by requesting the connector's own catalog:
 
 ```
 request_catalog(
-    counter_party_address="<EdcApiDspApiEndpoint from CDK output>",
+    counter_party_address="<EdcApiDspApiEndpoint from CDK output>/<connectorId>",
     counter_party_id="<PARTICIPANT_ID from Phase 3>"
 )
 ```

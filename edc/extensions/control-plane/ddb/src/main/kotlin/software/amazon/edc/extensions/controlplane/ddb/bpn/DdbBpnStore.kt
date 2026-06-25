@@ -8,7 +8,9 @@ import org.eclipse.tractusx.edc.validation.businesspartner.spi.store.BusinessPar
 import org.eclipse.tractusx.edc.validation.businesspartner.spi.store.BusinessPartnerStore.ALREADY_EXISTS_TEMPLATE
 import org.eclipse.tractusx.edc.validation.businesspartner.spi.store.BusinessPartnerStore.NOT_FOUND_TEMPLATE
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
-import software.amazon.edc.extensions.common.ddb.utility.keyFromId
+import software.amazon.edc.extensions.common.ddb.EntityType
+import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.controlplane.ddb.types.BpnGroup
 
 class DdbBpnStore(
@@ -21,18 +23,22 @@ class DdbBpnStore(
     override fun resolveForBpnGroup(businessPartnerGroup: String): StoreResult<List<String>> {
         val allBpns =
             table
-                .scan()
-                .items()
+                .query(queryRequestFromPk(EntityType.BPN_GROUP))
+                .flatMap { it.items() }
                 .filter { it.groups?.contains(businessPartnerGroup) == true }
                 .map { it.bpn }
-        return StoreResult.success(allBpns)
+        return if (allBpns.isEmpty()) {
+            StoreResult.notFound("No BPNs found for group '$businessPartnerGroup'")
+        } else {
+            StoreResult.success(allBpns)
+        }
     }
 
     override fun resolveForBpnGroups(): StoreResult<List<String>> {
         val allGroups =
             table
-                .scan()
-                .items()
+                .query(queryRequestFromPk(EntityType.BPN_GROUP))
+                .flatMap { it.items() }
                 .flatMap { it.groups ?: emptyList() }
                 .distinct()
         return StoreResult.success(allGroups)
@@ -43,12 +49,7 @@ class DdbBpnStore(
         groups: List<String>?,
     ): StoreResult<Void> =
         if (getBpnGroup(businessPartnerNumber) == null) {
-            val bpnGroup =
-                BpnGroup(
-                    bpn = businessPartnerNumber,
-                    groups = groups,
-                )
-            table.putItem(bpnGroup)
+            table.putItem(BpnGroup(pk = EntityType.BPN_GROUP, sk = businessPartnerNumber, groups = groups))
             StoreResult.success()
         } else {
             StoreResult.alreadyExists(ALREADY_EXISTS_TEMPLATE.format(businessPartnerNumber))
@@ -70,5 +71,5 @@ class DdbBpnStore(
         return StoreResult.success()
     }
 
-    private fun getBpnGroup(bpn: String): BpnGroup? = table.getItem(keyFromId(bpn))
+    private fun getBpnGroup(bpn: String): BpnGroup? = table.getItem(keyFromPkSk(EntityType.BPN_GROUP, bpn))
 }

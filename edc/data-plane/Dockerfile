@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-FROM amazoncorretto:17-alpine
+FROM public.ecr.aws/docker/library/amazoncorretto:17-alpine
 
 RUN addgroup -g 1001 edc && \
     adduser -D -u 1001 -G edc edc

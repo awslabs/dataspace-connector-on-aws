@@ -11,41 +11,27 @@ import org.eclipse.edc.query.CriterionOperatorRegistryImpl
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema
 import software.amazon.edc.extensions.common.ddb.types.Lease
+import software.amazon.edc.extensions.controlplane.ddb.TestTableHelper
 import software.amazon.edc.extensions.controlplane.ddb.types.ContractAgreement
 import software.amazon.edc.extensions.controlplane.ddb.types.ContractNegotiation
 import java.time.Duration
 
 class DdbContractNegotiationStoreTest : ContractNegotiationStoreTestBase() {
-    private val client =
-        DynamoDbEnhancedClient
-            .builder()
-            .dynamoDbClient(DynamoDBEmbedded.create().dynamoDbClient())
-            .build()
-    private val contractAgreementTable =
-        client
-            .table(
-                ContractAgreement.TABLE_NAME,
-                TableSchema.fromBean(ContractAgreement::class.java),
-            ).apply { createTable() }
-    private val contractNegotiationTable =
-        client
-            .table(
-                ContractNegotiation.TABLE_NAME,
-                TableSchema.fromBean(ContractNegotiation::class.java),
-            ).apply { createTable() }
-    private val leaseTable =
-        client
-            .table(Lease.TABLE_NAME, TableSchema.fromBean(Lease::class.java))
-            .apply { createTable() }
+    private val ddbClient = DynamoDBEmbedded.create().dynamoDbClient()
+    private val client = DynamoDbEnhancedClient.builder().dynamoDbClient(ddbClient).build()
+
+    init {
+        ddbClient.createTable(TestTableHelper.createRequest())
+    }
 
     private val contractNegotiationStore =
         DdbContractNegotiationStore(
             clock = clock,
-            contractAgreementTable = contractAgreementTable,
-            contractNegotiationTable = contractNegotiationTable,
+            contractAgreementTable = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(ContractAgreement::class.java)),
+            contractNegotiationTable = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(ContractNegotiation::class.java)),
             criterionOperatorRegistry = CriterionOperatorRegistryImpl.ofDefaults(),
             leaseHolder = CONNECTOR_NAME,
-            leaseTable = leaseTable,
+            leaseTable = client.table(TestTableHelper.TABLE_NAME, TableSchema.fromBean(Lease::class.java)),
             objectMapper = ObjectMapper(),
         )
 

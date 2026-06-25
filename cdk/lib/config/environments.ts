@@ -2,15 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { RemovalPolicy } from "aws-cdk-lib";
-import { ArnPrincipal } from "aws-cdk-lib/aws-iam";
-import { DataspaceConnectorStackProps } from "../dataspace-connector-stack";
-
-export type DeploymentProfile = "development" | "production";
+import { ArnPrincipal, IPrincipal } from "aws-cdk-lib/aws-iam";
 
 import {
   CONTROL_PLANE_PORT_MAPPING_DEFAULT,
+  ControlPlanePortMapping,
   DATA_PLANE_PORT_MAPPING_DEFAULT,
+  DataPlanePortMapping,
 } from "./port-mappings";
+
+export type DeploymentProfile = "development" | "production";
 
 export const EDC_IAM_ENVIRONMENT_VARIABLE_KEYS = {
   TRUSTED_ISSUER: "edc.iam.trusted-issuer.issuer-1.id",
@@ -28,51 +29,120 @@ export const EDC_SECRETS_MANAGER_ALIASES = {
   TOKEN_VERIFIER_PUBLIC_KEY: "edc.transfer.proxy.token.verifier.publickey",
 };
 
+// ─── Shared Infrastructure Config ─────────────────────────────────────────────
+
+export interface SharedInfraConfig {
+  readonly certificateArn?: string;
+  readonly containerInsights: boolean;
+  readonly controlPlanePortMapping: ControlPlanePortMapping;
+  readonly dataPlanePortMapping: DataPlanePortMapping;
+  readonly domainName?: string;
+  readonly hostedZoneId?: string;
+  readonly managementApiPrincipals: IPrincipal[];
+  readonly observabilityApiPrincipals: IPrincipal[];
+  readonly profile: DeploymentProfile;
+  readonly vpcIpAddresses: string;
+}
+
+// ─── Per-Connector Config ─────────────────────────────────────────────────────
+
+/**
+ * connectorId constraints (must be compatible with all usage sites):
+ * - Allowed characters: lowercase alphanumeric + hyphens [a-z0-9-]
+ * - Length: 2–60 characters
+ * - Cannot start or end with a hyphen
+ *
+ * Used in: ALB path patterns, URL rewrite regex, API Gateway paths,
+ * Secrets Manager name prefix, CloudFormation stack name suffix,
+ * DynamoDB table prefix (future), ECS runtime ID.
+ */
+export function validateConnectorId(connectorId: string): void {
+  if (!/^[a-z0-9]([a-z0-9-]{0,58}[a-z0-9])?$/.test(connectorId)) {
+    throw new Error(
+      `Invalid connectorId "${connectorId}". Must be 2-60 chars, lowercase alphanumeric + hyphens, cannot start/end with hyphen.`,
+    );
+  }
+}
+
+/**
+ * Derives a deterministic ALB listener rule priority from a connectorId.
+ * Uses a simple hash to produce a value in [1, 50000] that is independent
+ * of array ordering — safe for GitOps where connector configs are discovered
+ * dynamically (e.g. from per-connector YAML files).
+ */
+export function connectorPriority(connectorId: string): number {
+  let hash = 0;
+  for (const ch of connectorId) {
+    hash = ((hash << 5) - hash + ch.charCodeAt(0)) | 0;
+  }
+  return (Math.abs(hash) % 49999) + 1;
+}
+
+export interface ConnectorConfig {
+  readonly connectorId: string;
+  readonly controlPlaneCpu: number;
+  readonly controlPlaneMemoryLimitMiB: number;
+  readonly dataPlaneCpu: number;
+  readonly dataPlaneMemoryLimitMiB: number;
+  readonly edcIam: { [key: string]: string };
+  readonly edcStateRemovalPolicy: RemovalPolicy;
+  readonly profile?: DeploymentProfile;
+  readonly stateMachineIterationMillis: string;
+}
+
+// ─── Deployment Config (combined) ─────────────────────────────────────────────
+
+export interface DeploymentConfig {
+  readonly sharedInfra: SharedInfraConfig;
+  readonly connectors: ConnectorConfig[];
+}
+
+// ─── Configuration Values ─────────────────────────────────────────────────────
+
 /**
  * Enter EDC configuration values obtained from the Cofinity-X Portal below.
  *
- * The keys match the labels shown in the portal's "Configure Your Connector" dialog under https://portal.beta.cofinity-x.com/connectorManagement.
- * Copy-paste the values directly from the portal into this configuration.
+ * Each connector requires its own identity credentials from the portal's
+ * "Configure Your Connector" dialog: https://portal.beta.cofinity-x.com/connectorManagement
+ * Copy-paste the values directly from the portal into each connector's edcIam section.
  */
 
-const edcIam = {
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.TRUSTED_ISSUER]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_OAUTH_TOKEN_URL]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_OAUTH_CLIENT_ID]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_DIM_URL]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.PARTICIPANT_ID]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_ID]: "",
-  [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DID_RESOLVER]: "",
-};
-
-/**
- * Enter CDK configuration values for AWS resources below.
- *
- * Make sure to adjust CPU and memory as per your needs and set the APIs' IAM principals.
- * To use a custom domain for EDC API endpoints, uncomment and set certificateArn,
- * domainName, and hostedZoneId below (see README for details).
- */
-
-export const DataspaceConnectorStackConfig: DataspaceConnectorStackProps = {
-  // certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id>",
-  // domainName: "edc.example.com",
-  // hostedZoneId: "Z0123456789ABCDEFGHIJ",
-  containerInsights: true,
-  controlPlaneCpu: 256,
-  controlPlaneMemoryLimitMiB: 1024,
-  controlPlanePortMapping: CONTROL_PLANE_PORT_MAPPING_DEFAULT,
-  dataPlaneCpu: 256,
-  dataPlaneMemoryLimitMiB: 512,
-  dataPlanePortMapping: DATA_PLANE_PORT_MAPPING_DEFAULT,
-  edcIam: edcIam,
-  edcStateRemovalPolicy: RemovalPolicy.DESTROY,
-  managementApiPrincipals: [
-    // new ArnPrincipal("arn:aws:iam::<account-id>:role/<role-name>"),
+export const DEPLOYMENT_CONFIG: DeploymentConfig = {
+  sharedInfra: {
+    // certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id>",
+    // domainName: "edc.example.com",
+    // hostedZoneId: "Z0123456789ABCDEFGHIJ",
+    containerInsights: true,
+    controlPlanePortMapping: CONTROL_PLANE_PORT_MAPPING_DEFAULT,
+    dataPlanePortMapping: DATA_PLANE_PORT_MAPPING_DEFAULT,
+    managementApiPrincipals: [
+      // new ArnPrincipal("arn:aws:iam::<account-id>:role/<role-name>"),
+    ],
+    observabilityApiPrincipals: [
+      // new ArnPrincipal("arn:aws:iam::<account-id>:role/<role-name>"),
+    ],
+    profile: "development",
+    vpcIpAddresses: "10.0.0.0/20",
+  },
+  connectors: [
+    {
+      connectorId: "default",
+      controlPlaneCpu: 256,
+      controlPlaneMemoryLimitMiB: 1024,
+      dataPlaneCpu: 256,
+      dataPlaneMemoryLimitMiB: 512,
+      edcIam: {
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.TRUSTED_ISSUER]: "",
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_OAUTH_TOKEN_URL]: "",
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_OAUTH_CLIENT_ID]: "",
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_DIM_URL]: "",
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.PARTICIPANT_ID]: "",
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_ID]: "",
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DID_RESOLVER]: "",
+      },
+      edcStateRemovalPolicy: RemovalPolicy.DESTROY,
+      profile: "development", // Optional, overrides shared profile if set
+      stateMachineIterationMillis: "10000",
+    },
   ],
-  observabilityApiPrincipals: [
-    // new ArnPrincipal("arn:aws:iam::<account-id>:role/<role-name>"),
-  ],
-  profile: "development",
-  stateMachineIterationMillis: "10000",
-  vpcIpAddresses: "10.0.10.0/24",
 };

@@ -45,3 +45,7 @@ configure<KtlintExtension> {
     enableExperimentalRules = false
     ignoreFailures = false
 }
+
+tasks.withType<Test> {
+    useJUnitPlatform()
+}

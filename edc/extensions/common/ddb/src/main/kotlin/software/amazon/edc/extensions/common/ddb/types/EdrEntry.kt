@@ -7,12 +7,17 @@ import org.eclipse.edc.edr.spi.types.EndpointDataReferenceEntry
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttribute
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
+import software.amazon.edc.extensions.common.ddb.EntityType
 
 @DynamoDbBean
 data class EdrEntry(
     @get:DynamoDbPartitionKey
-    @get:DynamoDbAttribute(ID)
-    var transferProcessId: String = "",
+    @get:DynamoDbAttribute("pk")
+    var pk: String = EntityType.EDR_ENTRY,
+    @get:DynamoDbSortKey
+    @get:DynamoDbAttribute("sk")
+    var sk: String = "",
     @get:DynamoDbAttribute(CREATED_AT)
     var createdAt: Long = 0L,
     @get:DynamoDbAttribute(AGREEMENT_ID)
@@ -24,11 +29,13 @@ data class EdrEntry(
     @get:DynamoDbAttribute(PROVIDER_ID)
     var providerId: String = "",
 ) {
+    val transferProcessId: String get() = sk
+
     fun toEdcType(): EndpointDataReferenceEntry =
         EndpointDataReferenceEntry.Builder
             .newInstance()
             .apply {
-                transferProcessId(transferProcessId)
+                transferProcessId(sk)
                 agreementId(agreementId)
                 assetId(assetId)
                 contractNegotiationId(contractNegotiationId)
@@ -41,16 +48,14 @@ data class EdrEntry(
         const val ASSET_ID = "assetId"
         const val CONTRACT_NEGOTIATION_ID = "contractNegotiationId"
         const val CREATED_AT = "createdAt"
-        const val ID = "id"
         const val PROVIDER_ID = "providerId"
-
-        const val TABLE_NAME = "EdrEntries"
     }
 }
 
 fun EndpointDataReferenceEntry.toDdbEdrEntry(): EdrEntry =
     EdrEntry(
-        transferProcessId = transferProcessId,
+        pk = EntityType.EDR_ENTRY,
+        sk = transferProcessId,
         agreementId = agreementId,
         assetId = assetId,
         contractNegotiationId = contractNegotiationId,
