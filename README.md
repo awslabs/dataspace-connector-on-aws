@@ -17,8 +17,6 @@ To participate in secure, sovereign data sharing through the Catena-X data space
 
 ![architecture diagram](img/dataspace-connector-on-aws-architecture.png)
 
-*Note: This architecture diagram is currently outdated.*
-
 ## Quick Start
 
 ### Prerequisites
@@ -60,6 +58,14 @@ aws secretsmanager put-secret-value \
 ### Option B: GitOps Deploy (CDK Pipelines)
 
 For hands-off, Git-driven deployments — add or remove connectors by editing YAML files. See [Pipeline Deployment](#pipeline-deployment-gitops) below.
+
+## AI-Assisted Connector Management
+
+This project includes tooling for AI-assisted deployment and operation:
+
+* **[MCP Server](mcp/)** — A Model Context Protocol server with 18 tools for interacting with the EDC Management API. Create assets, negotiate contracts, transfer data, and troubleshoot — all through natural language.
+
+* **[Kiro Power](kiro-power/)** — Guided workflows for [Kiro](https://kiro.dev) that walk you through deploying your connector and validating end-to-end data exchange, including S3 loopback testing.
 
 ## Configuration
 
@@ -259,14 +265,6 @@ aws cloudformation delete-stack --stack-name DataspaceConnectorPipelineStack --r
 | 100 | ~$7/connector | ~$12/connector |
 
 Baseline infrastructure cost drops significantly at scale because VPC, NAT Gateway, and ALB are shared. Per-connector cost is primarily Fargate compute + DynamoDB on-demand.
-
-## AI-Assisted Connector Management
-
-This project includes tooling for AI-assisted deployment and operation:
-
-* **[MCP Server](mcp/)** — A Model Context Protocol server with 18 tools for interacting with the EDC Management API. Create assets, negotiate contracts, transfer data, and troubleshoot — all through natural language.
-
-* **[Kiro Power](kiro-power/)** — Guided workflows for [Kiro](https://kiro.dev) that walk you through deploying your connector and validating end-to-end data exchange, including S3 loopback testing.
 
 ## Considerations
 
