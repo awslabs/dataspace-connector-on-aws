@@ -3,7 +3,7 @@
 
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
-import { App } from "aws-cdk-lib";
+import { App, Tags } from "aws-cdk-lib";
 
 import * as yaml from "js-yaml";
 
@@ -47,3 +47,6 @@ new PipelineStack(app, "DataspaceConnectorPipelineStack", {
     region: process.env.CDK_DEFAULT_REGION,
   },
 });
+
+Tags.of(app).add("Project", "dataspace-connector-on-aws");
+Tags.of(app).add("GitRepo", "github.com/awslabs/dataspace-connector-on-aws");

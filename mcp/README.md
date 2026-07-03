@@ -30,6 +30,9 @@ This MCP server provides 18 tools covering the full EDC Management API workflow:
 - **query_transfer_processes** - List/search transfer processes
 - **query_contract_agreements** - List/search contract agreements
 
+### Discovery tools (multi-connector mode)
+- **list_connectors** - Discover deployed connector IDs from CloudFormation (requires `EDC_MULTI_CONNECTOR=true`)
+
 ## Installation
 
 ```bash
@@ -54,7 +57,25 @@ export EDC_API_KEY="your-api-key"
 # Optional: Enable AWS IAM authentication for API Gateway (for Dataspace Connector on AWS deployments)
 export EDC_USE_AWS_IAM="true"
 export AWS_REGION="us-east-1"
+
+# Optional: Enable multi-connector mode (for Dataspace Connector on AWS deployments with multiple EDCs)
+export EDC_MULTI_CONNECTOR="true"
 ```
+
+### Multi-Connector Mode
+
+When `EDC_MULTI_CONNECTOR=true` is set, the MCP server enables dynamic connector discovery:
+
+- A `list_connectors` tool becomes available that queries AWS CloudFormation for deployed connector stacks
+- All other tools require a `connector_id` parameter (discovered via `list_connectors`)
+- The Management API URL is constructed as `{EDC_MANAGEMENT_URL}/{connector_id}/v3/...`
+
+This mode requires an additional IAM permission beyond `execute-api:Invoke`:
+- `cloudformation:ListStacks` — to discover deployed connector IDs
+
+The MCP server instructions automatically guide agents to call `list_connectors` first when multi-connector mode is active.
+
+When `EDC_MULTI_CONNECTOR` is not set (default), the server operates in legacy single-connector mode where all tools target `EDC_MANAGEMENT_URL` directly — compatible with any EDC installation.
 
 ### Authentication Modes
 
@@ -125,6 +146,35 @@ Add to your `.kiro/settings/mcp.json`:
   }
 }
 ```
+
+### Dataspace Connector on AWS — Multi-Connector Mode
+
+For deployments with multiple EDC connectors (e.g., via CDK Pipelines GitOps):
+
+```json
+{
+  "mcpServers": {
+    "dataspace-connector-on-aws": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "<path-to-mcp-directory>",
+        "run",
+        "dataspace-connector-mcp"
+      ],
+      "env": {
+        "EDC_MANAGEMENT_URL": "https://<api-id>.execute-api.<aws-region>.amazonaws.com/management",
+        "EDC_USE_AWS_IAM": "true",
+        "EDC_MULTI_CONNECTOR": "true",
+        "AWS_REGION": "eu-central-1",
+        "AWS_PROFILE": ""
+      }
+    }
+  }
+}
+```
+
+In multi-connector mode, the agent calls `list_connectors` first to discover available connector IDs, then passes `connector_id` to all subsequent tool calls. The additional IAM permission required is `cloudformation:ListStacks`.
 
 ## Example Usage
 

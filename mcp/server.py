@@ -4,11 +4,15 @@ Dataspace Connector MCP Server
 
 Provides tools for interacting with Eclipse Dataspace Components' Connector Management API.
 
+Supports two modes:
+- Legacy (single connector): Set EDC_MANAGEMENT_URL only. All tools target that endpoint directly.
+- Multi-connector (Dataspace Connector on AWS): Set EDC_MANAGEMENT_URL + EDC_MULTI_CONNECTOR=true.
+  Enables dynamic connector discovery via CloudFormation and requires connector_id on all tools.
+
 Provider-side tools:
 - create_asset: Create a new asset with data address
 - create_policy_definition: Create a new policy definition
 - create_contract_definition: Create a new contract definition
-- query_assets: List/search existing assets
 
 Consumer-side tools:
 - request_catalog: Request EDC connector catalog from a counterparty
@@ -28,6 +32,9 @@ Query tools:
 - query_contract_negotiations: List/search contract negotiations
 - query_transfer_processes: List/search transfer processes
 - query_contract_agreements: List/search contract agreements
+
+Discovery tools (multi-connector mode only):
+- list_connectors: Discover deployed connector IDs from CloudFormation
 """
 
 import json
@@ -39,20 +46,51 @@ from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from mcp.server.fastmcp import FastMCP
 
-# Initialize FastMCP server
-mcp = FastMCP("dataspace-connector")
-
 # Configuration
 EDC_MANAGEMENT_URL = os.getenv("EDC_MANAGEMENT_URL", "http://localhost:8080/management").rstrip("/")
 EDC_API_KEY = os.getenv("EDC_API_KEY", "")
 USE_AWS_IAM = os.getenv("EDC_USE_AWS_IAM", "false").lower() == "true"
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+MULTI_CONNECTOR = os.getenv("EDC_MULTI_CONNECTOR", "false").lower() == "true"
 
-# Initialize AWS session if IAM auth is enabled
+# CloudFormation stack prefix used by Dataspace Connector on AWS deployments
+_CFN_STACK_PREFIX = "Deploy-DataspaceConnector-"
+_CFN_SHARED_INFRA_SUFFIX = "SharedInfraStack"
+
+# Initialize FastMCP server with mode-dependent instructions
+_MULTI_INSTRUCTIONS = (
+    "This server manages multiple EDC connectors deployed via Dataspace Connector on AWS. "
+    "ALWAYS call list_connectors first to discover available connector IDs before using any other tool. "
+    "All other tools require a connector_id parameter — pass the connector ID returned by list_connectors."
+)
+
+mcp = FastMCP(
+    "dataspace-connector",
+    instructions=_MULTI_INSTRUCTIONS if MULTI_CONNECTOR else None,
+)
+
+# Initialize AWS session if IAM auth or multi-connector discovery is enabled
 _aws_session = None
 
-if USE_AWS_IAM:
+if USE_AWS_IAM or MULTI_CONNECTOR:
     _aws_session = boto3.Session()
+
+
+def _resolve_management_url(connector_id: Optional[str]) -> str:
+    """Resolve the Management API base URL for a request.
+
+    In multi-connector mode, connector_id is prepended as a path segment.
+    In legacy mode, the EDC_MANAGEMENT_URL is used directly.
+    """
+    if MULTI_CONNECTOR:
+        if not connector_id:
+            raise ValueError(
+                "connector_id is required in multi-connector mode. "
+                "Call list_connectors first to discover available connector IDs."
+            )
+        return f"{EDC_MANAGEMENT_URL}/{connector_id}"
+    else:
+        return EDC_MANAGEMENT_URL
 
 
 def get_headers() -> dict[str, str]:
@@ -93,9 +131,10 @@ def sign_request(method: str, url: str, headers: dict[str, str], body: bytes = N
     return dict(aws_request.headers)
 
 
-async def _api_request(method: str, path: str, payload: dict | None = None) -> dict[str, Any]:
+async def _api_request(method: str, path: str, payload: dict | None = None, connector_id: Optional[str] = None) -> dict[str, Any]:
     """Make an authenticated request to the EDC Management API."""
-    url = f"{EDC_MANAGEMENT_URL}{path}"
+    base_url = _resolve_management_url(connector_id)
+    url = f"{base_url}{path}"
     headers = get_headers()
     body = json.dumps(payload).encode('utf-8') if payload else None
 
@@ -127,12 +166,78 @@ async def _api_request(method: str, path: str, payload: dict | None = None) -> d
         return response.json()
 
 
+# ─── Discovery Tool ────────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def list_connectors() -> dict[str, Any]:
+    """
+    Discover deployed EDC connector IDs from CloudFormation.
+
+    Queries AWS CloudFormation for stacks deployed by Dataspace Connector on AWS
+    and returns the list of active connector IDs. Use these IDs as the connector_id
+    parameter in all other tools.
+
+    Requires EDC_MULTI_CONNECTOR=true and cloudformation:ListStacks IAM permission.
+
+    Returns:
+        Dictionary with connector_ids list and management_base_url
+
+    Example:
+        list_connectors()
+        # → {"connector_ids": ["zentra-motors", "ferrotec", "voltwerk", ...], "management_base_url": "https://..."}
+    """
+    if not MULTI_CONNECTOR:
+        return {
+            "error": True,
+            "message": (
+                "Multi-connector discovery is not enabled. "
+                "Set EDC_MULTI_CONNECTOR=true for Dataspace Connector on AWS deployments. "
+                "In single-connector mode, all tools target EDC_MANAGEMENT_URL directly."
+            ),
+        }
+
+    try:
+        cfn_client = _aws_session.client("cloudformation", region_name=AWS_REGION)
+        paginator = cfn_client.get_paginator("list_stacks")
+
+        connector_ids = []
+        for page in paginator.paginate(
+            StackStatusFilter=["CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_ROLLBACK_COMPLETE"]
+        ):
+            for stack in page.get("StackSummaries", []):
+                name = stack["StackName"]
+                if name.startswith(_CFN_STACK_PREFIX) and not name.endswith(_CFN_SHARED_INFRA_SUFFIX):
+                    connector_id = name[len(_CFN_STACK_PREFIX):]
+                    connector_ids.append(connector_id)
+
+        connector_ids.sort()
+
+        return {
+            "connector_ids": connector_ids,
+            "count": len(connector_ids),
+            "management_base_url": EDC_MANAGEMENT_URL,
+            "region": AWS_REGION,
+        }
+
+    except Exception as e:
+        return {
+            "error": True,
+            "message": f"Failed to discover connectors from CloudFormation: {str(e)}",
+            "hint": "Ensure your AWS credentials have cloudformation:ListStacks permission.",
+        }
+
+
+# ─── Provider Tools ────────────────────────────────────────────────────────────
+
+
 @mcp.tool()
 async def create_asset(
     asset_id: str,
     properties: dict[str, Any],
     data_address: dict[str, Any],
     private_properties: Optional[dict[str, Any]] = None,
+    connector_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Create a new asset in the EDC connector.
@@ -145,6 +250,7 @@ async def create_asset(
         properties: Public metadata about the asset (e.g., name, description, contentType)
         data_address: Information about how to access the data (type, baseUrl, etc.)
         private_properties: Optional private metadata not shared in catalog
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         Response with asset ID and creation timestamp
@@ -153,7 +259,8 @@ async def create_asset(
         create_asset(
             asset_id="my-dataset-1",
             properties={"name": "Sample Dataset", "contentType": "application/json"},
-            data_address={"type": "HttpData", "baseUrl": "https://api.example.com/data"}
+            data_address={"type": "HttpData", "baseUrl": "https://api.example.com/data"},
+            connector_id="ferrotec"
         )
     """
     payload = {
@@ -172,13 +279,14 @@ async def create_asset(
     if private_properties:
         payload["privateProperties"] = private_properties
 
-    return await _api_request("POST", "/v3/assets", payload)
+    return await _api_request("POST", "/v3/assets", payload, connector_id=connector_id)
 
 
 @mcp.tool()
 async def create_policy_definition(
     policy_id: str,
     policy: dict[str, Any],
+    connector_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Create a new policy definition in the EDC connector.
@@ -189,6 +297,7 @@ async def create_policy_definition(
     Args:
         policy_id: Unique identifier for the policy definition
         policy: ODRL policy object with permissions, prohibitions, and obligations
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         Response with policy definition ID and creation timestamp
@@ -207,7 +316,8 @@ async def create_policy_definition(
                         ]
                     }]
                 }]
-            }
+            },
+            connector_id="ferrotec"
         )
     """
     payload = {
@@ -220,7 +330,7 @@ async def create_policy_definition(
         "@type": "PolicyDefinition",
         "policy": policy,
     }
-    return await _api_request("POST", "/v3/policydefinitions", payload)
+    return await _api_request("POST", "/v3/policydefinitions", payload, connector_id=connector_id)
 
 
 @mcp.tool()
@@ -229,6 +339,7 @@ async def create_contract_definition(
     access_policy_id: str,
     contract_policy_id: str,
     assets_selector: list[dict[str, Any]],
+    connector_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Create a new contract definition in the EDC connector.
@@ -241,6 +352,7 @@ async def create_contract_definition(
         access_policy_id: ID of policy that controls who can see the offer
         contract_policy_id: ID of policy that governs the actual data usage
         assets_selector: Criteria to select which assets this contract applies to
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         Response with contract definition ID and creation timestamp
@@ -254,7 +366,8 @@ async def create_contract_definition(
                 "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id",
                 "operator": "=",
                 "operandRight": "my-dataset-1"
-            }]
+            }],
+            connector_id="ferrotec"
         )
     """
     payload = {
@@ -265,7 +378,10 @@ async def create_contract_definition(
         "contractPolicyId": contract_policy_id,
         "assetsSelector": assets_selector,
     }
-    return await _api_request("POST", "/v3/contractdefinitions", payload)
+    return await _api_request("POST", "/v3/contractdefinitions", payload, connector_id=connector_id)
+
+
+# ─── Consumer Tools ────────────────────────────────────────────────────────────
 
 
 @mcp.tool()
@@ -274,6 +390,7 @@ async def request_catalog(
     counter_party_id: str,
     protocol: str = "dataspace-protocol-http",
     query_spec: Optional[dict[str, Any]] = None,
+    connector_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Request the catalog from another EDC connector.
@@ -286,6 +403,7 @@ async def request_catalog(
         counter_party_id: BPN/DID of the provider participant
         protocol: Protocol to use (default: "dataspace-protocol-http")
         query_spec: Optional query specification for filtering/pagination
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         Catalog containing available datasets and contract offers
@@ -293,7 +411,8 @@ async def request_catalog(
     Example:
         request_catalog(
             counter_party_address="https://provider.example.com/dsp",
-            counter_party_id="BPNL000000000001"
+            counter_party_id="BPNL000000000001",
+            connector_id="zentra-motors"
         )
     """
     payload = {
@@ -306,10 +425,7 @@ async def request_catalog(
     if query_spec:
         payload["querySpec"] = query_spec
 
-    return await _api_request("POST", "/v3/catalog/request", payload)
-
-
-# --- Contract Negotiation ---
+    return await _api_request("POST", "/v3/catalog/request", payload, connector_id=connector_id)
 
 
 @mcp.tool()
@@ -323,6 +439,7 @@ async def initiate_contract_negotiation(
     prohibition: Optional[list[dict[str, Any]]] = None,
     obligation: Optional[list[dict[str, Any]]] = None,
     callback_addresses: Optional[list[dict[str, Any]]] = None,
+    connector_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Initiate a contract negotiation with a provider connector.
@@ -340,6 +457,7 @@ async def initiate_contract_negotiation(
         prohibition: The prohibition array from the catalog offer's odrl:hasPolicy (pass it through exactly)
         obligation: The obligation array from the catalog offer's odrl:hasPolicy (pass it through exactly)
         callback_addresses: Optional webhook addresses for negotiation events
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         Response with negotiation ID and created timestamp
@@ -352,7 +470,8 @@ async def initiate_contract_negotiation(
             assigner="provider-participant-id",
             permission=[{"action": "use"}],
             prohibition=[],
-            obligation=[]
+            obligation=[],
+            connector_id="zentra-motors"
         )
     """
     policy: dict[str, Any] = {
@@ -382,36 +501,34 @@ async def initiate_contract_negotiation(
     if callback_addresses:
         payload["callbackAddresses"] = callback_addresses
 
-    return await _api_request("POST", "/v3/contractnegotiations", payload)
+    return await _api_request("POST", "/v3/contractnegotiations", payload, connector_id=connector_id)
 
 
 @mcp.tool()
 async def get_contract_negotiation(
     negotiation_id: str,
+    connector_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Get the state of a contract negotiation.
 
     Use this to poll the progress of an asynchronous contract negotiation.
-    Returns the full negotiation object including state, contractAgreementId,
-    and errorDetail (if terminated).
     Common states: REQUESTED, AGREED, VERIFIED, FINALIZED, TERMINATED.
 
     Args:
         negotiation_id: The ID returned by initiate_contract_negotiation
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         The full contract negotiation object including state and agreement ID
-
-    Example:
-        get_contract_negotiation(negotiation_id="negotiation-id")
     """
-    return await _api_request("GET", f"/v3/contractnegotiations/{negotiation_id}")
+    return await _api_request("GET", f"/v3/contractnegotiations/{negotiation_id}", connector_id=connector_id)
 
 
 @mcp.tool()
 async def get_contract_agreement(
     agreement_id: str,
+    connector_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Get a contract agreement by ID.
@@ -421,17 +538,12 @@ async def get_contract_agreement(
 
     Args:
         agreement_id: The contract agreement ID
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         The contract agreement with policy, asset, provider/consumer IDs
-
-    Example:
-        get_contract_agreement(agreement_id="agreement-id")
     """
-    return await _api_request("GET", f"/v3/contractagreements/{agreement_id}")
-
-
-# --- Transfer Process ---
+    return await _api_request("GET", f"/v3/contractagreements/{agreement_id}", connector_id=connector_id)
 
 
 @mcp.tool()
@@ -442,13 +554,13 @@ async def initiate_transfer(
     protocol: str = "dataspace-protocol-http",
     data_destination: Optional[dict[str, Any]] = None,
     callback_addresses: Optional[list[dict[str, Any]]] = None,
+    connector_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Initiate a data transfer using a contract agreement.
 
     Starts an asynchronous transfer process. Poll get_transfer_process to track progress.
     For HTTP pull transfers, use transfer_type="HttpData-PULL" and no data_destination.
-    After the transfer reaches STARTED state, use get_edr_data_address to get the access token.
 
     Args:
         counter_party_address: The DSP endpoint URL of the provider connector
@@ -457,16 +569,10 @@ async def initiate_transfer(
         protocol: Protocol to use (default: "dataspace-protocol-http")
         data_destination: Optional destination data address (required for PUSH transfers)
         callback_addresses: Optional webhook addresses for transfer events
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         Response with transfer process ID and created timestamp
-
-    Example:
-        initiate_transfer(
-            counter_party_address="https://provider.example.com/dsp",
-            contract_id="contract-agreement-id",
-            transfer_type="HttpData-PULL"
-        )
     """
     payload: dict[str, Any] = {
         "@context": {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
@@ -479,45 +585,37 @@ async def initiate_transfer(
     if data_destination:
         payload["dataDestination"] = data_destination
     else:
-        # EDC requires a dataDestination even for PULL transfers to avoid NPE
-        # in resource definition generators. HttpProxy signals a client-pull.
         payload["dataDestination"] = {"@type": "DataAddress", "type": "HttpProxy"}
     if callback_addresses:
         payload["callbackAddresses"] = callback_addresses
 
-    return await _api_request("POST", "/v3/transferprocesses", payload)
+    return await _api_request("POST", "/v3/transferprocesses", payload, connector_id=connector_id)
 
 
 @mcp.tool()
 async def get_transfer_process(
     transfer_process_id: str,
+    connector_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Get the state of a transfer process.
 
-    Use this to poll the progress of an asynchronous data transfer.
-    Returns the full transfer process object including state, correlationId,
-    and errorDetail (if terminated).
     Common states: REQUESTED, STARTED, COMPLETED, TERMINATED, SUSPENDED.
 
     Args:
         transfer_process_id: The ID returned by initiate_transfer
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         The full transfer process object including state and error details
-
-    Example:
-        get_transfer_process(transfer_process_id="transfer-id")
     """
-    return await _api_request("GET", f"/v3/transferprocesses/{transfer_process_id}")
-
-
-# --- EDR Cache ---
+    return await _api_request("GET", f"/v3/transferprocesses/{transfer_process_id}", connector_id=connector_id)
 
 
 @mcp.tool()
 async def get_edr_data_address(
     transfer_process_id: str,
+    connector_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Get the endpoint data reference (EDR) for an active transfer.
@@ -528,14 +626,12 @@ async def get_edr_data_address(
 
     Args:
         transfer_process_id: The transfer process ID
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         Data address with endpoint URL and authorization token
-
-    Example:
-        get_edr_data_address(transfer_process_id="transfer-id")
     """
-    return await _api_request("GET", f"/v3/edrs/{transfer_process_id}/dataaddress")
+    return await _api_request("GET", f"/v3/edrs/{transfer_process_id}/dataaddress", connector_id=connector_id)
 
 
 @mcp.tool()
@@ -546,58 +642,33 @@ async def fetch_data_with_edr(
     query_params: Optional[dict[str, str]] = None,
     body: Optional[dict[str, Any]] = None,
     media_type: Optional[str] = None,
+    connector_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Fetch data from the provider's data plane using an EDR (Endpoint Data Reference).
 
     This is the final step in the consumer PULL flow. It resolves the EDR for the given
-    transfer process (with automatic token refresh handled by Tractus-X), then makes an
-    HTTP request to the provider's data plane public API using the EDR's endpoint and
-    authorization token.
-
-    The provider's data plane acts as a proxy — the request is forwarded to the actual
-    backend data source. All HTTP methods, path suffixes, query parameters, and request
-    bodies are supported and forwarded transparently.
-
-    Prerequisites: The transfer process must be in STARTED state with a valid EDR.
+    transfer process, then makes an HTTP request to the provider's data plane public API.
 
     Args:
         transfer_process_id: The transfer process ID (must have an active EDR)
-        method: HTTP method to use (default: "GET"). Supports GET, POST, PUT, PATCH, DELETE.
-        path: Optional sub-path to append to the EDR endpoint URL (default: "public/", which is
-              where the data plane serves content. Override for sub-resources, e.g., "/public/items")
+        method: HTTP method to use (default: "GET")
+        path: Optional sub-path to append to the EDR endpoint URL
         query_params: Optional query parameters to include in the request
         body: Optional JSON request body (for POST, PUT, PATCH)
         media_type: Optional media type for the request body (default: "application/json")
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
-        Dictionary with "status" (HTTP status code), "headers" (response headers),
-        and "body" (response body — parsed as JSON if possible, otherwise raw text)
-
-    Example:
-        # Simple GET
-        fetch_data_with_edr(transfer_process_id="transfer-id")
-
-        # GET with sub-path and query params
-        fetch_data_with_edr(
-            transfer_process_id="transfer-id",
-            path="/items",
-            query_params={"limit": "10", "offset": "0"}
-        )
-
-        # POST with body
-        fetch_data_with_edr(
-            transfer_process_id="transfer-id",
-            method="POST",
-            body={"query": "SELECT * FROM data"}
-        )
+        Dictionary with "status", "headers", and "body"
     """
-    # Step 1: Resolve the EDR (Tractus-X auto-refreshes expired tokens transparently)
-    edr = await _api_request("GET", f"/v3/edrs/{transfer_process_id}/dataaddress")
+    # Step 1: Resolve the EDR
+    edr = await _api_request("GET", f"/v3/edrs/{transfer_process_id}/dataaddress", connector_id=connector_id)
 
-    # Step 2: Extract endpoint and authorization from the EDR response.
-    # The EDR is a JSON-LD DataAddress. The endpoint and authorization fields
-    # may appear with or without the EDC namespace prefix depending on context expansion.
+    if edr.get("error"):
+        return edr
+
+    # Step 2: Extract endpoint and authorization
     endpoint = (
         edr.get("endpoint")
         or edr.get("https://w3id.org/edc/v0.0.1/ns/endpoint")
@@ -612,22 +683,17 @@ async def fetch_data_with_edr(
     if not authorization:
         return {"error": "EDR does not contain an authorization token", "edr": edr}
 
-    # Step 3: Build the target URL.
-    # The EDR endpoint is the data plane base URL. The data plane public API serves
-    # content under the "public/" path, so we default to that when no path is given.
+    # Step 3: Build the target URL
     target_url = endpoint.rstrip("/")
     sub_path = path if path is not None else "public/"
     target_url = f"{target_url}/{sub_path.lstrip('/')}"
 
-    # Step 4: Build headers with the EDR authorization token.
-    # The token is sent as-is (not prefixed with "Bearer") because the EDC data plane
-    # expects the raw token, and API Gateway would reject a "Bearer ..." value.
+    # Step 4: Build headers
     headers: dict[str, str] = {"Authorization": authorization}
-
     if body is not None:
         headers["Content-Type"] = media_type or "application/json"
 
-    # Step 5: Make the request to the provider's data plane
+    # Step 5: Make the request
     request_body = json.dumps(body).encode("utf-8") if body is not None else None
 
     async with httpx.AsyncClient() as client:
@@ -644,7 +710,6 @@ async def fetch_data_with_edr(
     response_headers = dict(response.headers)
     content_type = response.headers.get("content-type", "")
 
-    # Try to parse as JSON, fall back to text
     if "json" in content_type:
         try:
             response_body = response.json()
@@ -671,40 +736,28 @@ async def initiate_edr_negotiation(
     prohibition: Optional[list[dict[str, Any]]] = None,
     obligation: Optional[list[dict[str, Any]]] = None,
     callback_addresses: Optional[list[dict[str, Any]]] = None,
+    connector_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Initiate an EDR negotiation that combines contract negotiation and transfer in one call.
 
     This is a convenience shortcut that handles the full flow: contract negotiation,
-    followed by an automatic HttpData-PULL transfer. Once the negotiation finalizes
-    and the transfer starts, the EDR becomes available via get_edr_data_address.
-
-    Poll get_contract_negotiation with the returned negotiation ID to track progress.
+    followed by an automatic HttpData-PULL transfer.
 
     Args:
         counter_party_address: The DSP endpoint URL of the provider connector
-        offer_id: The offer/policy ID from the catalog (the "@id" of the odrl:hasPolicy)
+        offer_id: The offer/policy ID from the catalog
         asset_id: The target asset ID from the catalog offer
-        assigner: The provider participant ID (assigner of the offer)
+        assigner: The provider participant ID
         protocol: Protocol to use (default: "dataspace-protocol-http")
-        permission: The permission array from the catalog offer's odrl:hasPolicy (pass it through exactly)
-        prohibition: The prohibition array from the catalog offer's odrl:hasPolicy (pass it through exactly)
-        obligation: The obligation array from the catalog offer's odrl:hasPolicy (pass it through exactly)
+        permission: The permission array from the catalog offer's odrl:hasPolicy
+        prohibition: The prohibition array from the catalog offer's odrl:hasPolicy
+        obligation: The obligation array from the catalog offer's odrl:hasPolicy
         callback_addresses: Optional webhook addresses for negotiation events
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         Response with negotiation ID and created timestamp
-
-    Example:
-        initiate_edr_negotiation(
-            counter_party_address="https://provider.example.com/dsp",
-            offer_id="offer-id-from-catalog",
-            asset_id="asset-id",
-            assigner="provider-participant-id",
-            permission=[{"action": "use"}],
-            prohibition=[],
-            obligation=[]
-        )
     """
     policy: dict[str, Any] = {
         "@type": "odrl:Offer",
@@ -733,10 +786,10 @@ async def initiate_edr_negotiation(
     if callback_addresses:
         payload["callbackAddresses"] = callback_addresses
 
-    return await _api_request("POST", "/v3/edrs", payload)
+    return await _api_request("POST", "/v3/edrs", payload, connector_id=connector_id)
 
 
-# --- Query Tools ---
+# ─── Query Tools ───────────────────────────────────────────────────────────────
 
 
 def _build_query_spec(
@@ -768,6 +821,7 @@ async def query_policy_definitions(
     filter_expression: Optional[list[dict[str, Any]]] = None,
     sort_field: Optional[str] = None,
     sort_order: str = "ASC",
+    connector_id: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """
     Query policy definitions in the EDC connector.
@@ -778,20 +832,13 @@ async def query_policy_definitions(
         filter_expression: Optional filter criteria as list of Criterion objects
         sort_field: Optional field name to sort by
         sort_order: Sort direction, "ASC" or "DESC" (default: "ASC")
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         List of policy definitions matching the query
-
-    Example:
-        query_policy_definitions(limit=10)
-        query_policy_definitions(filter_expression=[{
-            "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id",
-            "operator": "=",
-            "operandRight": "my-policy-id"
-        }])
     """
     payload = _build_query_spec(offset, limit, filter_expression, sort_field, sort_order)
-    return await _api_request("POST", "/v3/policydefinitions/request", payload)
+    return await _api_request("POST", "/v3/policydefinitions/request", payload, connector_id=connector_id)
 
 
 @mcp.tool()
@@ -801,6 +848,7 @@ async def query_contract_definitions(
     filter_expression: Optional[list[dict[str, Any]]] = None,
     sort_field: Optional[str] = None,
     sort_order: str = "ASC",
+    connector_id: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """
     Query contract definitions in the EDC connector.
@@ -811,20 +859,13 @@ async def query_contract_definitions(
         filter_expression: Optional filter criteria as list of Criterion objects
         sort_field: Optional field name to sort by
         sort_order: Sort direction, "ASC" or "DESC" (default: "ASC")
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         List of contract definitions matching the query
-
-    Example:
-        query_contract_definitions(limit=10)
-        query_contract_definitions(filter_expression=[{
-            "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id",
-            "operator": "=",
-            "operandRight": "my-contract-def-id"
-        }])
     """
     payload = _build_query_spec(offset, limit, filter_expression, sort_field, sort_order)
-    return await _api_request("POST", "/v3/contractdefinitions/request", payload)
+    return await _api_request("POST", "/v3/contractdefinitions/request", payload, connector_id=connector_id)
 
 
 @mcp.tool()
@@ -834,6 +875,7 @@ async def query_assets(
     filter_expression: Optional[list[dict[str, Any]]] = None,
     sort_field: Optional[str] = None,
     sort_order: str = "ASC",
+    connector_id: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """
     Query assets in the EDC connector.
@@ -844,20 +886,13 @@ async def query_assets(
         filter_expression: Optional filter criteria as list of Criterion objects
         sort_field: Optional field name to sort by
         sort_order: Sort direction, "ASC" or "DESC" (default: "ASC")
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         List of assets matching the query
-
-    Example:
-        query_assets(limit=10)
-        query_assets(filter_expression=[{
-            "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id",
-            "operator": "=",
-            "operandRight": "my-asset-id"
-        }])
     """
     payload = _build_query_spec(offset, limit, filter_expression, sort_field, sort_order)
-    return await _api_request("POST", "/v3/assets/request", payload)
+    return await _api_request("POST", "/v3/assets/request", payload, connector_id=connector_id)
 
 
 @mcp.tool()
@@ -867,6 +902,7 @@ async def query_contract_negotiations(
     filter_expression: Optional[list[dict[str, Any]]] = None,
     sort_field: Optional[str] = None,
     sort_order: str = "ASC",
+    connector_id: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """
     Query contract negotiations in the EDC connector.
@@ -877,20 +913,13 @@ async def query_contract_negotiations(
         filter_expression: Optional filter criteria as list of Criterion objects
         sort_field: Optional field name to sort by
         sort_order: Sort direction, "ASC" or "DESC" (default: "ASC")
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         List of contract negotiations matching the query
-
-    Example:
-        query_contract_negotiations(limit=10)
-        query_contract_negotiations(filter_expression=[{
-            "operandLeft": "state",
-            "operator": "=",
-            "operandRight": "FINALIZED"
-        }])
     """
     payload = _build_query_spec(offset, limit, filter_expression, sort_field, sort_order)
-    return await _api_request("POST", "/v3/contractnegotiations/request", payload)
+    return await _api_request("POST", "/v3/contractnegotiations/request", payload, connector_id=connector_id)
 
 
 @mcp.tool()
@@ -900,6 +929,7 @@ async def query_transfer_processes(
     filter_expression: Optional[list[dict[str, Any]]] = None,
     sort_field: Optional[str] = None,
     sort_order: str = "ASC",
+    connector_id: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """
     Query transfer processes in the EDC connector.
@@ -910,20 +940,13 @@ async def query_transfer_processes(
         filter_expression: Optional filter criteria as list of Criterion objects
         sort_field: Optional field name to sort by
         sort_order: Sort direction, "ASC" or "DESC" (default: "ASC")
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         List of transfer processes matching the query
-
-    Example:
-        query_transfer_processes(limit=10)
-        query_transfer_processes(filter_expression=[{
-            "operandLeft": "state",
-            "operator": "=",
-            "operandRight": "STARTED"
-        }])
     """
     payload = _build_query_spec(offset, limit, filter_expression, sort_field, sort_order)
-    return await _api_request("POST", "/v3/transferprocesses/request", payload)
+    return await _api_request("POST", "/v3/transferprocesses/request", payload, connector_id=connector_id)
 
 
 @mcp.tool()
@@ -933,6 +956,7 @@ async def query_contract_agreements(
     filter_expression: Optional[list[dict[str, Any]]] = None,
     sort_field: Optional[str] = None,
     sort_order: str = "ASC",
+    connector_id: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """
     Query contract agreements in the EDC connector.
@@ -943,20 +967,13 @@ async def query_contract_agreements(
         filter_expression: Optional filter criteria as list of Criterion objects
         sort_field: Optional field name to sort by
         sort_order: Sort direction, "ASC" or "DESC" (default: "ASC")
+        connector_id: Target connector ID (required in multi-connector mode, from list_connectors)
 
     Returns:
         List of contract agreements matching the query
-
-    Example:
-        query_contract_agreements(limit=10)
-        query_contract_agreements(filter_expression=[{
-            "operandLeft": "assetId",
-            "operator": "=",
-            "operandRight": "my-asset-id"
-        }])
     """
     payload = _build_query_spec(offset, limit, filter_expression, sort_field, sort_order)
-    return await _api_request("POST", "/v3/contractagreements/request", payload)
+    return await _api_request("POST", "/v3/contractagreements/request", payload, connector_id=connector_id)
 
 
 if __name__ == "__main__":
