@@ -268,6 +268,7 @@ Baseline infrastructure cost drops significantly at scale because VPC, NAT Gatew
 
 ## Considerations
 
+* **Per-connector access control:** When deploying multiple connectors, you can restrict which IAM principals can access which connector's Management API. Supports single-account, cross-account, and organization-level trust patterns — see [Management API Access Patterns](docs/management-api-access-patterns.md).
 * **API Gateway payload limit:** 10 MB per request (REST API). Does not affect Consumer Pull scenarios or S3-backed data transfers.
 * **Fargate Spot availability:** In `development` profile, Spot capacity constraints may cause deployment delays during updates. Retry or use `production` profile for guaranteed placement.
 * **Connector ID constraints:** Must be 2–60 characters, lowercase alphanumeric + hyphens, cannot start/end with a hyphen. Used in ALB paths, DynamoDB table names, Secrets Manager prefixes, and CloudFormation stack names.
