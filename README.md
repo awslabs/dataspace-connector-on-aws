@@ -98,7 +98,7 @@ All configuration lives in [`cdk/lib/config/environments.ts`](cdk/lib/config/env
 
 ### EDC Identity (`edcIam`)
 
-These values are obtained from the [Cofinity-X Portal](https://portal.cofinity-x.com/) → "Configure Your Connector" dialog. Each connector requires its own set of credentials.
+These values are obtained from the [Cofinity-X Portal](https://portal.cofinity-x.com/) → "Configure Your Connector" dialog. Each connector requires its own set of credentials. For a visual step-by-step walkthrough with screenshots, see [Obtaining EDC Identity Credentials from the Cofinity-X Portal](docs/obtaining-edc-identity-credentials.md).
 
 | Field | Description |
 |-------|-------------|
