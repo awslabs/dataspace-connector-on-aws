@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { RemovalPolicy } from "aws-cdk-lib";
-import { ArnPrincipal, IPrincipal } from "aws-cdk-lib/aws-iam";
+import { IPrincipal } from "aws-cdk-lib/aws-iam";
 
 import {
   CONTROL_PLANE_PORT_MAPPING_DEFAULT,
@@ -90,11 +90,26 @@ export interface ConnectorConfig {
   readonly stateMachineIterationMillis: string;
 }
 
+// ─── Portal Integration Config (optional) ─────────────────────────────────────
+
+export interface PortalConfig {
+  readonly environment: "beta" | "production";
+  readonly identity: {
+    readonly trustedIssuer: string;
+    readonly stsOauthTokenUrl: string;
+    readonly stsDimUrl: string;
+    readonly participantId: string;
+    readonly dcpId: string;
+    readonly didResolver: string;
+  };
+}
+
 // ─── Deployment Config (combined) ─────────────────────────────────────────────
 
 export interface DeploymentConfig {
   readonly sharedInfra: SharedInfraConfig;
   readonly connectors: ConnectorConfig[];
+  readonly portal?: PortalConfig;
 }
 
 // ─── Configuration Values ─────────────────────────────────────────────────────

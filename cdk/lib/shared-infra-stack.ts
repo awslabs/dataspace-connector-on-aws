@@ -171,5 +171,6 @@ export class SharedInfraStack extends Stack {
     new CfnOutput(this, "VpcId", { value: this.vpc.vpcId });
     new CfnOutput(this, "ClusterArn", { value: this.ecsCluster.clusterArn });
     new CfnOutput(this, "AlbDnsName", { value: this.albDnsName });
+    new CfnOutput(this, "DspApiUrl", { value: this.dspUrl });
   }
 }

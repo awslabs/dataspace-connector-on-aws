@@ -51,11 +51,13 @@ export function loadConfigFromYaml(
     );
   }
 
+  const portalConfigured = !!deployment.portal;
+
   const connectors: ConnectorConfig[] = connectorFiles.map((file) => {
     const raw = yaml.load(
       readFileSync(join(connectorsDir, file), "utf-8"),
     ) as ConnectorYaml;
-    validateConnectorYaml(raw, file);
+    validateConnectorYaml(raw, file, portalConfigured);
     return mapConnectorYaml(raw);
   });
 
@@ -76,29 +78,37 @@ export function loadConfigFromYaml(
     vpcIpAddresses: deployment.vpcIpAddresses,
   };
 
-  return { sharedInfra, connectors };
+  return { sharedInfra, connectors, portal: deployment.portal };
 }
 
 function mapConnectorYaml(raw: ConnectorYaml): ConnectorConfig {
+  // edcIam may be absent if portal provisioning hasn't run yet (local deploy without portal).
+  // When running in the pipeline, provision.ts populates edcIam before synth.
+  const edcIam = raw.edcIam
+    ? {
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.TRUSTED_ISSUER]:
+          raw.edcIam.trustedIssuer,
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_OAUTH_TOKEN_URL]:
+          raw.edcIam.stsOauthTokenUrl,
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_OAUTH_CLIENT_ID]:
+          raw.edcIam.stsOauthClientId,
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_DIM_URL]:
+          raw.edcIam.stsDimUrl,
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.PARTICIPANT_ID]:
+          raw.edcIam.participantId,
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_ID]: raw.edcIam.dcpId,
+        [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DID_RESOLVER]:
+          raw.edcIam.didResolver,
+      }
+    : {};
+
   return {
     connectorId: raw.connectorId,
     controlPlaneCpu: raw.controlPlaneCpu,
     controlPlaneMemoryLimitMiB: raw.controlPlaneMemoryLimitMiB,
     dataPlaneCpu: raw.dataPlaneCpu,
     dataPlaneMemoryLimitMiB: raw.dataPlaneMemoryLimitMiB,
-    edcIam: {
-      [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.TRUSTED_ISSUER]:
-        raw.edcIam.trustedIssuer,
-      [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_OAUTH_TOKEN_URL]:
-        raw.edcIam.stsOauthTokenUrl,
-      [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_OAUTH_CLIENT_ID]:
-        raw.edcIam.stsOauthClientId,
-      [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_STS_DIM_URL]: raw.edcIam.stsDimUrl,
-      [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.PARTICIPANT_ID]:
-        raw.edcIam.participantId,
-      [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DCP_ID]: raw.edcIam.dcpId,
-      [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS.DID_RESOLVER]: raw.edcIam.didResolver,
-    },
+    edcIam,
     edcStateRemovalPolicy:
       raw.edcStateRemovalPolicy === "RETAIN"
         ? RemovalPolicy.RETAIN
@@ -108,10 +118,7 @@ function mapConnectorYaml(raw: ConnectorYaml): ConnectorConfig {
   };
 }
 
-function validateDeploymentYaml(
-  data: DeploymentYaml,
-  filePath: string,
-): void {
+function validateDeploymentYaml(data: DeploymentYaml, filePath: string): void {
   const required: (keyof DeploymentYaml)[] = [
     "profile",
     "vpcIpAddresses",
@@ -132,7 +139,11 @@ function validateDeploymentYaml(
   }
 }
 
-function validateConnectorYaml(data: ConnectorYaml, fileName: string): void {
+function validateConnectorYaml(
+  data: ConnectorYaml,
+  fileName: string,
+  portalConfigured: boolean,
+): void {
   const required: (keyof ConnectorYaml)[] = [
     "connectorId",
     "controlPlaneCpu",
@@ -141,7 +152,6 @@ function validateConnectorYaml(data: ConnectorYaml, fileName: string): void {
     "dataPlaneMemoryLimitMiB",
     "stateMachineIterationMillis",
     "edcStateRemovalPolicy",
-    "edcIam",
   ];
   const missing = required.filter(
     (key) => data[key] === undefined || data[key] === null,
@@ -151,7 +161,20 @@ function validateConnectorYaml(data: ConnectorYaml, fileName: string): void {
       `${fileName}: missing required fields: ${missing.join(", ")}`,
     );
   }
-  if (!data.edcIam || typeof data.edcIam !== "object") {
+
+  // edcIam validation: required unless portal integration will provide it
+  if (!data.edcIam) {
+    if (portalConfigured && data.edcTechnicalUserId) {
+      // Portal provisioning will populate edcIam at synth time — skip validation
+      return;
+    }
+    throw new Error(
+      `${fileName}: edcIam is required. Either provide edcIam values directly, ` +
+        `or configure portal integration in deployment.yaml and set edcTechnicalUserId.`,
+    );
+  }
+
+  if (typeof data.edcIam !== "object") {
     throw new Error(`${fileName}: edcIam must be an object`);
   }
   const requiredIam = [
@@ -165,8 +188,8 @@ function validateConnectorYaml(data: ConnectorYaml, fileName: string): void {
   ];
   const missingIam = requiredIam.filter(
     (key) =>
-      !(key in data.edcIam) ||
-      data.edcIam[key as keyof typeof data.edcIam] === undefined,
+      !(key in data.edcIam!) ||
+      data.edcIam![key as keyof typeof data.edcIam] === undefined,
   );
   if (missingIam.length > 0) {
     throw new Error(

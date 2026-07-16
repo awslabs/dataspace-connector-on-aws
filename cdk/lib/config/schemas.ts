@@ -29,6 +29,23 @@ export interface DeploymentYaml {
   readonly certificateArn?: string;
   readonly domainName?: string;
   readonly hostedZoneId?: string;
+  readonly portal?: PortalYaml;
+}
+
+// ─── deployment.yaml — portal section (optional) ──────────────────────────────
+
+export interface PortalYaml {
+  readonly environment: "beta" | "production";
+  readonly identity: PortalIdentityYaml;
+}
+
+export interface PortalIdentityYaml {
+  readonly trustedIssuer: string;
+  readonly stsOauthTokenUrl: string;
+  readonly stsDimUrl: string;
+  readonly participantId: string;
+  readonly dcpId: string;
+  readonly didResolver: string;
 }
 
 // ─── connectors/connector-*.yaml ──────────────────────────────────────────────
@@ -42,7 +59,8 @@ export interface ConnectorYaml {
   readonly dataPlaneMemoryLimitMiB: number;
   readonly stateMachineIterationMillis: string;
   readonly edcStateRemovalPolicy: "DESTROY" | "RETAIN";
-  readonly edcIam: EdcIamYaml;
+  readonly edcIam?: EdcIamYaml;
+  readonly edcTechnicalUserId?: string;
 }
 
 export interface EdcIamYaml {
