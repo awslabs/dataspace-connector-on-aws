@@ -117,13 +117,18 @@ export class PortalClient {
     body?: unknown,
   ): Promise<Response> {
     const token = await this.getToken();
+    // Some portal endpoints bind [FromForm] (application/x-www-form-urlencoded)
+    // rather than JSON. Pass a URLSearchParams body for those; objects are JSON.
+    const isForm = body instanceof URLSearchParams;
     return fetch(`${this.backendUrl}${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+        "Content-Type": isForm
+          ? "application/x-www-form-urlencoded"
+          : "application/json",
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
     });
   }
 
@@ -182,12 +187,18 @@ export class PortalClient {
     technicalUserId: string,
     location: string = "DE",
   ): Promise<string> {
-    const response = await this.request("POST", "/connectors", {
-      name,
-      connectorUrl,
-      location,
-      technicalUserId,
+    // POST /connectors is an ASP.NET [FromForm] endpoint binding
+    // ConnectorInputModel (Name, ConnectorUrl, Location [2-char country code],
+    // TechnicalUserId). It expects form-encoded fields with these PascalCase
+    // names — sending JSON yields a 400 "field required" for every field.
+    const form = new URLSearchParams({
+      Name: name,
+      ConnectorUrl: connectorUrl,
+      Location: location,
+      TechnicalUserId: technicalUserId,
     });
+
+    const response = await this.request("POST", "/connectors", form);
 
     if (!response.ok) {
       const error = await response.text();
