@@ -118,7 +118,7 @@ async function finalizeNewConnectors(
 ): Promise<void> {
   for (const { connectorId, edcTechnicalUserId } of current) {
     if (registered.has(connectorId)) continue; // already finalized
-    if (!edcTechnicalUserId) continue; // manual edcIam connector — nothing to do
+    if (!edcTechnicalUserId) continue; // defensive: provision guarantees this is set
 
     console.log(`[portal/finalize] ${connectorId}: finalizing...`);
 

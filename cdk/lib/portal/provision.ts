@@ -4,16 +4,15 @@
 /**
  * Pre-synth provisioning script for Cofinity-X Portal integration.
  *
- * Runs as part of the CDK Pipeline Synth step, between TypeScript compilation
- * and `cdk synth`. For each connector YAML that declares an `edcTechnicalUserId`
- * but no `edcIam`, it assembles the `edcIam` block from:
+ * Runs inside the CDK Pipeline Synth step, between TypeScript compilation and
+ * `cdk synth`. For every connector it assembles the `edcIam` block from:
  *   - organization-wide identity values in deployment.yaml (portal.identity)
  *   - the connector's OAuth client ID, read fresh from the portal API
  * and writes it into the connector YAML (workspace-local only).
  *
  * Stateless by design: the portal is the source of truth, so every run is an
- * idempotent read. Connectors that already carry an explicit `edcIam` block are
- * left untouched.
+ * idempotent read. `edcTechnicalUserId` is retained in the file (the CDK config
+ * loader requires it); `edcIam` is added alongside it.
  *
  * Usage: node dist/portal/provision.js --config-path=<path>
  */
@@ -35,18 +34,13 @@ interface PortalIdentity {
   didResolver: string;
 }
 
-interface DeploymentYamlWithPortal {
-  portal?: {
-    environment: PortalEnvironment;
-    identity: PortalIdentity;
-  };
-  [key: string]: unknown;
+interface DeploymentYaml {
+  portal?: { environment: PortalEnvironment; identity: PortalIdentity };
 }
 
-interface ConnectorYamlWithPortal {
+interface ConnectorYaml {
   connectorId: string;
   edcTechnicalUserId?: string;
-  edcIam?: Record<string, string>;
   [key: string]: unknown;
 }
 
@@ -67,65 +61,28 @@ async function main(): Promise<void> {
   }
   const configPath = resolve(configPathArg.split("=")[1]);
 
-  const deploymentPath = join(configPath, "deployment.yaml");
-  if (!existsSync(deploymentPath)) {
-    console.log("[portal/provision] No deployment.yaml found, skipping.");
-    return;
-  }
-
   const deployment = yaml.load(
-    readFileSync(deploymentPath, "utf-8"),
-  ) as DeploymentYamlWithPortal;
+    readFileSync(join(configPath, "deployment.yaml"), "utf-8"),
+  ) as DeploymentYaml;
 
-  if (!deployment.portal) {
-    console.log(
-      "[portal/provision] No portal section in deployment.yaml, skipping.",
-    );
-    return;
-  }
-
-  const { environment, identity } = deployment.portal;
-  if (!environment || !identity) {
+  if (!deployment.portal?.environment || !deployment.portal?.identity) {
     throw new Error(
-      "[portal/provision] portal section requires 'environment' and 'identity'",
+      "[portal/provision] deployment.yaml requires a portal section with 'environment' and 'identity'.",
     );
   }
+  const { environment, identity } = deployment.portal;
 
   const connectorsDir = join(configPath, "connectors");
-  if (!existsSync(connectorsDir)) {
-    console.log("[portal/provision] No connectors/ directory, skipping.");
+  const files = existsSync(connectorsDir)
+    ? readdirSync(connectorsDir).filter(
+        (f) => f.startsWith("connector-") && f.endsWith(".yaml"),
+      )
+    : [];
+
+  if (files.length === 0) {
+    console.log("[portal/provision] No connectors to provision. Done.");
     return;
   }
-
-  // Select connectors that need edcIam populated from the portal.
-  const pending = readdirSync(connectorsDir)
-    .filter((f) => f.startsWith("connector-") && f.endsWith(".yaml"))
-    .map((file) => ({
-      file,
-      data: yaml.load(
-        readFileSync(join(connectorsDir, file), "utf-8"),
-      ) as ConnectorYamlWithPortal,
-    }))
-    .filter(({ file, data }) => {
-      if (data.edcIam) {
-        console.log(`[portal/provision] ${file}: edcIam present, skipping.`);
-        return false;
-      }
-      if (!data.edcTechnicalUserId) {
-        // Neither edcIam nor a tech user — config-loader will reject this.
-        return false;
-      }
-      return true;
-    });
-
-  if (pending.length === 0) {
-    console.log("[portal/provision] Nothing to provision. Done.");
-    return;
-  }
-
-  console.log(
-    `[portal/provision] Populating edcIam for ${pending.length} connector(s).`,
-  );
 
   const adminCreds = await new SecretsHelper().getAdminCredentials(
     ADMIN_SECRET_NAME,
@@ -133,15 +90,24 @@ async function main(): Promise<void> {
   const portal = new PortalClient(environment, adminCreds);
   await portal.authenticate();
 
-  for (const { file, data } of pending) {
-    const { connectorId } = data;
-    const techUserId = data.edcTechnicalUserId!;
+  for (const file of files) {
+    const path = join(connectorsDir, file);
+    const connector = yaml.load(readFileSync(path, "utf-8")) as ConnectorYaml;
 
-    const techUser = await portal.getTechUserDetails(techUserId);
+    if (!connector.edcTechnicalUserId) {
+      throw new Error(
+        `[portal/provision] ${file}: 'edcTechnicalUserId' is required. ` +
+          `Create a technical user in the Cofinity-X Portal and reference its ID.`,
+      );
+    }
+
+    const techUser = await portal.getTechUserDetails(
+      connector.edcTechnicalUserId,
+    );
     if (techUser.status !== "ACTIVE") {
       throw new Error(
-        `[portal/provision] ${connectorId}: tech user ${techUserId} is not ACTIVE ` +
-          `(status: ${techUser.status}). Wait for DIM provisioning to complete in the portal.`,
+        `[portal/provision] ${connector.connectorId}: tech user ${connector.edcTechnicalUserId} ` +
+          `is not ACTIVE (status: ${techUser.status}). Wait for DIM provisioning to complete.`,
       );
     }
 
@@ -155,16 +121,13 @@ async function main(): Promise<void> {
       didResolver: identity.didResolver,
     };
 
-    // edcTechnicalUserId is replaced by the resolved edcIam block for synth.
-    const { edcTechnicalUserId: _drop, ...rest } = data;
-    void _drop;
     writeFileSync(
-      join(connectorsDir, file),
-      yaml.dump({ ...rest, edcIam }, { lineWidth: -1 }),
+      path,
+      yaml.dump({ ...connector, edcIam }, { lineWidth: -1 }),
       "utf-8",
     );
     console.log(
-      `[portal/provision] ${connectorId}: edcIam written to ${file}.`,
+      `[portal/provision] ${connector.connectorId}: edcIam written to ${file}.`,
     );
   }
 

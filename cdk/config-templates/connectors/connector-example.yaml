@@ -1,9 +1,10 @@
 # Connector configuration for Dataspace Connector on AWS
 # See: https://github.com/awslabs/dataspace-connector-on-aws
 #
-# Each connector requires its own identity credentials from the Cofinity-X Portal:
-# https://portal.cofinity-x.com/connectorManagement
-# Copy-paste the values from the portal's "Configure Your Connector" dialog.
+# Create a technical user with the "Identity Wallet Management" role in the
+# Cofinity-X Portal, then reference its service account ID below. The pipeline
+# reads its credentials, populates the connector's EDC identity, stores the
+# OAuth secret, and registers the connector for discovery.
 
 connectorId: example
 # profile: development           # Optional override (defaults to deployment.yaml profile)
@@ -13,12 +14,4 @@ dataPlaneCpu: 256
 dataPlaneMemoryLimitMiB: 512
 stateMachineIterationMillis: "10000"
 edcStateRemovalPolicy: DESTROY # DESTROY or RETAIN
-
-edcIam:
-  trustedIssuer: ""
-  stsOauthTokenUrl: ""
-  stsOauthClientId: ""
-  stsDimUrl: ""
-  participantId: ""
-  dcpId: ""
-  didResolver: ""
+edcTechnicalUserId: "00000000-0000-0000-0000-000000000000"

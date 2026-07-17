@@ -34,7 +34,7 @@ import {
   DataPlanePortMapping,
 } from "../config/port-mappings";
 
-import { DeploymentProfile } from "../config/environments";
+import { DeploymentProfile } from "../config/config";
 
 export interface EdcApiProps {
   readonly albArn: string;

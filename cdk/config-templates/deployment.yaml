@@ -15,3 +15,21 @@ observabilityApiPrincipals:
 # certificateArn: "arn:aws:acm:<region>:<account-id>:certificate/<certificate-id>"
 # domainName: "edc.example.com"
 # hostedZoneId: "Z0123456789ABCDEFGHIJ"
+
+# Cofinity-X Portal integration. The pipeline reads each connector's identity
+# credentials from the portal, populates its EDC config, stores the OAuth secret
+# in Secrets Manager, and registers the connector for discovery.
+#
+# The organization-wide identity values below come from the portal's
+# "Configure Your Connector" dialog and are shared across all connectors.
+# The admin technical user credentials (Offer Management + Dataspace Discovery
+# roles) are prompted for by deploy.sh and stored in Secrets Manager.
+portal:
+  environment: beta # "beta" or "production"
+  identity:
+    trustedIssuer: "did:web:..."
+    stsOauthTokenUrl: "https://..."
+    stsDimUrl: "https://..."
+    participantId: "BPNL..."
+    dcpId: "did:web:..."
+    didResolver: "https://..."

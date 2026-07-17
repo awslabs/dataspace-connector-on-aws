@@ -22,10 +22,17 @@ import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 
 import {
-  ConnectorConfig,
+  ConnectorYaml,
+  DeploymentYaml,
   EDC_SECRETS_MANAGER_ALIASES,
-  SharedInfraConfig,
-} from "./config/environments";
+  toEdcIamEnvVars,
+  toRemovalPolicy,
+} from "./config/config";
+
+import {
+  CONTROL_PLANE_PORT_MAPPING_DEFAULT,
+  DATA_PLANE_PORT_MAPPING_DEFAULT,
+} from "./config/port-mappings";
 
 import { EdcControlPlane } from "./constructs/edc-control-plane";
 import { EdcDataPlane } from "./constructs/edc-data-plane";
@@ -35,9 +42,9 @@ import { EdcTokenKeyPair } from "./constructs/edc-token-key-pair";
 import { SharedInfraStack } from "./shared-infra-stack";
 
 export interface ConnectorStackProps extends StackProps {
-  readonly connectorConfig: ConnectorConfig;
+  readonly connector: ConnectorYaml;
+  readonly deployment: DeploymentYaml;
   readonly sharedInfra: SharedInfraStack;
-  readonly sharedInfraConfig: SharedInfraConfig;
   readonly priority: number;
 }
 
@@ -45,26 +52,34 @@ export class ConnectorStack extends Stack {
   constructor(scope: Construct, id: string, props: ConnectorStackProps) {
     super(scope, id, props);
 
-    const config = props.connectorConfig;
-    const infra = props.sharedInfra;
-    const infraConfig = props.sharedInfraConfig;
-    const connectorId = config.connectorId;
-    const profile = config.profile ?? infraConfig.profile;
+    const { connector, deployment, sharedInfra: infra } = props;
+    const connectorId = connector.connectorId;
+    const profile = connector.profile ?? deployment.profile;
+    const removalPolicy = toRemovalPolicy(connector.edcStateRemovalPolicy);
+
+    // edcIam is populated by portal/provision.ts before synth. It is absent
+    // only during a bare synth of the config templates (bootstrap deploy),
+    // where empty env vars are acceptable.
+    const edcIamEnvVars = connector.edcIam
+      ? toEdcIamEnvVars(connector.edcIam)
+      : {};
+
+    const cpPorts = CONTROL_PLANE_PORT_MAPPING_DEFAULT;
+    const dpPorts = DATA_PLANE_PORT_MAPPING_DEFAULT;
 
     // Per-connector DDB table (single-table design)
     const ddb = new EdcDdb(this, "EdcDdb", {
-      encryptionKey: undefined,
-      removalPolicy: config.edcStateRemovalPolicy,
+      removalPolicy,
       tableName: connectorId,
     });
 
     // Per-connector S3 bucket
     const s3Bucket = new Bucket(this, "DataPlaneBucket", {
-      autoDeleteObjects: config.edcStateRemovalPolicy === RemovalPolicy.DESTROY,
+      autoDeleteObjects: removalPolicy === RemovalPolicy.DESTROY,
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
       encryption: BucketEncryption.S3_MANAGED,
       enforceSSL: true,
-      removalPolicy: config.edcStateRemovalPolicy,
+      removalPolicy,
     });
 
     // Per-connector secrets
@@ -80,57 +95,22 @@ export class ConnectorStack extends Stack {
     });
 
     // ALB target groups and listener rules — one per EDC port
-    const cpPorts = infraConfig.controlPlanePortMapping;
-    const dpPorts = infraConfig.dataPlanePortMapping;
-
-    const portConfigs: {
-      name: string;
-      port: number;
-      healthPort: number;
-      plane: "cp" | "dp";
-    }[] = [
-      {
-        name: "CpDefault",
-        port: cpPorts.default,
-        healthPort: cpPorts.default,
-        plane: "cp",
-      },
+    const portConfigs: { name: string; port: number; healthPort: number }[] = [
+      { name: "CpDefault", port: cpPorts.default, healthPort: cpPorts.default },
       {
         name: "CpManagement",
         port: cpPorts.management,
         healthPort: cpPorts.default,
-        plane: "cp",
       },
       {
         name: "CpProtocol",
         port: cpPorts.protocol,
         healthPort: cpPorts.default,
-        plane: "cp",
       },
-      {
-        name: "CpControl",
-        port: cpPorts.control,
-        healthPort: cpPorts.default,
-        plane: "cp",
-      },
-      {
-        name: "DpDefault",
-        port: dpPorts.default,
-        healthPort: dpPorts.default,
-        plane: "dp",
-      },
-      {
-        name: "DpPublic",
-        port: dpPorts.public,
-        healthPort: dpPorts.default,
-        plane: "dp",
-      },
-      {
-        name: "DpControl",
-        port: dpPorts.control,
-        healthPort: dpPorts.default,
-        plane: "dp",
-      },
+      { name: "CpControl", port: cpPorts.control, healthPort: cpPorts.default },
+      { name: "DpDefault", port: dpPorts.default, healthPort: dpPorts.default },
+      { name: "DpPublic", port: dpPorts.public, healthPort: dpPorts.default },
+      { name: "DpControl", port: dpPorts.control, healthPort: dpPorts.default },
     ];
 
     const targetGroups: { [port: number]: ApplicationTargetGroup } = {};
@@ -141,10 +121,7 @@ export class ConnectorStack extends Stack {
         protocol: ApplicationProtocol.HTTP,
         targetType: TargetType.IP,
         vpc: infra.vpc,
-        healthCheck: {
-          path: "/api/check/health",
-          port: `${pc.healthPort}`,
-        },
+        healthCheck: { path: "/api/check/health", port: `${pc.healthPort}` },
       });
       targetGroups[pc.port] = tg;
 
@@ -222,29 +199,24 @@ export class ConnectorStack extends Stack {
     ];
 
     // DSP callback and data plane public URL include connectorId
-    const dspCallbackAddress = `${infra.dspUrl}${connectorId}`;
-    const dataPlanePublicUrl = `${infra.dataPlaneUrl}${connectorId}/`;
-
     const albOutputs = {
       dnsName: infra.albDnsName,
       securityGroupId: infra.albSecurityGroupId,
       targetGroups,
     };
 
-    // ECS services
     const controlPlane = new EdcControlPlane(this, "ControlPlane", {
       albOutputs,
       cluster: infra.ecsCluster,
       connectorId,
-      cpu: config.controlPlaneCpu,
+      cpu: connector.controlPlaneCpu,
       ddbTableName: ddb.table.tableName,
-      dspCallbackAddress,
-      edcIamEnvVars: config.edcIam,
+      dspCallbackAddress: `${infra.dspUrl}${connectorId}`,
+      edcIamEnvVars,
       image: ContainerImage.fromDockerImageAsset(infra.controlPlaneImage),
-      memoryLimitMiB: config.controlPlaneMemoryLimitMiB,
+      memoryLimitMiB: connector.controlPlaneMemoryLimitMiB,
       secretPrefix,
-      stateMachineIterationMillis: config.stateMachineIterationMillis,
-      portMapping: infraConfig.controlPlanePortMapping,
+      stateMachineIterationMillis: connector.stateMachineIterationMillis,
       profile,
       taskRolePolicyStatements: policyStatements,
       vpc: infra.vpc,
@@ -252,19 +224,17 @@ export class ConnectorStack extends Stack {
 
     const dataPlane = new EdcDataPlane(this, "DataPlane", {
       albOutputs,
-      apiPublicUrl: dataPlanePublicUrl,
+      apiPublicUrl: `${infra.dataPlaneUrl}${connectorId}/`,
       cluster: infra.ecsCluster,
       connectorId,
-      controlPlanePortMapping: infraConfig.controlPlanePortMapping,
-      cpu: config.dataPlaneCpu,
-      dataPlanePortMapping: infraConfig.dataPlanePortMapping,
+      cpu: connector.dataPlaneCpu,
       ddbTableName: ddb.table.tableName,
-      edcIamEnvVars: config.edcIam,
+      edcIamEnvVars,
       image: ContainerImage.fromDockerImageAsset(infra.dataPlaneImage),
-      memoryLimitMiB: config.dataPlaneMemoryLimitMiB,
+      memoryLimitMiB: connector.dataPlaneMemoryLimitMiB,
       profile,
       secretPrefix,
-      stateMachineIterationMillis: config.stateMachineIterationMillis,
+      stateMachineIterationMillis: connector.stateMachineIterationMillis,
       taskRolePolicyStatements: policyStatements,
       vpc: infra.vpc,
     });

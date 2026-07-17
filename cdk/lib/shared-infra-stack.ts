@@ -28,12 +28,16 @@ import { Cluster, ContainerInsights, ICluster } from "aws-cdk-lib/aws-ecs";
 import { DockerImageAsset, Platform } from "aws-cdk-lib/aws-ecr-assets";
 import { VpcLink } from "aws-cdk-lib/aws-apigatewayv2";
 
-import { SharedInfraConfig } from "./config/environments";
+import { DeploymentYaml, toPrincipals } from "./config/config";
+import {
+  CONTROL_PLANE_PORT_MAPPING_DEFAULT,
+  DATA_PLANE_PORT_MAPPING_DEFAULT,
+} from "./config/port-mappings";
 import { EdcApi } from "./constructs/edc-api";
 import { EdcSecretCleanup } from "./constructs/edc-secret-cleanup";
 
 export interface SharedInfraStackProps extends StackProps {
-  readonly config: SharedInfraConfig;
+  readonly config: DeploymentYaml;
 }
 
 export class SharedInfraStack extends Stack {
@@ -53,6 +57,8 @@ export class SharedInfraStack extends Stack {
     super(scope, id, props);
 
     const config = props.config;
+    const cpPorts = CONTROL_PLANE_PORT_MAPPING_DEFAULT;
+    const dpPorts = DATA_PLANE_PORT_MAPPING_DEFAULT;
 
     // VPC — ALB requires minimum 2 AZs; use single NAT in dev to save cost
     this.vpc = new Vpc(this, "Vpc", {
@@ -92,11 +98,7 @@ export class SharedInfraStack extends Stack {
       vpc: this.vpc,
     });
 
-    // Allow egress to all EDC ports
-    const allPorts = [
-      ...Object.values(config.controlPlanePortMapping),
-      ...Object.values(config.dataPlanePortMapping),
-    ];
+    const allPorts = [...Object.values(cpPorts), ...Object.values(dpPorts)];
     new Set(allPorts).forEach((port) =>
       albSg.addEgressRule(Peer.ipv4(this.vpc.vpcCidrBlock), Port.tcp(port)),
     );
@@ -151,12 +153,14 @@ export class SharedInfraStack extends Stack {
     const api = new EdcApi(this, "EdcApi", {
       albArn: this.albArn,
       certificate,
-      controlPlanePortMapping: config.controlPlanePortMapping,
-      dataPlanePortMapping: config.dataPlanePortMapping,
+      controlPlanePortMapping: cpPorts,
+      dataPlanePortMapping: dpPorts,
       hostedZone,
       loadBalancerAddress: this.albDnsName,
-      managementApiPrincipals: config.managementApiPrincipals,
-      observabilityApiPrincipals: config.observabilityApiPrincipals,
+      managementApiPrincipals: toPrincipals(config.managementApiPrincipals),
+      observabilityApiPrincipals: toPrincipals(
+        config.observabilityApiPrincipals,
+      ),
       profile: config.profile,
       vpcLinkId: this.vpcLinkId,
     });
