@@ -7,7 +7,7 @@
 # OAuth secret, and registers the connector for discovery.
 
 connectorId: example
-# profile: development           # Optional override (defaults to deployment.yaml profile)
+profile: production # Optional override (defaults to deployment.yaml profile)
 controlPlaneCpu: 256
 controlPlaneMemoryLimitMiB: 1024
 dataPlaneCpu: 256

@@ -2,12 +2,12 @@
 
 This guide walks through retrieving the identity values *Dataspace Connector on AWS* needs from the Cofinity-X Portal [Beta](https://portal.beta.cofinity-x.com/) or [Production](https://myportal.cofinity-x.com/).
 
-With portal integration you no longer copy per-connector OAuth credentials by hand. You gather two things here:
+You gather two things here:
 
-1. **Your organization's identity values** — entered once in the `portal.identity` section of [`deployment.yaml`](../README.md#deploymentyaml). They are the same for every connector.
-2. **A technical user per connector** — created in the portal and referenced from [`connectors/connector-<id>.yaml`](../README.md#connectorsconnector-idyaml) by its **service account ID** (`edcTechnicalUserId`).
+1. **Your organization's identity values**, entered once in the `portal.identity` section of [`deployment.yaml`](../README.md#deploymentyaml). They are the same for every connector.
+2. **A technical user per connector**, created in the portal and referenced from [`connectors/connector-<id>.yaml`](../README.md#connectorsconnector-idyaml) by its **service account ID** (`edcTechnicalUserId`).
 
-At deploy time the pipeline reads each technical user's OAuth client ID and secret from the portal, assembles the connector's EDC identity, stores the secret in AWS Secrets Manager, and registers the connector for discovery — so you never handle a client secret directly.
+At deploy time the pipeline reads each technical user's OAuth client ID and secret from the portal, assembles the connector's EDC identity, stores the secret in AWS Secrets Manager, and registers the connector for discovery.
 
 ## Prerequisites
 
@@ -38,20 +38,17 @@ Technical user creation takes a couple of minutes to complete.
 
 ## Step 3: Copy the Technical User's Service Account ID
 
-Once the technical user is active, open its details page. The value you need is its **service account ID** — the identifier *Dataspace Connector on AWS* uses to look the user up in the portal at deploy time.
+Once the technical user is active, open its details page. Under **Technical User Details**, copy the value of the **ID** field. This is the service account ID that *Dataspace Connector on AWS* uses to look the user up in the portal at deploy time.
 
-![Technical User Details](../img/obtaining-edc-identity-credentials-3.png)
+![Technical User Details, the ID field](../img/obtaining-edc-identity-credentials-3.png)
 
-Copy the service account ID into the `edcTechnicalUserId` field of your `connectors/connector-<id>.yaml`:
+Set it as the `edcTechnicalUserId` in your `connectors/connector-<id>.yaml`:
 
 ```yaml
 edcTechnicalUserId: "00000000-0000-0000-0000-000000000000"
 ```
 
-You do **not** copy the Client ID or Secret. At deploy time the pipeline reads them from the portal, assembles the connector's EDC identity, and writes the OAuth client secret to AWS Secrets Manager for you.
-
-> [!WARNING]
-> **Pre-publish check — not yet verified against the portal UI.** Confirm exactly where the service account ID appears on the Technical User Details page (a labeled field on this screen, or only in the page URL) and update this step — and the screenshot if needed — before publishing.
+You do not copy the Client ID or Secret. At deploy time the pipeline reads them from the portal, assembles the connector's EDC identity, and writes the OAuth client secret to AWS Secrets Manager.
 
 ## Step 4: Navigate to Connector Registration
 
@@ -69,7 +66,7 @@ On the Connector Registration page, click the **small arrow icon (→)** on the 
 
 The "Configure Your Connector" dialog displays your organization's identity values. These are the same for every connector, so you enter them **once** in the `portal.identity` section of [`deployment.yaml`](../README.md#deploymentyaml).
 
-![Configure Your Connector — EDC identity values](../img/obtaining-edc-identity-credentials-6.png)
+![Configure Your Connector dialog with EDC identity values](../img/obtaining-edc-identity-credentials-6.png)
 
 ### Field Mapping
 
@@ -83,7 +80,7 @@ The "Configure Your Connector" dialog displays your organization's identity valu
 | `DID Resolver` | `didResolver` | BPN/DID Resolution Service (BDRS) URL |
 
 > [!NOTE]
-> The dialog also shows `dcp.sts.oauth.client.id` and `dcp.sts.oauth.client.secret_alias`. You do **not** copy these — the OAuth client ID and secret belong to each connector's technical user and are read automatically by the pipeline (see Step 3).
+> The dialog also shows `dcp.sts.oauth.client.id` and `dcp.sts.oauth.client.secret_alias`. You do **not** copy these. The OAuth client ID and secret belong to each connector's technical user and are read automatically by the pipeline (see Step 3).
 
 ## See Also
 
