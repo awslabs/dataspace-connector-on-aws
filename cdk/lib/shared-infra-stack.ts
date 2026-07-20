@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { resolve } from "path";
-import { CfnOutput, Stack, StackProps } from "aws-cdk-lib";
+import { CfnOutput, IgnoreMode, Stack, StackProps } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import { Certificate } from "aws-cdk-lib/aws-certificatemanager";
 import { HostedZone } from "aws-cdk-lib/aws-route53";
@@ -81,14 +81,17 @@ export class SharedInfraStack extends Stack {
       vpc: this.vpc,
     });
 
-    // Container images
+    // ignoreMode DOCKER applies the .dockerignore to the asset hash (not just the
+    // build), so the hash stays stable when the jar is unchanged.
     this.controlPlaneImage = new DockerImageAsset(this, "ControlPlaneImage", {
       directory: resolve(__dirname, "../../edc/control-plane"),
       platform: Platform.LINUX_ARM64,
+      ignoreMode: IgnoreMode.DOCKER,
     });
     this.dataPlaneImage = new DockerImageAsset(this, "DataPlaneImage", {
       directory: resolve(__dirname, "../../edc/data-plane"),
       platform: Platform.LINUX_ARM64,
+      ignoreMode: IgnoreMode.DOCKER,
     });
 
     // ALB

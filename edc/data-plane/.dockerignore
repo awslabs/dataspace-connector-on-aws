@@ -1,0 +1,7 @@
+# Trim the build context to the jar the Dockerfile copies, so the CDK
+# DockerImageAsset hash stays stable across runs (paired with reproducible jars).
+.gradle/
+bin/
+src/
+build/*
+!build/libs
