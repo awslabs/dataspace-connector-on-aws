@@ -12,6 +12,8 @@ controlPlaneCpu: 256
 controlPlaneMemoryLimitMiB: 1024
 dataPlaneCpu: 256
 dataPlaneMemoryLimitMiB: 512
-stateMachineIterationMillis: "10000"
+# State machine iteration intervals in milliseconds (both optional; defaults shown).
+interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-flow
+backgroundStateMachineIterationMillis: "60000" # policy monitor + data-plane selector
 edcStateRemovalPolicy: DESTROY # DESTROY or RETAIN
 edcTechnicalUserId: "00000000-0000-0000-0000-000000000000"

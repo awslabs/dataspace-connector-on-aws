@@ -3,10 +3,10 @@
 
 package software.amazon.edc.extensions.common.ddb.utility
 
+import org.eclipse.edc.spi.query.QuerySpec
 import software.amazon.awssdk.enhanced.dynamodb.Key
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryConditional
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryEnhancedRequest
-import org.eclipse.edc.spi.query.QuerySpec
 
 fun keyFromId(id: String): Key = Key.builder().partitionValue(id).build()
 
@@ -43,9 +43,3 @@ fun ddbReadLimit(querySpec: QuerySpec): Int =
     } else {
         Int.MAX_VALUE
     }
-
-/** Build a GSI state partition key: entityType#state */
-fun gsiStatePk(
-    entityType: String,
-    state: Int,
-): String = "$entityType#$state"

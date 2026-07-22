@@ -46,7 +46,7 @@ export interface EdcDataPlaneProps {
   readonly memoryLimitMiB: number;
   readonly profile: DeploymentProfile;
   readonly secretPrefix: string;
-  readonly stateMachineIterationMillis: string;
+  readonly dataPlaneStateMachineIterationMillis: string;
   readonly taskRolePolicyStatements: PolicyStatement[];
   readonly vpc: IVpc;
 }
@@ -90,10 +90,14 @@ export class EdcDataPlane extends Construct {
     taskDefinition.addContainer("DataPlaneContainer", {
       containerName: containerName,
       environment: {
+        // Point the S3 extension's static-credential probe at the connector's own
+        // (nonexistent) secret namespace so it resolves not-found and uses the task role.
+        "edc.aws.access.key": `${props.secretPrefix}edc.aws.access.key`,
+        "edc.aws.secret.access.key": `${props.secretPrefix}edc.aws.secret.access.key`,
         "edc.control.endpoint": `http://${props.albOutputs.dnsName}:${dataPlanePortMapping.control}/${props.connectorId}/api/control`,
         "edc.dataplane.api.public.baseurl": props.apiPublicUrl,
         "edc.dataplane.state-machine.iteration-wait-millis":
-          props.stateMachineIterationMillis,
+          props.dataPlaneStateMachineIterationMillis,
         "edc.ddb.table.name": props.ddbTableName,
         "edc.dpf.selector.url": `http://${props.albOutputs.dnsName}:${controlPlanePortMapping.control}/${props.connectorId}/api/control/v1/dataplanes`,
         "edc.hostname": props.albOutputs.dnsName,

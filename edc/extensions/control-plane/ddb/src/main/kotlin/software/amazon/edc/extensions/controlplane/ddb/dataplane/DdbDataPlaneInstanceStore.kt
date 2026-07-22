@@ -10,13 +10,14 @@ import org.eclipse.edc.spi.query.SortOrder
 import org.eclipse.edc.spi.result.StoreResult
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.edc.extensions.common.ddb.EntityType
+import software.amazon.edc.extensions.common.ddb.STATE_INDEX_CACHE_TTL_MILLIS
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
+import software.amazon.edc.extensions.common.ddb.utility.IterationCache
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
-import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
 import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
 import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
@@ -39,6 +40,7 @@ class DdbDataPlaneInstanceStore(
     ),
     DataPlaneInstanceStore {
     private val stateIndex = table.index(DataPlaneInstance.GSI_STATE)
+    private val stateCache = IterationCache<DataPlaneInstance>(STATE_INDEX_CACHE_TTL_MILLIS)
 
     override fun findById(id: String): EdcDataPlaneInstance? = getDataPlaneInstance(id)?.toEdcDataPlaneInstance()
 
@@ -55,16 +57,15 @@ class DdbDataPlaneInstanceStore(
                 .limit(max)
                 .build()
         val stateValues = criteria.extractStateValues()
+        val indexed =
+            stateCache.getOrLoad {
+                stateIndex.query(queryRequestFromId(EntityType.DATA_PLANE_INSTANCE)).flatMap { it.items() }
+            }
         val items =
             if (stateValues != null) {
-                stateValues
-                    .flatMap {
-                        stateIndex.query(queryRequestFromId(gsiStatePk(EntityType.DATA_PLANE_INSTANCE, it))).flatMap { page ->
-                            page.items()
-                        }
-                    }.asSequence()
+                indexed.asSequence().filter { it.state in stateValues }
             } else {
-                table.query(queryRequestFromPk(EntityType.DATA_PLANE_INSTANCE)).flatMap { it.items() }.asSequence()
+                indexed.asSequence()
             }
         return items
             .filterNot { hasActiveLease(it) }
@@ -101,11 +102,15 @@ class DdbDataPlaneInstanceStore(
                 breakLease(dataPlaneInstance.id)
             }
         }
+        stateCache.invalidate()
     }
 
-    override fun deleteById(id: String): StoreResult<EdcDataPlaneInstance> =
-        table.deleteItem(keyFromPkSk(EntityType.DATA_PLANE_INSTANCE, id))?.let { StoreResult.success(it.toEdcDataPlaneInstance()) }
+    override fun deleteById(id: String): StoreResult<EdcDataPlaneInstance> {
+        val deleted = table.deleteItem(keyFromPkSk(EntityType.DATA_PLANE_INSTANCE, id))
+        stateCache.invalidate()
+        return deleted?.let { StoreResult.success(it.toEdcDataPlaneInstance()) }
             ?: StoreResult.notFound("DataPlaneInstance $id not found!")
+    }
 
     override fun getAll(): Stream<EdcDataPlaneInstance> =
         table
@@ -119,6 +124,7 @@ class DdbDataPlaneInstanceStore(
 
     override fun updateLeaseId(leasable: Leasable) {
         table.updateItem(leasable as DataPlaneInstance)
+        stateCache.invalidate()
     }
 
     private fun getDataPlaneInstance(id: String): DataPlaneInstance? = table.getItem(keyFromPkSk(EntityType.DATA_PLANE_INSTANCE, id))

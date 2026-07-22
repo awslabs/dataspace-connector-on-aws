@@ -77,7 +77,10 @@ export interface ConnectorYaml {
   readonly controlPlaneMemoryLimitMiB: number;
   readonly dataPlaneCpu: number;
   readonly dataPlaneMemoryLimitMiB: number;
-  readonly stateMachineIterationMillis: string;
+  /** Iteration interval (ms) for the negotiation, transfer, and data-flow state machines. Default "10000". */
+  readonly interactiveStateMachineIterationMillis?: string;
+  /** Iteration interval (ms) for the policy monitor and data-plane selector state machines. Default "60000". */
+  readonly backgroundStateMachineIterationMillis?: string;
   readonly edcStateRemovalPolicy: "DESTROY" | "RETAIN";
   /** Cofinity-X portal technical user (service account) ID — authored by the user. */
   readonly edcTechnicalUserId: string;
@@ -232,7 +235,6 @@ function validateConnector(data: ConnectorYaml, fileName: string): void {
     "controlPlaneMemoryLimitMiB",
     "dataPlaneCpu",
     "dataPlaneMemoryLimitMiB",
-    "stateMachineIterationMillis",
     "edcStateRemovalPolicy",
     "edcTechnicalUserId",
   ];

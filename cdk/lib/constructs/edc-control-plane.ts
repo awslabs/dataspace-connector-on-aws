@@ -41,7 +41,8 @@ export interface EdcControlPlaneProps {
   readonly image: ContainerImage;
   readonly memoryLimitMiB: number;
   readonly secretPrefix: string;
-  readonly stateMachineIterationMillis: string;
+  readonly interactiveStateMachineIterationMillis: string;
+  readonly backgroundStateMachineIterationMillis: string;
   readonly profile: DeploymentProfile;
   readonly taskRolePolicyStatements: PolicyStatement[];
   readonly vpc: IVpc;
@@ -85,19 +86,25 @@ export class EdcControlPlane extends Construct {
     taskDefinition.addContainer("ControlPlaneContainer", {
       containerName: containerName,
       environment: {
+        // Point the S3 extension's static-credential probe at the connector's own
+        // (nonexistent) secret namespace so it resolves not-found and uses the task role.
+        "edc.aws.access.key": `${props.secretPrefix}edc.aws.access.key`,
+        "edc.aws.secret.access.key": `${props.secretPrefix}edc.aws.secret.access.key`,
         "edc.ddb.table.name": props.ddbTableName,
         "edc.dsp.callback.address": props.dspCallbackAddress,
         "edc.hostname": props.albOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",
         "edc.iam.sts.oauth.client.secret.alias": `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`,
         "edc.negotiation.consumer.state-machine.iteration-wait-millis":
-          props.stateMachineIterationMillis,
+          props.interactiveStateMachineIterationMillis,
         "edc.negotiation.provider.state-machine.iteration-wait-millis":
-          props.stateMachineIterationMillis,
-        "edc.policy.monitor.state-machine.iteration-wait-millis":
-          props.stateMachineIterationMillis,
+          props.interactiveStateMachineIterationMillis,
         "edc.transfer.state-machine.iteration-wait-millis":
-          props.stateMachineIterationMillis,
+          props.interactiveStateMachineIterationMillis,
+        "edc.policy.monitor.state-machine.iteration-wait-millis":
+          props.backgroundStateMachineIterationMillis,
+        "edc.data.plane.selector.state-machine.iteration-wait-millis":
+          props.backgroundStateMachineIterationMillis,
         "edc.runtime.id": props.connectorId,
         "edc.vault.aws.region": Stack.of(this).region,
 

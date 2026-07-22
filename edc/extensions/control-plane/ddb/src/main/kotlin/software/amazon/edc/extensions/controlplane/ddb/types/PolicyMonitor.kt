@@ -12,7 +12,6 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecon
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.types.Leasable
-import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 
 @DynamoDbBean
 data class PolicyMonitor(
@@ -85,7 +84,8 @@ fun PolicyMonitorEntry.toDdbPolicyMonitor(leaseId: String? = null): PolicyMonito
         contractId = contractId,
         createdAt = createdAt,
         errorDetail = errorDetail,
-        gsiStatePk = gsiStatePk(EntityType.POLICY_MONITOR, state),
+        // EDC exposes no isFinal for this entity, so index all entries.
+        gsiStatePk = EntityType.POLICY_MONITOR,
         leaseId = leaseId,
         state = state,
         stateCount = stateCount,

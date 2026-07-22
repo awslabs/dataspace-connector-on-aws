@@ -4,6 +4,7 @@
 package software.amazon.edc.extensions.controlplane.ddb.types
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.eclipse.edc.connector.controlplane.contract.spi.types.negotiation.ContractNegotiationStates
 import org.eclipse.edc.connector.controlplane.contract.spi.types.offer.ContractOffer
 import org.eclipse.edc.spi.entity.ProtocolMessages
 import org.eclipse.edc.spi.types.domain.callback.CallbackAddress
@@ -19,7 +20,6 @@ import software.amazon.edc.extensions.common.ddb.ListOfMapsConverter
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.utility.convertValueToMapStringAny
-import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import org.eclipse.edc.connector.controlplane.contract.spi.types.negotiation.ContractNegotiation as EdcContractNegotiation
 
 @DynamoDbBean
@@ -147,7 +147,7 @@ fun EdcContractNegotiation.toDdbContractNegotiation(
         counterPartyId = counterPartyId,
         createdAt = createdAt,
         errorDetail = errorDetail,
-        gsiStatePk = gsiStatePk(EntityType.CONTRACT_NEGOTIATION, state),
+        gsiStatePk = if (ContractNegotiationStates.isFinal(state)) null else EntityType.CONTRACT_NEGOTIATION,
         leaseId = leaseId,
         pending = isPending,
         protocol = protocol,

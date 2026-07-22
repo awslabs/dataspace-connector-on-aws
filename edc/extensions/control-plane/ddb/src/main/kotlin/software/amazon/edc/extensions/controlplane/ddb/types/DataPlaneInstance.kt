@@ -13,7 +13,6 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortK
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
 import software.amazon.edc.extensions.common.ddb.types.Leasable
-import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import java.time.Instant
 import org.eclipse.edc.connector.dataplane.selector.spi.instance.DataPlaneInstance as EdcDataPlaneInstance
 
@@ -107,7 +106,8 @@ fun EdcDataPlaneInstance.toDdbDataPlaneInstance(leaseId: String? = null): DataPl
         allowedTransferTypes = allowedTransferTypes?.let { if (it.isEmpty()) null else it },
         createdAt = createdAt,
         errorDetail = errorDetail,
-        gsiStatePk = gsiStatePk(EntityType.DATA_PLANE_INSTANCE, state),
+        // No terminal state, so always indexed.
+        gsiStatePk = EntityType.DATA_PLANE_INSTANCE,
         lastActive = lastActive,
         pending = isPending,
         properties = properties,
