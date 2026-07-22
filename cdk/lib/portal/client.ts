@@ -243,13 +243,13 @@ export class SecretsHelper {
     );
 
     if (!result.SecretString) {
-      throw new Error(`Admin secret ${secretId} has no value`);
+      throw new Error("Admin secret has no value");
     }
 
     const parsed = JSON.parse(result.SecretString);
     if (!parsed.clientId || !parsed.clientSecret) {
       throw new Error(
-        `Admin secret ${secretId} must contain "clientId" and "clientSecret" fields`,
+        'Admin secret must contain "clientId" and "clientSecret" fields',
       );
     }
 

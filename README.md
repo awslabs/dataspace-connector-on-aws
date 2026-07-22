@@ -21,8 +21,6 @@ To participate in secure, sovereign data sharing through the Catena-X data space
 
 ### Prerequisites
 
-* Java 17 (Amazon Corretto recommended)
-* Docker or [Finch](https://github.com/runfinch/finch) container runtime
 * Node.js 24+
 * AWS CDK CLI (`npm install -g aws-cdk`)
 * AWS CLI configured with credentials for your target account
@@ -65,7 +63,7 @@ All subsequent changes flow through Git pushes to the config repository.
 
 This project includes tooling for AI-assisted deployment and operation:
 
-* **[MCP Server](mcp/)**: A Model Context Protocol server with 18 tools for interacting with the EDC Management API. Create assets, negotiate contracts, transfer data, and troubleshoot, all through natural language.
+* **[MCP Server](mcp/)**: A Model Context Protocol server with 19 tools for interacting with the EDC Management API. Create assets, negotiate contracts, transfer data, and troubleshoot, all through natural language.
 
 * **[Kiro Power](kiro-power/)**: Guided workflows for [Kiro](https://kiro.dev) that walk you through deploying your connector and validating end-to-end data exchange, including S3 loopback testing.
 
@@ -139,9 +137,6 @@ edcStateRemovalPolicy: DESTROY       # DESTROY or RETAIN
 edcTechnicalUserId: "<portal-technical-user-service-account-id>"
 ```
 
-> [!IMPORTANT]
-> The Cofinity-X Portal does not currently expose an API to create technical users; only human portal users (IT Admin / Company Admin) can. Create the per-connector Identity Wallet Management technical user manually in the portal, then reference its service account ID here. The pipeline automates everything else.
-
 ### Custom Domain
 
 When all three optional fields (`certificateArn`, `domainName`, `hostedZoneId`) are provided in `deployment.yaml`, the stack creates an API Gateway custom domain with TLS 1.2, a Route 53 A record, and maps EDC APIs as base paths (`/status`, `/management`, `/protocol`, `/data`). The default `execute-api` endpoints are disabled. The ACM certificate must be in `us-east-1` regardless of stack region (API Gateway requirement for edge-optimized endpoints).
@@ -211,7 +206,6 @@ Baseline infrastructure cost drops significantly at scale because VPC, NAT Gatew
 * [AWS-specific service integrations for EDC](https://github.com/eclipse-edc/Technology-Aws)
 * [AWS joins Catena-X](https://aws.amazon.com/blogs/industries/aws-joins-catena-x/)
 * [Rapidly experimenting with Catena-X data space technology on AWS](https://aws.amazon.com/blogs/industries/rapidly-experimenting-with-catena-x-data-space-technology-on-aws/)
-* [Eclipse Tractus-X EDC](https://github.com/eclipse-tractusx/tractusx-edc)
 
 ## EDC Extensions and Service Options
 
