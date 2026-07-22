@@ -10,9 +10,13 @@ author: "AWS"
 
 ## Overview
 
-This power helps you deploy and operate a production-ready Dataspace Connector for Catena-X on AWS. It combines an AWS CDK deployment blueprint with 15 MCP tools for interacting with the Eclipse Dataspace Components (EDC) Management API.
+This power helps you deploy and operate a production-ready Dataspace Connector for Catena-X on AWS. It combines an AWS CDK deployment blueprint with 19 MCP tools for interacting with the Eclipse Dataspace Components (EDC) Management API.
 
 The connector uses Tractus-X EDC with AWS-native integrations: Amazon DynamoDB for control plane persistence, AWS Secrets Manager for credentials, Amazon S3 for data transfer, and Amazon API Gateway with IAM authorization for secure API access.
+
+The project supports two deployment modes:
+- **Local deploy** — Direct `cdk deploy` for single-connector setups (ideal for getting started)
+- **Pipeline deploy** — CI/CD via CodePipeline with a config repository for multi-connector production environments
 
 With this power, you can go from zero to a fully deployed connector with validated end-to-end data exchange in minutes.
 
@@ -24,13 +28,16 @@ With this power, you can go from zero to a fully deployed connector with validat
 
 ## Available Steering Files
 
-- **deploy-connector** — Step-by-step guided workflow to configure, deploy, and validate your connector on AWS
+- **deploy-connector** — Step-by-step guided workflow to configure, deploy, and validate your connector on AWS (supports both local single-connector deploy and pipeline-based multi-connector deploy)
 - **validate-data-exchange** — End-to-end validation workflow to create data offerings, negotiate contracts, transfer data, and troubleshoot issues
 - **prototype-use-case** — Research and compliance analysis workflow for a specific Catena-X use case. Loads KIT documentation, all applicable standards (with recursive normative reference resolution), and semantic data models. Produces a full compliance brief with every MUST/SHOULD/MAY requirement extracted verbatim, JSON schemas, example payloads, and EDC configuration requirements.
 
 ## Available MCP Tools
 
-This power provides 18 tools covering the full EDC Management API workflow:
+This power provides 19 tools covering the full EDC Management API workflow:
+
+### Discovery tools (multi-connector deployments)
+- `list_connectors` — Discover all deployed connector IDs from CloudFormation (requires `EDC_MULTI_CONNECTOR=true`)
 
 ### Provider-side tools (create data offerings)
 - `create_asset` — Create a new asset with data address
@@ -84,11 +91,12 @@ Your organization must be onboarded to the Catena-X data space. You will need th
 
 To deploy your connector, activate the **deploy-connector** steering file which walks you through:
 1. Verifying prerequisites
-2. Configuring your connector with Catena-X membership details
-3. Setting AWS resource configuration (IAM principals, region)
-4. Running the deployment
-5. Post-deployment setup (OAuth client secret)
-6. Configuring and validating MCP access
+2. Choosing deployment mode (local single-connector or pipeline multi-connector)
+3. Configuring your connector(s) with Catena-X membership details
+4. Setting AWS resource configuration (IAM principals, region)
+5. Running the deployment
+6. Post-deployment setup (OAuth client secret)
+7. Configuring and validating MCP access
 
 Once deployed, activate the **validate-data-exchange** steering file to validate the full data exchange flow end-to-end — creating offerings, negotiating contracts, transferring data, and verifying the payload reaches the consumer.
 
@@ -257,7 +265,7 @@ create_contract_definition(
 ## Troubleshooting
 
 ### MCP tools return 403 Forbidden
-Your AWS credentials don't have `execute-api:Invoke` permission for the Management API Gateway, or your IAM principal ARN isn't listed in `managementApiPrincipals` in `environments.ts`.
+Your AWS credentials don't have `execute-api:Invoke` permission for the Management API Gateway, or your IAM principal ARN isn't listed in `managementApiPrincipals` in your deployment config (`environments.ts` for local deploy, `deployment.yaml` for pipeline deploy).
 
 ### Contract negotiation returns "Policy not equal to offer"
 You must pass the full policy from the catalog offer (including `permission`, `prohibition`, `obligation` arrays) when calling `initiate_contract_negotiation`. Don't construct a minimal policy stub.
@@ -270,19 +278,23 @@ The MCP server refreshes AWS credentials on every request, so temporary credenti
 
 ## Configuration Reference
 
-### environments.ts — EDC IAM Settings (from Cofinity-X Portal)
+### EDC IAM Settings (from Cofinity-X Portal)
 
-| Field | Description |
-|-------|-------------|
-| `TRUSTED_ISSUER` | Trusted issuer DID (Cofinity-X) |
-| `DCP_STS_OAUTH_TOKEN_URL` | OAuth token endpoint URL |
-| `DCP_STS_OAUTH_CLIENT_ID` | Technical user OAuth client ID |
-| `DCP_STS_DIM_URL` | DIM integration service URL |
-| `PARTICIPANT_ID` | Your organization's BPNL number |
-| `DCP_ID` | Your connector's Decentralized Identifier (DID) |
-| `DID_RESOLVER` | BDRS server URL for DID resolution |
+These settings are configured in `cdk/lib/config/environments.ts` (local deploy) or `connectors/connector-<id>.yaml` in the config repository (pipeline deploy).
 
-### environments.ts — AWS Resource Settings
+| Constant (environments.ts) | YAML Field | EDC Property | Description |
+|-------|------|------|-------------|
+| `TRUSTED_ISSUER` | `trustedIssuer` | `edc.iam.trusted-issuer.issuer-1.id` | Trusted issuer DID (Cofinity-X) |
+| `DCP_STS_OAUTH_TOKEN_URL` | `stsOauthTokenUrl` | `edc.iam.sts.oauth.token.url` | OAuth token endpoint URL |
+| `DCP_STS_OAUTH_CLIENT_ID` | `stsOauthClientId` | `edc.iam.sts.oauth.client.id` | Technical user OAuth client ID |
+| `DCP_STS_DIM_URL` | `stsDimUrl` | `tx.edc.iam.sts.dim.url` | DIM integration service URL |
+| `PARTICIPANT_ID` | `participantId` | `tractusx.edc.participant.bpn` | Your organization's BPNL number |
+| `DCP_ID` | `dcpId` | `edc.iam.issuer.id` | Your connector's Decentralized Identifier (DID) |
+| `DID_RESOLVER` | `didResolver` | `tx.edc.iam.iatp.bdrs.server.url` | BDRS server URL for DID resolution |
+
+### AWS Resource Settings
+
+Configured in `environments.ts` (local) or split between `deployment.yaml` (shared infra) and `connector-<id>.yaml` (per-connector):
 
 | Field | Default | Description |
 |-------|---------|-------------|
@@ -292,7 +304,7 @@ The MCP server refreshes AWS credentials on every request, so temporary credenti
 | `dataPlaneMemoryLimitMiB` | 512 | Data plane memory (MB) |
 | `managementApiPrincipals` | `[]` | IAM ARNs allowed to call Management API |
 | `observabilityApiPrincipals` | `[]` | IAM ARNs allowed to call Observability API |
-| `vpcIpAddresses` | `10.0.10.0/24` | VPC CIDR block |
+| `vpcIpAddresses` | `10.0.0.0/20` | VPC CIDR block |
 | `edcStateRemovalPolicy` | `DESTROY` | DynamoDB table removal policy |
 
 ---
@@ -307,12 +319,16 @@ Before using this power, replace the following placeholders in `mcp.json` with y
   - **How to get it:** After cloning the repository, use the full path to the `mcp/` folder, e.g., `/Users/yourname/Code/dataspace-connector-on-aws/mcp`
 
 - **`PLACEHOLDER_MANAGEMENT_API_URL`**: The EDC Management API endpoint URL from your CDK deployment output.
-  - **How to get it:** After running `deploy.sh`, look for the CDK output key starting with `EdcApiManagementApiEndpoint`. It looks like `https://<api-id>.execute-api.<region>.amazonaws.com/management/`
+  - **How to get it:** After running `deploy-local.sh` or after the pipeline deploys, look for the CDK output key starting with `EdcApiManagementApiEndpoint`. It looks like `https://<api-id>.execute-api.<region>.amazonaws.com/management/`
+  - **Multi-connector mode:** Use the base URL without a connector ID suffix (e.g., `https://xxx.execute-api.region.amazonaws.com/management`). The `connector_id` parameter on each tool call handles routing.
+  - **Single-connector mode:** Append the connector ID (e.g., `https://xxx.execute-api.region.amazonaws.com/management/default`)
 
 - **`PLACEHOLDER_AWS_REGION`**: The AWS region where the connector is deployed.
   - **How to set it:** Use the region you chose during deployment (e.g., `eu-central-1`)
 
 - **`PLACEHOLDER_AWS_PROFILE`**: The AWS CLI profile used for deployment.
   - **How to get it:** Run `echo $AWS_PROFILE` or `aws configure list-profiles` to see available profiles
+
+The `mcp.json` template includes `"EDC_MULTI_CONNECTOR": "true"` by default — this enables `list_connectors()` discovery and requires `connector_id` on all tool calls. For single-connector local deployments, either remove this env var or set it to `"false"`.
 
 Note: The **deploy-connector** steering file automates this configuration — it collects all values during deployment and writes the MCP config automatically.

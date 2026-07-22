@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { resolve } from "path";
-import { CfnOutput, Stack, StackProps } from "aws-cdk-lib";
+import { CfnOutput, IgnoreMode, Stack, StackProps } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import { Certificate } from "aws-cdk-lib/aws-certificatemanager";
 import { HostedZone } from "aws-cdk-lib/aws-route53";
@@ -28,12 +28,16 @@ import { Cluster, ContainerInsights, ICluster } from "aws-cdk-lib/aws-ecs";
 import { DockerImageAsset, Platform } from "aws-cdk-lib/aws-ecr-assets";
 import { VpcLink } from "aws-cdk-lib/aws-apigatewayv2";
 
-import { SharedInfraConfig } from "./config/environments";
+import { DeploymentYaml, toPrincipals } from "./config/config";
+import {
+  CONTROL_PLANE_PORT_MAPPING_DEFAULT,
+  DATA_PLANE_PORT_MAPPING_DEFAULT,
+} from "./config/port-mappings";
 import { EdcApi } from "./constructs/edc-api";
 import { EdcSecretCleanup } from "./constructs/edc-secret-cleanup";
 
 export interface SharedInfraStackProps extends StackProps {
-  readonly config: SharedInfraConfig;
+  readonly config: DeploymentYaml;
 }
 
 export class SharedInfraStack extends Stack {
@@ -53,6 +57,8 @@ export class SharedInfraStack extends Stack {
     super(scope, id, props);
 
     const config = props.config;
+    const cpPorts = CONTROL_PLANE_PORT_MAPPING_DEFAULT;
+    const dpPorts = DATA_PLANE_PORT_MAPPING_DEFAULT;
 
     // VPC — ALB requires minimum 2 AZs; use single NAT in dev to save cost
     this.vpc = new Vpc(this, "Vpc", {
@@ -75,14 +81,17 @@ export class SharedInfraStack extends Stack {
       vpc: this.vpc,
     });
 
-    // Container images
+    // ignoreMode DOCKER applies the .dockerignore to the asset hash (not just the
+    // build), so the hash stays stable when the jar is unchanged.
     this.controlPlaneImage = new DockerImageAsset(this, "ControlPlaneImage", {
       directory: resolve(__dirname, "../../edc/control-plane"),
       platform: Platform.LINUX_ARM64,
+      ignoreMode: IgnoreMode.DOCKER,
     });
     this.dataPlaneImage = new DockerImageAsset(this, "DataPlaneImage", {
       directory: resolve(__dirname, "../../edc/data-plane"),
       platform: Platform.LINUX_ARM64,
+      ignoreMode: IgnoreMode.DOCKER,
     });
 
     // ALB
@@ -92,11 +101,7 @@ export class SharedInfraStack extends Stack {
       vpc: this.vpc,
     });
 
-    // Allow egress to all EDC ports
-    const allPorts = [
-      ...Object.values(config.controlPlanePortMapping),
-      ...Object.values(config.dataPlanePortMapping),
-    ];
+    const allPorts = [...Object.values(cpPorts), ...Object.values(dpPorts)];
     new Set(allPorts).forEach((port) =>
       albSg.addEgressRule(Peer.ipv4(this.vpc.vpcCidrBlock), Port.tcp(port)),
     );
@@ -151,12 +156,14 @@ export class SharedInfraStack extends Stack {
     const api = new EdcApi(this, "EdcApi", {
       albArn: this.albArn,
       certificate,
-      controlPlanePortMapping: config.controlPlanePortMapping,
-      dataPlanePortMapping: config.dataPlanePortMapping,
+      controlPlanePortMapping: cpPorts,
+      dataPlanePortMapping: dpPorts,
       hostedZone,
       loadBalancerAddress: this.albDnsName,
-      managementApiPrincipals: config.managementApiPrincipals,
-      observabilityApiPrincipals: config.observabilityApiPrincipals,
+      managementApiPrincipals: toPrincipals(config.managementApiPrincipals),
+      observabilityApiPrincipals: toPrincipals(
+        config.observabilityApiPrincipals,
+      ),
       profile: config.profile,
       vpcLinkId: this.vpcLinkId,
     });
@@ -171,5 +178,6 @@ export class SharedInfraStack extends Stack {
     new CfnOutput(this, "VpcId", { value: this.vpc.vpcId });
     new CfnOutput(this, "ClusterArn", { value: this.ecsCluster.clusterArn });
     new CfnOutput(this, "AlbDnsName", { value: this.albDnsName });
+    new CfnOutput(this, "DspApiUrl", { value: this.dspUrl });
   }
 }

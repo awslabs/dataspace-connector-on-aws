@@ -7,11 +7,7 @@ import { Construct } from "constructs";
 import { SharedInfraStack } from "./shared-infra-stack";
 import { ConnectorStack } from "./connector-stack";
 
-import {
-  connectorPriority,
-  DeploymentConfig,
-  validateConnectorId,
-} from "./config/environments";
+import { connectorPriority, DeploymentConfig } from "./config/config";
 
 export interface DeploymentStageProps extends StageProps {
   readonly config: DeploymentConfig;
@@ -21,34 +17,30 @@ export class DeploymentStage extends Stage {
   constructor(scope: Construct, id: string, props: DeploymentStageProps) {
     super(scope, id, props);
 
+    const { deployment, connectors } = props.config;
+
     const sharedInfra = new SharedInfraStack(
       this,
       "DataspaceConnectorSharedInfraStack",
-      { config: props.config.sharedInfra },
+      { config: deployment },
     );
 
     const priorities = new Map<number, string>();
 
-    props.config.connectors.forEach((connectorConfig) => {
-      validateConnectorId(connectorConfig.connectorId);
-      const priority = connectorPriority(connectorConfig.connectorId);
+    connectors.forEach((connector) => {
+      const priority = connectorPriority(connector.connectorId);
       const existing = priorities.get(priority);
       if (existing) {
         throw new Error(
-          `Priority collision: connectors "${existing}" and "${connectorConfig.connectorId}" both hash to priority ${priority}. Rename one connector to resolve.`,
+          `Priority collision: connectors "${existing}" and "${connector.connectorId}" both hash to priority ${priority}. Rename one connector to resolve.`,
         );
       }
-      priorities.set(priority, connectorConfig.connectorId);
+      priorities.set(priority, connector.connectorId);
 
       const stack = new ConnectorStack(
         this,
-        `DataspaceConnector-${connectorConfig.connectorId}`,
-        {
-          connectorConfig,
-          sharedInfra,
-          sharedInfraConfig: props.config.sharedInfra,
-          priority,
-        },
+        `DataspaceConnector-${connector.connectorId}`,
+        { connector, deployment, sharedInfra, priority },
       );
       stack.addDependency(sharedInfra);
     });

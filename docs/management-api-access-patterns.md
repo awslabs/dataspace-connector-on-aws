@@ -6,8 +6,8 @@ This guide covers how to configure access to the EDC Management API when deployi
 
 The Management API is deployed behind Amazon API Gateway with IAM authorization (`AWS_IAM`). Callers sign requests with AWS SigV4 using their IAM credentials. API Gateway evaluates two policies:
 
-- **Resource policy** (attached to the API) — controls which principals are allowed to invoke the API
-- **Caller's IAM policy** (attached to the caller's role) — controls which paths and methods the caller can invoke
+- **Resource policy** (attached to the API): controls which principals are allowed to invoke the API
+- **Caller's IAM policy** (attached to the caller's role): controls which paths and methods the caller can invoke
 
 The interaction between these policies depends on whether the caller is in the same account or a different account.
 
@@ -40,11 +40,11 @@ The caller's IAM role needs a policy allowing `execute-api:Invoke`:
 }
 ```
 
-Alternatively, for same-account callers, the role does not need to be listed in `managementApiPrincipals` at all — a scoped IAM policy alone is sufficient.
+Alternatively, for same-account callers, the role does not need to be listed in `managementApiPrincipals` at all; a scoped IAM policy alone is sufficient.
 
 ## Cross-Account Access
 
-When the caller is in a different AWS account, **both** the resource policy **and** the caller's IAM policy must explicitly allow access ([authorization flow reference](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-authorization-flow.html)). No cross-account role assumption (`sts:AssumeRole`) is needed — API Gateway supports direct cross-account invocation via resource policies, similar to S3 bucket policies or Lambda resource policies.
+When the caller is in a different AWS account, **both** the resource policy **and** the caller's IAM policy must explicitly allow access ([authorization flow reference](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-authorization-flow.html)). No cross-account role assumption (`sts:AssumeRole`) is needed. API Gateway supports direct cross-account invocation via resource policies, similar to S3 bucket policies or Lambda resource policies.
 
 ### How It Works
 
@@ -57,14 +57,14 @@ The caller never assumes a role in Account B. The SigV4 signature carries Accoun
 
 ### Setup
 
-**API side (Account B) — `deployment.yaml`:**
+**API side (Account B), `deployment.yaml`:**
 
 ```yaml
 managementApiPrincipals:
   - "arn:aws:iam::111122223333:role/CrossAccountEdcClient"
 ```
 
-**Caller side (Account A) — IAM policy on the calling role:**
+**Caller side (Account A), IAM policy on the calling role:**
 
 ```json
 {
@@ -147,7 +147,7 @@ These per-connector roles do **not** need to be listed in `managementApiPrincipa
 #### Example: Multiple Connectors
 
 ```yaml
-# deployment.yaml — broad admin access
+# deployment.yaml: broad admin access
 managementApiPrincipals:
   - "arn:aws:iam::111122223333:role/Admin"
 ```

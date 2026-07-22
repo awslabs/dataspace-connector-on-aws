@@ -19,4 +19,11 @@ subprojects {
             }
         }
     }
+
+    // Reproducible jars keep the CDK DockerImageAsset hash stable across runs,
+    // so connectors aren't redeployed on config-only changes.
+    tasks.withType<AbstractArchiveTask>().configureEach {
+        isPreserveFileTimestamps = false
+        isReproducibleFileOrder = true
+    }
 }

@@ -18,8 +18,8 @@ import {
 } from "aws-cdk-lib/aws-ecs";
 
 import {
-  ControlPlanePortMapping,
-  DataPlanePortMapping,
+  CONTROL_PLANE_PORT_MAPPING_DEFAULT,
+  DATA_PLANE_PORT_MAPPING_DEFAULT,
 } from "../config/port-mappings";
 
 import { IApplicationTargetGroup } from "aws-cdk-lib/aws-elasticloadbalancingv2";
@@ -30,18 +30,16 @@ export interface AlbOutputs {
   readonly targetGroups: { [port: number]: IApplicationTargetGroup };
 }
 
-import { EDC_SECRETS_MANAGER_ALIASES } from "../config/environments";
+import { EDC_SECRETS_MANAGER_ALIASES } from "../config/config";
 import { EdcFargateService } from "./edc-fargate-service";
-import { DeploymentProfile } from "../config/environments";
+import { DeploymentProfile } from "../config/config";
 
 export interface EdcDataPlaneProps {
   readonly albOutputs: AlbOutputs;
   readonly apiPublicUrl: string;
   readonly cluster: ICluster;
   readonly connectorId: string;
-  readonly controlPlanePortMapping: ControlPlanePortMapping;
   readonly cpu: number;
-  readonly dataPlanePortMapping: DataPlanePortMapping;
   readonly ddbTableName: string;
   readonly edcIamEnvVars: { [key: string]: string };
   readonly image: ContainerImage;
@@ -59,11 +57,14 @@ export class EdcDataPlane extends Construct {
   constructor(scope: Construct, id: string, props: EdcDataPlaneProps) {
     super(scope, id);
 
+    const controlPlanePortMapping = CONTROL_PLANE_PORT_MAPPING_DEFAULT;
+    const dataPlanePortMapping = DATA_PLANE_PORT_MAPPING_DEFAULT;
+
     const securityGroup = new SecurityGroup(this, "DataPlaneSecurityGroup", {
       allowAllOutbound: false,
       vpc: props.vpc,
     });
-    Object.values(props.dataPlanePortMapping).forEach((port) =>
+    Object.values(dataPlanePortMapping).forEach((port) =>
       securityGroup.addIngressRule(
         Peer.securityGroupId(props.albOutputs.securityGroupId),
         Port.tcp(port),
@@ -89,12 +90,12 @@ export class EdcDataPlane extends Construct {
     taskDefinition.addContainer("DataPlaneContainer", {
       containerName: containerName,
       environment: {
-        "edc.control.endpoint": `http://${props.albOutputs.dnsName}:${props.dataPlanePortMapping.control}/${props.connectorId}/api/control`,
+        "edc.control.endpoint": `http://${props.albOutputs.dnsName}:${dataPlanePortMapping.control}/${props.connectorId}/api/control`,
         "edc.dataplane.api.public.baseurl": props.apiPublicUrl,
         "edc.dataplane.state-machine.iteration-wait-millis":
           props.stateMachineIterationMillis,
         "edc.ddb.table.name": props.ddbTableName,
-        "edc.dpf.selector.url": `http://${props.albOutputs.dnsName}:${props.controlPlanePortMapping.control}/${props.connectorId}/api/control/v1/dataplanes`,
+        "edc.dpf.selector.url": `http://${props.albOutputs.dnsName}:${controlPlanePortMapping.control}/${props.connectorId}/api/control/v1/dataplanes`,
         "edc.hostname": props.albOutputs.dnsName,
         "edc.iam.did.web.use.https": "true",
         "edc.iam.sts.oauth.client.secret.alias": `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`,
@@ -109,11 +110,11 @@ export class EdcDataPlane extends Construct {
         ...props.edcIamEnvVars,
         "edc.participant.id": props.edcIamEnvVars["edc.iam.issuer.id"],
 
-        "web.http.port": `${props.dataPlanePortMapping.default}`,
+        "web.http.port": `${dataPlanePortMapping.default}`,
         "web.http.path": "/api",
-        "web.http.public.port": `${props.dataPlanePortMapping.public}`,
+        "web.http.public.port": `${dataPlanePortMapping.public}`,
         "web.http.public.path": "/api/public",
-        "web.http.control.port": `${props.dataPlanePortMapping.control}`,
+        "web.http.control.port": `${dataPlanePortMapping.control}`,
         "web.http.control.path": "/api/control",
 
         JDK_JAVA_OPTIONS: [
@@ -131,7 +132,7 @@ export class EdcDataPlane extends Construct {
         mode: AwsLogDriverMode.NON_BLOCKING,
         streamPrefix: "EdcDataPlane",
       }),
-      portMappings: Object.entries(props.dataPlanePortMapping).map((entry) => {
+      portMappings: Object.entries(dataPlanePortMapping).map((entry) => {
         return {
           name: entry[0],
           containerPort: entry[1],
@@ -143,17 +144,16 @@ export class EdcDataPlane extends Construct {
     const service = new EdcFargateService(this, "DataPlaneFargateService", {
       cluster: props.cluster,
       containerName: containerName,
-      containerPort: props.dataPlanePortMapping.default,
+      containerPort: dataPlanePortMapping.default,
       profile: props.profile,
       securityGroups: [securityGroup],
-      targetGroup:
-        props.albOutputs.targetGroups[props.dataPlanePortMapping.default],
+      targetGroup: props.albOutputs.targetGroups[dataPlanePortMapping.default],
       taskDefinition: taskDefinition,
     });
 
     // Register on all other DP target groups
-    for (const port of Object.values(props.dataPlanePortMapping)) {
-      if (port === props.dataPlanePortMapping.default) continue;
+    for (const port of Object.values(dataPlanePortMapping)) {
+      if (port === dataPlanePortMapping.default) continue;
       const tg = props.albOutputs.targetGroups[port];
       if (tg) {
         tg.addTarget(

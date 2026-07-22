@@ -10,21 +10,52 @@ The default validation uses Amazon S3 as the data source, which exercises the fu
 
 ## Phase 1: Verify Connectivity
 
-Before starting, confirm the MCP tools are working.
+Before starting, confirm the MCP tools are working and identify the target connector.
 
-Run a quick check:
+### Step 1.1: Identify the Target Connector
+
+This project supports two deployment modes with different stack naming conventions:
+
+| Mode | Shared Infra Stack | Connector Stack | Deployed via |
+|------|-------------------|-----------------|--------------|
+| **Local** (`deploy-local.sh`) | `DataspaceConnectorSharedInfraStack` | `DataspaceConnector-<connectorId>` | `cdk deploy --all` |
+| **Pipeline** (`deploy-pipeline.sh`) | `Deploy-DataspaceConnectorSharedInfraStack` | `Deploy-DataspaceConnector-<connectorId>` | CodePipeline + config repo |
+
+To determine which mode is in use, check for the pipeline stack:
+```bash
+aws cloudformation describe-stacks --stack-name DataspaceConnectorPipelineStack --region <region> --query 'Stacks[0].StackStatus' --output text 2>&1
 ```
-query_assets(limit=1)
+
+- If this returns a status like `CREATE_COMPLETE` or `UPDATE_COMPLETE` → **pipeline mode** (stacks are prefixed with `Deploy-`)
+- If it returns an error → **local mode** (no prefix)
+
+Store the stack prefix (either `Deploy-` or empty string) — it is used throughout this workflow.
+
+In **multi-connector mode** (pipeline deployments), use `list_connectors()` to discover all available connectors and ask the user which one to validate. All subsequent MCP tool calls MUST include the `connector_id` parameter.
+
+IMPORTANT: The `list_connectors()` tool discovers connectors by scanning CloudFormation for stacks matching the prefix `Deploy-DataspaceConnector-`. This means it **only works for pipeline-mode deployments**. For local-mode deployments, the agent must determine the connector ID from `cdk/lib/config/environments.ts` (the `connectorId` field) or ask the user directly.
+
+In **single-connector mode** (local deployments with one connector), the `connector_id` parameter can be omitted from MCP tool calls.
+
+### Step 1.2: Verify MCP Connectivity
+
+Run a quick check against the target connector:
+```python
+query_assets(connector_id="<target-connector>", limit=1)
 ```
 
 If this fails, the MCP connection isn't configured. Direct the user to the **deploy-connector** steering file first.
 
-Also discover the CloudWatch log groups for troubleshooting later. The AWS profile and region are needed — check `$AWS_PROFILE` or ask the user, and determine the region from the MCP config or `deploy.sh`:
+### Step 1.3: Discover CloudWatch Log Groups
+
+The AWS profile and region are needed — check the MCP config at `.kiro/settings/mcp.json` for `AWS_PROFILE` and `AWS_REGION` values:
 
 ```bash
-aws cloudformation list-stack-resources --stack-name DataspaceConnector-default --region <region> \
+aws cloudformation list-stack-resources --stack-name <prefix>DataspaceConnector-<connectorId> --region <region> \
     --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].[LogicalResourceId,PhysicalResourceId]' --output json
 ```
+
+Where `<prefix>` is `Deploy-` for pipeline mode or empty for local mode.
 
 This returns the log group physical resource IDs for the current deployment. Match by logical ID prefix:
 - `ControlPlane` → control plane log group
@@ -70,6 +101,7 @@ For open access, create two policies — one for access (who can see the offer) 
 **Access policy** (controls catalog visibility):
 ```python
 create_policy_definition(
+    connector_id="<target-connector>",
     policy_id="<user-chosen-id-or-default>-access",
     policy={
         "@type": "Set",
@@ -88,6 +120,7 @@ create_policy_definition(
 **Usage/contract policy** (controls negotiation — requires FrameworkAgreement + UsagePurpose):
 ```python
 create_policy_definition(
+    connector_id="<target-connector>",
     policy_id="<user-chosen-id-or-default>-usage",
     policy={
         "@type": "Set",
@@ -126,6 +159,7 @@ The user needs to provide:
 
 ```python
 create_asset(
+    connector_id="<target-connector>",
     asset_id="<user-chosen-id>",
     properties={
         "name": "<user-provided-name>",
@@ -152,6 +186,7 @@ If the user doesn't have a real data source, suggest a placeholder:
 
 ```python
 create_asset(
+    connector_id="<target-connector>",
     asset_id="<user-chosen-id>",
     properties={
         "name": "<user-provided-name>",
@@ -171,6 +206,7 @@ Link the asset to both policies:
 
 ```python
 create_contract_definition(
+    connector_id="<target-connector>",
     contract_definition_id="<user-chosen-id>",
     access_policy_id="<access-policy-id-from-step-3.1>",
     contract_policy_id="<usage-policy-id-from-step-3.1>",
@@ -197,6 +233,7 @@ Ask the user:
 
 ```python
 request_catalog(
+    connector_id="<target-connector>",
     counter_party_address="<provider-dsp-endpoint>",
     counter_party_id="<provider-bpnl>"
 )
@@ -215,6 +252,7 @@ Using the catalog response, extract the offer details and negotiate:
 
 ```python
 initiate_contract_negotiation(
+    connector_id="<target-connector>",
     counter_party_address="<provider-dsp-endpoint>",
     offer_id="<@id from odrl:hasPolicy>",
     asset_id="<asset-id from catalog>",
@@ -231,7 +269,7 @@ IMPORTANT: The `permission`, `prohibition`, and `obligation` must be passed thro
 
 Poll the negotiation state:
 ```python
-get_contract_negotiation(negotiation_id="<negotiation-id>")
+get_contract_negotiation(connector_id="<target-connector>", negotiation_id="<negotiation-id>")
 ```
 
 Expected state progression: `REQUESTED` → `AGREED` → `VERIFIED` → `FINALIZED`
@@ -245,13 +283,14 @@ Once `FINALIZED`, extract the `contractAgreementId` directly from the `get_contr
 ### Step 4.4: Retrieve the Agreement
 
 ```python
-get_contract_agreement(agreement_id="<contract-agreement-id>")
+get_contract_agreement(connector_id="<target-connector>", agreement_id="<contract-agreement-id>")
 ```
 
 ### Step 4.5: Transfer Data
 
 ```python
 initiate_transfer(
+    connector_id="<target-connector>",
     counter_party_address="<provider-dsp-endpoint>",
     contract_id="<agreement-id>",
     transfer_type="HttpData-PULL"
@@ -264,14 +303,14 @@ For `HttpData-PULL`, the MCP server automatically sets the data destination to `
 
 Poll until the transfer reaches `STARTED`:
 ```python
-get_transfer_process(transfer_process_id="<transfer-id>")
+get_transfer_process(connector_id="<target-connector>", transfer_process_id="<transfer-id>")
 ```
 
 If the transfer state is `TERMINATED` instead of progressing to `STARTED`, do NOT retry blindly. Follow the troubleshooting procedure in Phase 8 to diagnose the root cause.
 
 Then retrieve the endpoint data reference:
 ```python
-get_edr_data_address(transfer_process_id="<transfer-id>")
+get_edr_data_address(connector_id="<target-connector>", transfer_process_id="<transfer-id>")
 ```
 
 The EDR contains:
@@ -281,8 +320,10 @@ The EDR contains:
 Now fetch the actual data using the `fetch_data_with_edr` tool, which resolves the EDR and makes the HTTP request to the provider's data plane in one step:
 
 ```python
-fetch_data_with_edr(transfer_process_id="<transfer-id>")
+fetch_data_with_edr(connector_id="<target-connector>", transfer_process_id="<transfer-id>")
 ```
+
+NOTE: When no `path` parameter is provided, the MCP server defaults to appending `public/` to the EDR endpoint URL. This is the standard Tractus-X data plane public API path. If the data plane requires a different sub-path, pass it explicitly via the `path` parameter.
 
 This tool handles token refresh transparently — Tractus-X auto-refreshes expired EDR tokens when resolving the data address, so the agent can call this repeatedly over time without worrying about token expiry.
 
@@ -294,6 +335,7 @@ For advanced use cases (sub-paths, query parameters, POST bodies), `fetch_data_w
 
 ```python
 fetch_data_with_edr(
+    connector_id="<target-connector>",
     transfer_process_id="<transfer-id>",
     method="GET",
     path="/public/items",
@@ -311,26 +353,48 @@ This is the recommended validation path. It exercises the full AWS-native data f
 
 ### Step 5.1: Discover Stack Resources
 
-Retrieve the S3 bucket name, DSP endpoint, and BPNL. The bucket name comes from the connector stack, API endpoints from the shared infra stack:
+Retrieve the S3 bucket name, DSP endpoint, and BPNL. The bucket comes from the per-connector stack, API endpoints from the shared infra stack.
+
+**Determine the stack prefix** based on the deployment mode identified in Phase 1:
+- Pipeline mode → prefix is `Deploy-`
+- Local mode → no prefix
+
+**Shared infrastructure outputs** (API endpoints are shared across all connectors):
 
 ```bash
-aws cloudformation describe-stacks --stack-name DataspaceConnectorSharedInfraStack --region <region> \
+aws cloudformation describe-stacks --stack-name <prefix>DataspaceConnectorSharedInfraStack --region <region> \
     --query 'Stacks[0].Outputs' --output json
 ```
 
-Also get connector-specific outputs:
+Extract from shared infra outputs:
+- Key starting with `EdcApiDspApiEndpoint` → DSP endpoint base URL. Append the connector ID to form the full DSP address (e.g., `https://xxx.execute-api.region.amazonaws.com/protocol/<connectorId>`)
+- Key starting with `EdcApiManagementApiEndpoint` → Management API base URL (for reference)
+
+**Per-connector outputs** (each connector has its own stack with its own S3 bucket):
 
 ```bash
-aws cloudformation describe-stacks --stack-name DataspaceConnector-default --region <region> \
+aws cloudformation describe-stacks --stack-name <prefix>DataspaceConnector-<connectorId> --region <region> \
     --query 'Stacks[0].Outputs' --output json
 ```
 
-Extract (the output keys have CDK-generated hash suffixes — match by prefix):
-- Key starting with `EdcDataPlaneBucketName` → S3 bucket name
-- Key starting with `EdcApiDspApiEndpoint` → DSP endpoint base URL. Append the connector ID to form the full DSP address (e.g., `https://xxx.execute-api.region.amazonaws.com/protocol/default`)
-- Key starting with `EdcApiManagementApiEndpoint` → Management API base URL. Append the connector ID for requests (e.g., `.../management/default`)
+Extract from connector stack outputs:
+- Key `EdcDataPlaneBucketName` → the S3 bucket name for this connector's data plane
 
-Read the `connectorId` and `PARTICIPANT_ID` from `cdk/lib/config/environments.ts` (the `connectorId` field and `tractusx.edc.participant.bpn` field in the connector's `edcIam` object) for the connector's BPNL. Use the BPNL as the `counter_party_id` for catalog requests and as the `assigner` for contract negotiations.
+**Retrieve the BPNL (participantId) for the target connector:**
+
+The connector's identity configuration depends on the deployment mode:
+
+- **Pipeline mode:** Config is stored in a CodeCommit (or GitHub) config repository. Discover the repo name from `pipeline.yaml` (field `configRepoName`, default: `dataspace-connector-config`). Then fetch the connector's YAML:
+  ```bash
+  aws codecommit get-file --repository-name <config-repo-name> \
+      --file-path connectors/connector-<connectorId>.yaml \
+      --region <region> --query 'fileContent' --output text | base64 -d
+  ```
+  The `participantId` field under `edcIam` contains the BPNL.
+
+- **Local mode:** Read `cdk/lib/config/environments.ts` (or the YAML config files if `cdk/config/` directory exists). Find the connector entry matching the `connectorId` and extract the value for `tractusx.edc.participant.bpn`.
+
+Use the BPNL as the `counter_party_id` for catalog requests and as the `assigner` for contract negotiations.
 
 If the user already has these values from a prior deployment, use them directly.
 
@@ -358,6 +422,7 @@ Create an access policy, usage policy, asset, and contract definition for the te
 **Access policy** (Membership check):
 ```python
 create_policy_definition(
+    connector_id="<target-connector>",
     policy_id="test-s3-access-policy",
     policy={
         "@type": "Set",
@@ -376,6 +441,7 @@ create_policy_definition(
 **Usage policy** (FrameworkAgreement + UsagePurpose):
 ```python
 create_policy_definition(
+    connector_id="<target-connector>",
     policy_id="test-s3-usage-policy",
     policy={
         "@type": "Set",
@@ -403,6 +469,7 @@ create_policy_definition(
 **Asset with S3 data address:**
 ```python
 create_asset(
+    connector_id="<target-connector>",
     asset_id="test-s3-asset",
     properties={
         "name": "Test S3 Dataset",
@@ -421,6 +488,7 @@ create_asset(
 **Contract definition** (links asset to both policies):
 ```python
 create_contract_definition(
+    connector_id="<target-connector>",
     contract_definition_id="test-s3-contract-def",
     access_policy_id="test-s3-access-policy",
     contract_policy_id="test-s3-usage-policy",
@@ -436,6 +504,7 @@ create_contract_definition(
 
 ```python
 request_catalog(
+    connector_id="<target-connector>",
     counter_party_address="<own-dsp-endpoint>",
     counter_party_id="<own-bpnl>"
 )
@@ -479,6 +548,7 @@ Retrieve the DSP endpoint and BPNL as described in Phase 5 Step 5.1, then:
 
 ```python
 request_catalog(
+    connector_id="<target-connector>",
     counter_party_address="<own-dsp-endpoint>",
     counter_party_id="<own-bpnl>"
 )
@@ -498,12 +568,12 @@ After successful completion:
 After testing, help the user review what was created:
 
 ```python
-query_assets(limit=50)
-query_policy_definitions(limit=50)
-query_contract_definitions(limit=50)
-query_contract_negotiations(limit=50)
-query_contract_agreements(limit=50)
-query_transfer_processes(limit=50)
+query_assets(connector_id="<target-connector>", limit=50)
+query_policy_definitions(connector_id="<target-connector>", limit=50)
+query_contract_definitions(connector_id="<target-connector>", limit=50)
+query_contract_negotiations(connector_id="<target-connector>", limit=50)
+query_contract_agreements(connector_id="<target-connector>", limit=50)
+query_transfer_processes(connector_id="<target-connector>", limit=50)
 ```
 
 Note: The EDC Management API does not provide delete operations for assets, policies, or contract definitions through the standard endpoints used by this MCP server. Resources created during testing will persist, including any S3 test objects uploaded during the S3 self-test — do not delete them independently, as that would leave broken asset records. For a clean slate, the user can redeploy the stack (DynamoDB tables are set to `DESTROY` removal policy by default).
@@ -519,13 +589,13 @@ When any EDC operation reaches an unexpected state (e.g., transfer `TERMINATED` 
 For a failed transfer, first get the full transfer process object which includes `errorDetail` and `correlationId`:
 
 ```python
-get_transfer_process(transfer_process_id="<consumer-transfer-id>")
+get_transfer_process(connector_id="<target-connector>", transfer_process_id="<consumer-transfer-id>")
 ```
 
 Extract the `correlationId` from the response, then query the provider-side transfer process:
 
 ```python
-query_transfer_processes(filter_expression=[{
+query_transfer_processes(connector_id="<target-connector>", filter_expression=[{
     "operandLeft": "id",
     "operator": "=",
     "operandRight": "<correlationId>"
@@ -536,7 +606,7 @@ The provider-side response contains the `errorDetail` field with the actual erro
 
 For a failed negotiation, get the full negotiation object directly:
 ```python
-get_contract_negotiation(negotiation_id="<negotiation-id>")
+get_contract_negotiation(connector_id="<target-connector>", negotiation_id="<negotiation-id>")
 ```
 
 The response includes the `errorDetail` field when the negotiation is `TERMINATED`.
@@ -546,13 +616,15 @@ The response includes the `errorDetail` field when the negotiation is `TERMINATE
 The control plane and data plane each write to their own CloudWatch log group. The names include CDK-generated suffixes, so discover them from the stack resources (this avoids picking up stale log groups from prior deployments):
 
 ```bash
-aws cloudformation list-stack-resources --stack-name DataspaceConnector-default --region <region> \
+aws cloudformation list-stack-resources --stack-name <prefix>DataspaceConnector-<connectorId> --region <region> \
     --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].[LogicalResourceId,PhysicalResourceId]' --output json
 ```
 
+Where `<prefix>` is `Deploy-` for pipeline mode or empty for local mode (determined in Phase 1).
+
 This returns entries like:
-- Logical ID containing `ControlPlane` → `DataspaceConnector-default-ControlPlaneLogGroup<suffix>`
-- Logical ID containing `DataPlane` → `DataspaceConnector-default-DataPlaneLogGroup<suffix>`
+- Logical ID containing `ControlPlane` → `<prefix>DataspaceConnector-<connectorId>-ControlPlaneLogGroup<suffix>`
+- Logical ID containing `DataPlane` → `<prefix>DataspaceConnector-<connectorId>-DataPlaneLogGroup<suffix>`
 
 Store both — you'll need them for log queries.
 
@@ -594,7 +666,7 @@ With the error detail from Step 8.1 and the correlated logs from Step 8.3, inter
 | `DataPlane not found` | Data plane registration expired or data plane not running | Control plane logs for `DataPlaneSelectorManagerImpl` state changes; data plane logs for `DataPlaneHealthCheck` registration |
 | `Policy not equal to offer` | Contract negotiation used a policy that doesn't match the catalog offer | Control plane logs for policy evaluation; verify `permission`/`prohibition`/`obligation` arrays match the catalog exactly |
 | `Contract agreement not found` | Invalid or expired contract agreement ID used for transfer | Control plane logs; verify the agreement ID exists via `get_contract_agreement` |
-| `Failed to decode token` | Token signing key mismatch between control plane and data plane | Verify both planes have `edc.transfer.proxy.token.signer.privatekey.alias` and `edc.transfer.proxy.token.verifier.publickey.alias` set to the same Secrets Manager key names |
+| `Failed to decode token` | Token signing key mismatch between control plane and data plane | Verify the Secrets Manager secrets `<connectorId>/edc.transfer.proxy.token.signer.privatekey` and `<connectorId>/edc.transfer.proxy.token.verifier.publickey` exist and contain valid RSA keys (these are auto-generated on first deploy by the `EdcTokenKeyPair` construct — if missing, redeploy the connector stack) |
 | S3 `AccessDenied` | Data plane Fargate task role lacks `s3:GetObject` permission on the bucket | Check the task role policies; verify the bucket ARN matches |
 | No logs in data plane | Data plane task may have crashed or not started | Check ECS service status: `aws ecs describe-services --cluster <cluster> --services <service>` |
 

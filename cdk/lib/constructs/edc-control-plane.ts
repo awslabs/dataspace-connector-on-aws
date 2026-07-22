@@ -25,10 +25,10 @@ export interface AlbOutputs {
   readonly targetGroups: { [port: number]: IApplicationTargetGroup };
 }
 
-import { EDC_SECRETS_MANAGER_ALIASES } from "../config/environments";
+import { EDC_SECRETS_MANAGER_ALIASES } from "../config/config";
 import { EdcFargateService } from "./edc-fargate-service";
-import { ControlPlanePortMapping } from "../config/port-mappings";
-import { DeploymentProfile } from "../config/environments";
+import { CONTROL_PLANE_PORT_MAPPING_DEFAULT } from "../config/port-mappings";
+import { DeploymentProfile } from "../config/config";
 
 export interface EdcControlPlaneProps {
   readonly albOutputs: AlbOutputs;
@@ -42,7 +42,6 @@ export interface EdcControlPlaneProps {
   readonly memoryLimitMiB: number;
   readonly secretPrefix: string;
   readonly stateMachineIterationMillis: string;
-  readonly portMapping: ControlPlanePortMapping;
   readonly profile: DeploymentProfile;
   readonly taskRolePolicyStatements: PolicyStatement[];
   readonly vpc: IVpc;
@@ -54,11 +53,13 @@ export class EdcControlPlane extends Construct {
   constructor(scope: Construct, id: string, props: EdcControlPlaneProps) {
     super(scope, id);
 
+    const portMapping = CONTROL_PLANE_PORT_MAPPING_DEFAULT;
+
     const securityGroup = new SecurityGroup(this, "ControlPlaneSecurityGroup", {
       allowAllOutbound: false,
       vpc: props.vpc,
     });
-    Object.values(props.portMapping).forEach((port) =>
+    Object.values(portMapping).forEach((port) =>
       securityGroup.addIngressRule(
         Peer.securityGroupId(props.albOutputs.securityGroupId),
         Port.tcp(port),
@@ -107,13 +108,13 @@ export class EdcControlPlane extends Construct {
         ...props.edcIamEnvVars,
         "edc.participant.id": props.edcIamEnvVars["edc.iam.issuer.id"],
 
-        "web.http.port": `${props.portMapping.default}`,
+        "web.http.port": `${portMapping.default}`,
         "web.http.path": "/api",
-        "web.http.management.port": `${props.portMapping.management}`,
+        "web.http.management.port": `${portMapping.management}`,
         "web.http.management.path": "/api/management",
-        "web.http.control.port": `${props.portMapping.control}`,
+        "web.http.control.port": `${portMapping.control}`,
         "web.http.control.path": "/api/control",
-        "web.http.protocol.port": `${props.portMapping.protocol}`,
+        "web.http.protocol.port": `${portMapping.protocol}`,
         "web.http.protocol.path": "/api/protocol",
 
         JDK_JAVA_OPTIONS: [
@@ -131,7 +132,7 @@ export class EdcControlPlane extends Construct {
         mode: AwsLogDriverMode.NON_BLOCKING,
         streamPrefix: "EdcControlPlane",
       }),
-      portMappings: Object.entries(props.portMapping).map((entry) => {
+      portMappings: Object.entries(portMapping).map((entry) => {
         return {
           name: entry[0],
           containerPort: entry[1],
@@ -143,16 +144,16 @@ export class EdcControlPlane extends Construct {
     const service = new EdcFargateService(this, "ControlPlaneFargateService", {
       cluster: props.cluster,
       containerName: containerName,
-      containerPort: props.portMapping.default,
+      containerPort: portMapping.default,
       profile: props.profile,
       securityGroups: [securityGroup],
-      targetGroup: props.albOutputs.targetGroups[props.portMapping.default],
+      targetGroup: props.albOutputs.targetGroups[portMapping.default],
       taskDefinition: taskDefinition,
     });
 
     // Register on all other CP target groups
-    for (const port of Object.values(props.portMapping)) {
-      if (port === props.portMapping.default) continue;
+    for (const port of Object.values(portMapping)) {
+      if (port === portMapping.default) continue;
       const tg = props.albOutputs.targetGroups[port];
       if (tg) {
         tg.addTarget(

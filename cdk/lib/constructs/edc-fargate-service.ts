@@ -12,7 +12,7 @@ import {
   TaskDefinition,
 } from "aws-cdk-lib/aws-ecs";
 
-import { DeploymentProfile } from "../config/environments";
+import { DeploymentProfile } from "../config/config";
 
 export interface EdcFargateServiceProps {
   readonly cluster: ICluster;

@@ -1,12 +1,13 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { resolve } from "path";
-import { Stack, StackProps } from "aws-cdk-lib";
+import { RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
 import { LinuxArmBuildImage, LinuxBuildImage } from "aws-cdk-lib/aws-codebuild";
 import { Code, Repository } from "aws-cdk-lib/aws-codecommit";
 import { PipelineType } from "aws-cdk-lib/aws-codepipeline";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
+import { ISecret, Secret } from "aws-cdk-lib/aws-secretsmanager";
+import { resolve } from "path";
 
 import { Construct } from "constructs";
 
@@ -14,14 +15,17 @@ import {
   CodeBuildStep,
   CodePipeline,
   CodePipelineSource,
+  FileSet,
+  IFileSetProducer,
   ManualApprovalStep,
 } from "aws-cdk-lib/pipelines";
 
 import { DeploymentStage } from "./deployment-stage";
-import { DeploymentConfig } from "./config/environments";
-import { PipelineYaml } from "./config/schemas";
+import { DeploymentConfig, PipelineYaml } from "./config/config";
 
 const STAGE_ID = "Deploy";
+const ADMIN_SECRET_NAME = "dataspace-connector/portal-admin";
+const CONNECTOR_STACK_PREFIX = `${STAGE_ID}-DataspaceConnector`;
 
 export interface PipelineStackProps extends StackProps {
   readonly pipelineConfig: PipelineYaml;
@@ -34,7 +38,17 @@ export class PipelineStack extends Stack {
 
     const config = props.pipelineConfig;
 
-    // Config repo source (trigger)
+    // The stack owns the admin credentials secret (so its ARN is known for
+    // least-privilege scoping); the value — the Cofinity-X portal technical
+    // user's clientId and clientSecret as JSON — is populated out-of-band by
+    // deploy.sh and never enters CloudFormation.
+    const adminSecret = new Secret(this, "PortalAdminSecret", {
+      secretName: ADMIN_SECRET_NAME,
+      description:
+        "Cofinity-X Portal admin technical user credentials (JSON: clientId, clientSecret)",
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
     const configSource =
       config.configSource === "github"
         ? CodePipelineSource.connection(config.configRepoName, "main", {
@@ -45,29 +59,36 @@ export class PipelineStack extends Stack {
             "main",
           );
 
-    // Synth step: clone app repo at pinned version, build, synth
+    // ─── Synth (clones the app, builds EDC, provisions portal identity) ──
+
     const synth = new CodeBuildStep("Synth", {
       input: configSource,
-      buildEnvironment: {
-        buildImage: LinuxBuildImage.STANDARD_7_0,
-      },
+      buildEnvironment: { buildImage: LinuxBuildImage.STANDARD_7_0 },
+      env: { PORTAL_ADMIN_SECRET: ADMIN_SECRET_NAME },
       installCommands: ["n 24"],
       commands: [
-        // Read appVersion from pipeline.yaml using a proper YAML parser
         `APP_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('pipeline.yaml'))['appVersion'])")`,
         `echo "Using app version: $APP_VERSION"`,
-        // Clone app repo at specific version
         `git clone https://github.com/${config.appRepo}.git app`,
         `cd app && git checkout "$APP_VERSION"`,
-        // Build EDC extensions
         `cd edc && ./gradlew clean shadowJar`,
-        // Install CDK dependencies and compile
         `cd ../cdk && npm ci --ignore-scripts && npx tsc`,
-        // Synth with config path pointing to the config repo root
-        `npx cdk synth --app 'node dist/pipeline-app.js' --context config-path=../..`,
+        // Populate each connector's edcIam from the portal before synth.
+        `node dist/portal/provision.js --config-path=../..`,
+        `npx cdk synth --app 'node dist/app.js' --context config-path=../..`,
       ],
       primaryOutputDirectory: "app/cdk/build/cdk.out",
+      rolePolicyStatements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ["secretsmanager:GetSecretValue"],
+          resources: [adminSecret.secretArn],
+        }),
+      ],
     });
+
+    // Reuse the compiled CDK bundle in the finalization step — no re-clone/build.
+    const cdkBundle = synth.addOutputDirectory("app/cdk");
 
     const pipeline = new CodePipeline(this, "Pipeline", {
       pipelineName: "DataspaceConnectorPipeline",
@@ -83,44 +104,71 @@ export class PipelineStack extends Stack {
       },
     });
 
-    // Deploy stage (SharedInfra + all Connectors in parallel)
-    const deployStage = new DeploymentStage(this, STAGE_ID, {
-      config: props.deploymentConfig,
-    });
+    const stage = pipeline.addStage(
+      new DeploymentStage(this, STAGE_ID, { config: props.deploymentConfig }),
+    );
 
-    const stage = pipeline.addStage(deployStage);
-
-    // Optional manual approval before deploy
     if (config.requireApproval) {
       stage.addPre(new ManualApprovalStep("Approve"));
     }
 
-    // Orphan cleanup step: destroy stacks for removed connectors
-    const expectedConnectors = props.deploymentConfig.connectors
-      .map((c) => `${STAGE_ID}-DataspaceConnector-${c.connectorId}`)
-      .join(" ");
-
     stage.addPost(
-      new CodeBuildStep("CleanupOrphans", {
-        commands: [
-          `EXPECTED="${expectedConnectors}"`,
-          `DEPLOYED=$(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE --query "StackSummaries[?starts_with(StackName,'${STAGE_ID}-DataspaceConnector-')].StackName" --output text)`,
-          `for stack in $DEPLOYED; do if ! echo "$EXPECTED" | grep -qw "$stack"; then echo "Destroying orphaned stack: $stack"; aws cloudformation delete-stack --stack-name "$stack"; aws cloudformation wait stack-delete-complete --stack-name "$stack" --cli-read-timeout 600; fi; done`,
-        ],
-        rolePolicyStatements: [
-          new PolicyStatement({
-            effect: Effect.ALLOW,
-            actions: [
-              "cloudformation:ListStacks",
-              "cloudformation:DeleteStack",
-              "cloudformation:DescribeStacks",
-              "cloudformation:DescribeStackEvents",
-            ],
-            resources: ["*"],
-          }),
-        ],
-      }),
+      this.portalFinalizationStep(configSource, cdkBundle, adminSecret),
     );
+  }
+
+  /**
+   * Post-deploy finalization: writes OAuth secrets, registers new connectors,
+   * and cleans up orphans (portal deregistration + stack deletion). Reuses the
+   * compiled CDK bundle from Synth — no clone or rebuild.
+   */
+  private portalFinalizationStep(
+    configSource: IFileSetProducer,
+    cdkBundle: FileSet,
+    adminSecret: ISecret,
+  ): CodeBuildStep {
+    const connectorSecretArn = `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*/edc.iam.sts.oauth.client.secret-*`;
+    const connectorStackArn = `arn:aws:cloudformation:${this.region}:${this.account}:stack/${CONNECTOR_STACK_PREFIX}*/*`;
+
+    return new CodeBuildStep("PortalFinalization", {
+      input: configSource,
+      additionalInputs: { "cdk-bundle": cdkBundle },
+      env: { PORTAL_ADMIN_SECRET: ADMIN_SECRET_NAME },
+      installCommands: ["n 24"],
+      commands: [
+        // Config files are at the input root; compiled scripts + node_modules
+        // come from the Synth bundle.
+        `node cdk-bundle/dist/portal/finalize.js --config-path=. --stack-prefix=${STAGE_ID}`,
+      ],
+      rolePolicyStatements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ["secretsmanager:GetSecretValue"],
+          resources: [adminSecret.secretArn],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ["secretsmanager:PutSecretValue"],
+          resources: [connectorSecretArn],
+        }),
+        // ListStacks does not support resource-level scoping; the mutating
+        // actions are scoped to the connector stack namespace.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ["cloudformation:ListStacks"],
+          resources: ["*"],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: [
+            "cloudformation:DescribeStacks",
+            "cloudformation:DeleteStack",
+            "cloudformation:DescribeStackEvents",
+          ],
+          resources: [connectorStackArn],
+        }),
+      ],
+    });
   }
 
   private getOrCreateConfigRepo(repoName: string): Repository {

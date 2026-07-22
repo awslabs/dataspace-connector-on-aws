@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server for interacting with the Eclipse Dataspace
 
 ## Features
 
-This MCP server provides 18 tools covering the full EDC Management API workflow:
+This MCP server provides 19 tools covering the full EDC Management API workflow:
 
 ### Provider-side tools
 - **create_asset** - Create a new asset with data address

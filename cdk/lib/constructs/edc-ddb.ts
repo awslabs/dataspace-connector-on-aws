@@ -1,20 +1,33 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { IKey } from "aws-cdk-lib/aws-kms";
 import { Construct } from "constructs";
 import { RemovalPolicy } from "aws-cdk-lib";
-import { Billing, TableEncryptionV2, TableV2 } from "aws-cdk-lib/aws-dynamodb";
-
 import {
-  GSI_CORRELATION_ID,
-  GSI_STATE,
-  SINGLE_TABLE_PARTITION_KEY,
-  SINGLE_TABLE_SORT_KEY,
-} from "../config/ddb-tables";
+  AttributeType,
+  Billing,
+  GlobalSecondaryIndexPropsV2,
+  TableEncryptionV2,
+  TableV2,
+} from "aws-cdk-lib/aws-dynamodb";
+
+// EDC single-table design: one table per connector, keyed by pk/sk with two GSIs.
+const PARTITION_KEY = { name: "pk", type: AttributeType.STRING };
+const SORT_KEY = { name: "sk", type: AttributeType.STRING };
+
+const GSI_STATE: GlobalSecondaryIndexPropsV2 = {
+  indexName: "gsi-state",
+  partitionKey: { name: "gsiStatePk", type: AttributeType.STRING },
+  sortKey: { name: "stateTimestamp", type: AttributeType.NUMBER },
+};
+
+const GSI_CORRELATION_ID: GlobalSecondaryIndexPropsV2 = {
+  indexName: "gsi-correlationId",
+  partitionKey: { name: "correlationId", type: AttributeType.STRING },
+  sortKey: { name: "pk", type: AttributeType.STRING },
+};
 
 export interface EdcDdbProps {
-  readonly encryptionKey?: IKey;
   readonly removalPolicy: RemovalPolicy;
   readonly tableName: string;
 }
@@ -24,20 +37,15 @@ export class EdcDdb extends Construct {
 
   constructor(scope: Construct, id: string, props: EdcDdbProps) {
     super(scope, id);
-    const encryption = props.encryptionKey
-      ? TableEncryptionV2.customerManagedKey(props.encryptionKey)
-      : TableEncryptionV2.awsManagedKey();
 
     this.table = new TableV2(this, "Table", {
       tableName: props.tableName,
-      partitionKey: SINGLE_TABLE_PARTITION_KEY,
-      sortKey: SINGLE_TABLE_SORT_KEY,
+      partitionKey: PARTITION_KEY,
+      sortKey: SORT_KEY,
       globalSecondaryIndexes: [GSI_STATE, GSI_CORRELATION_ID],
       billing: Billing.onDemand(),
-      encryption: encryption,
-      pointInTimeRecoverySpecification: {
-        pointInTimeRecoveryEnabled: true,
-      },
+      encryption: TableEncryptionV2.awsManagedKey(),
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: props.removalPolicy,
       timeToLiveAttribute: "ttl",
     });
