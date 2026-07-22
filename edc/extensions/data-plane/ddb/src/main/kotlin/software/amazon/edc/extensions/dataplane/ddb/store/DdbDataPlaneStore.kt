@@ -10,14 +10,14 @@ import org.eclipse.edc.spi.query.CriterionOperatorRegistry
 import org.eclipse.edc.spi.result.StoreResult
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.edc.extensions.common.ddb.EntityType
+import software.amazon.edc.extensions.common.ddb.STATE_INDEX_CACHE_TTL_MILLIS
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
+import software.amazon.edc.extensions.common.ddb.utility.IterationCache
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
-import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
 import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
-import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.common.ddb.utility.toPredicate
 import software.amazon.edc.extensions.dataplane.ddb.types.DataFlow
 import software.amazon.edc.extensions.dataplane.ddb.types.toDdbDataFlow
@@ -38,6 +38,7 @@ class DdbDataPlaneStore(
     ),
     DataPlaneStore {
     private val stateIndex = table.index(DataFlow.GSI_STATE)
+    private val stateCache = IterationCache<DataFlow>(STATE_INDEX_CACHE_TTL_MILLIS)
 
     override fun findById(id: String): EdcDataFlow? = getDataFlow(id)?.toEdcDataFlow(objectMapper)
 
@@ -47,13 +48,15 @@ class DdbDataPlaneStore(
     ): MutableList<EdcDataFlow> {
         val predicate = criteria.toList().toPredicate<Any>(criterionOperatorRegistry)
         val stateValues = criteria.extractStateValues()
+        val indexed =
+            stateCache.getOrLoad {
+                stateIndex.query(queryRequestFromId(EntityType.DATA_FLOW)).flatMap { it.items() }
+            }
         val items =
             if (stateValues != null) {
-                stateValues
-                    .flatMap { stateIndex.query(queryRequestFromId(gsiStatePk(EntityType.DATA_FLOW, it))).flatMap { page -> page.items() } }
-                    .asSequence()
+                indexed.asSequence().filter { item -> item.state?.let { it in stateValues } ?: false }
             } else {
-                table.query(queryRequestFromPk(EntityType.DATA_FLOW)).flatMap { it.items() }.asSequence()
+                indexed.asSequence()
             }
         return items
             .filterNot { hasActiveLease(it) }
@@ -89,12 +92,14 @@ class DdbDataPlaneStore(
                 breakLease(dataFlow.id)
             }
         }
+        stateCache.invalidate()
     }
 
     override fun getLeasableById(id: String): Leasable? = getDataFlow(id)
 
     override fun updateLeaseId(leasable: Leasable) {
         table.updateItem(leasable as DataFlow)
+        stateCache.invalidate()
     }
 
     private fun getDataFlow(id: String): DataFlow? = table.getItem(keyFromPkSk(EntityType.DATA_FLOW, id))

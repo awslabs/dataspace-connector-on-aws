@@ -11,16 +11,16 @@ import org.eclipse.edc.spi.query.SortOrder
 import org.eclipse.edc.spi.result.StoreResult
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.edc.extensions.common.ddb.EntityType
+import software.amazon.edc.extensions.common.ddb.STATE_INDEX_CACHE_TTL_MILLIS
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
+import software.amazon.edc.extensions.common.ddb.utility.IterationCache
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
-import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
 import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
-import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.controlplane.ddb.types.PolicyMonitor
 import software.amazon.edc.extensions.controlplane.ddb.types.toDdbPolicyMonitor
 import java.time.Clock
@@ -37,6 +37,7 @@ class DdbPolicyMonitorStore(
     ),
     PolicyMonitorStore {
     private val stateIndex = table.index(PolicyMonitor.GSI_STATE)
+    private val stateCache = IterationCache<PolicyMonitor>(STATE_INDEX_CACHE_TTL_MILLIS)
 
     override fun findById(id: String): PolicyMonitorEntry? = getPolicyMonitor(id)?.toEdcPolicyMonitor()
 
@@ -53,16 +54,15 @@ class DdbPolicyMonitorStore(
                 .limit(max)
                 .build()
         val stateValues = criteria.extractStateValues()
+        val indexed =
+            stateCache.getOrLoad {
+                stateIndex.query(queryRequestFromId(EntityType.POLICY_MONITOR)).flatMap { it.items() }
+            }
         val items =
             if (stateValues != null) {
-                stateValues
-                    .flatMap {
-                        stateIndex.query(queryRequestFromId(gsiStatePk(EntityType.POLICY_MONITOR, it))).flatMap { page ->
-                            page.items()
-                        }
-                    }.asSequence()
+                indexed.asSequence().filter { it.state in stateValues }
             } else {
-                table.query(queryRequestFromPk(EntityType.POLICY_MONITOR)).flatMap { it.items() }.asSequence()
+                indexed.asSequence()
             }
         return items
             .filterNot { hasActiveLease(it) }
@@ -98,12 +98,14 @@ class DdbPolicyMonitorStore(
                 breakLease(entry.id)
             }
         }
+        stateCache.invalidate()
     }
 
     override fun getLeasableById(id: String): Leasable? = getPolicyMonitor(id)
 
     override fun updateLeaseId(leasable: Leasable) {
         table.updateItem(leasable as PolicyMonitor)
+        stateCache.invalidate()
     }
 
     private fun getPolicyMonitor(id: String): PolicyMonitor? = table.getItem(keyFromPkSk(EntityType.POLICY_MONITOR, id))

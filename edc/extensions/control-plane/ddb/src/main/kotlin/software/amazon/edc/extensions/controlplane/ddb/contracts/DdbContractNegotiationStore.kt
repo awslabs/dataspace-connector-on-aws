@@ -13,14 +13,15 @@ import org.eclipse.edc.spi.result.StoreResult
 import org.eclipse.edc.store.ReflectionBasedQueryResolver
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.edc.extensions.common.ddb.EntityType
+import software.amazon.edc.extensions.common.ddb.STATE_INDEX_CACHE_TTL_MILLIS
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
+import software.amazon.edc.extensions.common.ddb.utility.IterationCache
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.extractStringValue
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
-import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import software.amazon.edc.extensions.common.ddb.utility.hasProperty
 import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
 import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
@@ -54,6 +55,7 @@ class DdbContractNegotiationStore(
     private val negotiationQueryResolver =
         ReflectionBasedQueryResolver(EdcContractNegotiation::class.java, criterionOperatorRegistry)
     private val stateIndex = contractNegotiationTable.index(ContractNegotiation.GSI_STATE)
+    private val stateCache = IterationCache<ContractNegotiation>(STATE_INDEX_CACHE_TTL_MILLIS)
 
     override fun findById(id: String): EdcContractNegotiation? {
         val contractNegotiation = getContractNegotiation(id) ?: return null
@@ -75,20 +77,18 @@ class DdbContractNegotiationStore(
                 .build()
         val stateValues = criteria.extractStateValues()
         val typeFilter = criteria.extractStringValue("type")
+        val indexed =
+            stateCache.getOrLoad {
+                stateIndex.query(queryRequestFromId(EntityType.CONTRACT_NEGOTIATION)).flatMap { it.items() }
+            }
         val items: Sequence<ContractNegotiation> =
             if (stateValues != null) {
-                stateValues
-                    .flatMap { state ->
-                        stateIndex
-                            .query(queryRequestFromId(gsiStatePk(EntityType.CONTRACT_NEGOTIATION, state)))
-                            .flatMap { page -> page.items() }
-                    }.asSequence()
+                indexed
+                    .asSequence()
+                    .filter { it.state in stateValues }
                     .let { seq -> if (typeFilter != null) seq.filter { it.type == typeFilter } else seq }
             } else {
-                contractNegotiationTable
-                    .query(queryRequestFromPk(EntityType.CONTRACT_NEGOTIATION))
-                    .flatMap { it.items() }
-                    .asSequence()
+                indexed.asSequence()
             }
         return items
             .filterNot { hasActiveLease(it) }
@@ -127,6 +127,7 @@ class DdbContractNegotiationStore(
                 breakLease(contractNegotiation.id)
             }
         }
+        stateCache.invalidate()
     }
 
     override fun findContractAgreement(contractId: String): EdcContractAgreement? =
@@ -148,6 +149,7 @@ class DdbContractNegotiationStore(
             )
         }
         contractNegotiationTable.deleteItem(keyFromPkSk(EntityType.CONTRACT_NEGOTIATION, negotiationId))
+        stateCache.invalidate()
         return StoreResult.success()
     }
 
@@ -186,6 +188,7 @@ class DdbContractNegotiationStore(
 
     override fun updateLeaseId(leasable: Leasable) {
         contractNegotiationTable.updateItem(leasable as ContractNegotiation)
+        stateCache.invalidate()
     }
 
     private fun getContractAgreement(id: String): ContractAgreement? =

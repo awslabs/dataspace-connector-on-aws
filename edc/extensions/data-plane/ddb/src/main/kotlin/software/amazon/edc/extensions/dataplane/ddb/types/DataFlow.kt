@@ -20,7 +20,6 @@ import software.amazon.edc.extensions.common.ddb.ListOfMapsConverter
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.utility.convertValueToMapStringAny
-import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import java.net.URI
 import org.eclipse.edc.connector.dataplane.spi.DataFlow as EdcDataFlow
 
@@ -155,7 +154,8 @@ fun EdcDataFlow.toDdbDataFlow(
         createdAt = createdAt,
         destination = destination?.properties,
         errorDetail = errorDetail,
-        gsiStatePk = state?.let { gsiStatePk(EntityType.DATA_FLOW, it) },
+        // EDC exposes no isFinal for this entity, so index all entries.
+        gsiStatePk = EntityType.DATA_FLOW,
         transferTypeDestination = transferType?.destinationType(),
         transferTypeFlow = transferType?.flowType()?.toString(),
         transferTypeResponseChannel = transferType?.responseChannelType(),

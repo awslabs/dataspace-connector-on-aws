@@ -216,7 +216,10 @@ export class ConnectorStack extends Stack {
       image: ContainerImage.fromDockerImageAsset(infra.controlPlaneImage),
       memoryLimitMiB: connector.controlPlaneMemoryLimitMiB,
       secretPrefix,
-      stateMachineIterationMillis: connector.stateMachineIterationMillis,
+      interactiveStateMachineIterationMillis:
+        connector.interactiveStateMachineIterationMillis ?? "10000",
+      backgroundStateMachineIterationMillis:
+        connector.backgroundStateMachineIterationMillis ?? "60000",
       profile,
       taskRolePolicyStatements: policyStatements,
       vpc: infra.vpc,
@@ -234,7 +237,8 @@ export class ConnectorStack extends Stack {
       memoryLimitMiB: connector.dataPlaneMemoryLimitMiB,
       profile,
       secretPrefix,
-      stateMachineIterationMillis: connector.stateMachineIterationMillis,
+      dataPlaneStateMachineIterationMillis:
+        connector.interactiveStateMachineIterationMillis ?? "10000",
       taskRolePolicyStatements: policyStatements,
       vpc: infra.vpc,
     });

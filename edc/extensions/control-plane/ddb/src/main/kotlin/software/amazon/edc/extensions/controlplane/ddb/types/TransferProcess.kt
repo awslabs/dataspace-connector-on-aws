@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.eclipse.edc.connector.controlplane.transfer.spi.types.DeprovisionedResource
 import org.eclipse.edc.connector.controlplane.transfer.spi.types.ProvisionedResourceSet
 import org.eclipse.edc.connector.controlplane.transfer.spi.types.ResourceManifest
+import org.eclipse.edc.connector.controlplane.transfer.spi.types.TransferProcessStates
 import org.eclipse.edc.spi.entity.ProtocolMessages
 import org.eclipse.edc.spi.types.domain.DataAddress
 import org.eclipse.edc.spi.types.domain.callback.CallbackAddress
@@ -22,7 +23,6 @@ import software.amazon.edc.extensions.common.ddb.ListOfMapsConverter
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
 import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.utility.convertValueToMapStringAny
-import software.amazon.edc.extensions.common.ddb.utility.gsiStatePk
 import org.eclipse.edc.connector.controlplane.transfer.spi.types.TransferProcess as EdcTransferProcess
 
 @DynamoDbBean
@@ -198,7 +198,7 @@ fun EdcTransferProcess.toDdbTransferProcess(
         dataPlaneId = dataPlaneId,
         deprovisionedResources = deprovisionedResources.map { objectMapper.convertValueToMapStringAny(it) },
         errorDetail = errorDetail,
-        gsiStatePk = gsiStatePk(EntityType.TRANSFER_PROCESS, state),
+        gsiStatePk = if (TransferProcessStates.isFinal(state)) null else EntityType.TRANSFER_PROCESS,
         leaseId = leaseId,
         pending = isPending,
         privateProperties = privateProperties,

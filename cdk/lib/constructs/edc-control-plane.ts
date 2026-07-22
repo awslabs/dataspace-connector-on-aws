@@ -41,7 +41,8 @@ export interface EdcControlPlaneProps {
   readonly image: ContainerImage;
   readonly memoryLimitMiB: number;
   readonly secretPrefix: string;
-  readonly stateMachineIterationMillis: string;
+  readonly interactiveStateMachineIterationMillis: string;
+  readonly backgroundStateMachineIterationMillis: string;
   readonly profile: DeploymentProfile;
   readonly taskRolePolicyStatements: PolicyStatement[];
   readonly vpc: IVpc;
@@ -91,13 +92,15 @@ export class EdcControlPlane extends Construct {
         "edc.iam.did.web.use.https": "true",
         "edc.iam.sts.oauth.client.secret.alias": `${props.secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`,
         "edc.negotiation.consumer.state-machine.iteration-wait-millis":
-          props.stateMachineIterationMillis,
+          props.interactiveStateMachineIterationMillis,
         "edc.negotiation.provider.state-machine.iteration-wait-millis":
-          props.stateMachineIterationMillis,
-        "edc.policy.monitor.state-machine.iteration-wait-millis":
-          props.stateMachineIterationMillis,
+          props.interactiveStateMachineIterationMillis,
         "edc.transfer.state-machine.iteration-wait-millis":
-          props.stateMachineIterationMillis,
+          props.interactiveStateMachineIterationMillis,
+        "edc.policy.monitor.state-machine.iteration-wait-millis":
+          props.backgroundStateMachineIterationMillis,
+        "edc.data.plane.selector.state-machine.iteration-wait-millis":
+          props.backgroundStateMachineIterationMillis,
         "edc.runtime.id": props.connectorId,
         "edc.vault.aws.region": Stack.of(this).region,
 
