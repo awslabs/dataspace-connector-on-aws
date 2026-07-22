@@ -90,6 +90,10 @@ export class EdcDataPlane extends Construct {
     taskDefinition.addContainer("DataPlaneContainer", {
       containerName: containerName,
       environment: {
+        // Point the S3 extension's static-credential probe at the connector's own
+        // (nonexistent) secret namespace so it resolves not-found and uses the task role.
+        "edc.aws.access.key": `${props.secretPrefix}edc.aws.access.key`,
+        "edc.aws.secret.access.key": `${props.secretPrefix}edc.aws.secret.access.key`,
         "edc.control.endpoint": `http://${props.albOutputs.dnsName}:${dataPlanePortMapping.control}/${props.connectorId}/api/control`,
         "edc.dataplane.api.public.baseurl": props.apiPublicUrl,
         "edc.dataplane.state-machine.iteration-wait-millis":

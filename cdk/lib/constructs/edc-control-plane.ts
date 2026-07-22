@@ -86,6 +86,10 @@ export class EdcControlPlane extends Construct {
     taskDefinition.addContainer("ControlPlaneContainer", {
       containerName: containerName,
       environment: {
+        // Point the S3 extension's static-credential probe at the connector's own
+        // (nonexistent) secret namespace so it resolves not-found and uses the task role.
+        "edc.aws.access.key": `${props.secretPrefix}edc.aws.access.key`,
+        "edc.aws.secret.access.key": `${props.secretPrefix}edc.aws.secret.access.key`,
         "edc.ddb.table.name": props.ddbTableName,
         "edc.dsp.callback.address": props.dspCallbackAddress,
         "edc.hostname": props.albOutputs.dnsName,
