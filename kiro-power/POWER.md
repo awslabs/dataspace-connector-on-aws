@@ -14,9 +14,7 @@ This power helps you deploy and operate a production-ready Dataspace Connector f
 
 The connector uses Tractus-X EDC with AWS-native integrations: Amazon DynamoDB for control plane persistence, AWS Secrets Manager for credentials, Amazon S3 for data transfer, and Amazon API Gateway with IAM authorization for secure API access.
 
-The project supports two deployment modes:
-- **Local deploy** — Direct `cdk deploy` for single-connector setups (ideal for getting started)
-- **Pipeline deploy** — CI/CD via CodePipeline with a config repository for multi-connector production environments
+Deployment is a single GitOps flow: `deploy.sh` creates a CDK Pipeline and a configuration repository, then the pipeline provisions each connector's identity from the Cofinity-X Portal, deploys it, and registers it for discovery. The same configuration repository can hold one or many connectors.
 
 With this power, you can go from zero to a fully deployed connector with validated end-to-end data exchange in minutes.
 
@@ -28,54 +26,54 @@ With this power, you can go from zero to a fully deployed connector with validat
 
 ## Available Steering Files
 
-- **deploy-connector** — Step-by-step guided workflow to configure, deploy, and validate your connector on AWS (supports both local single-connector deploy and pipeline-based multi-connector deploy)
-- **validate-data-exchange** — End-to-end validation workflow to create data offerings, negotiate contracts, transfer data, and troubleshoot issues
-- **prototype-use-case** — Research and compliance analysis workflow for a specific Catena-X use case. Loads KIT documentation, all applicable standards (with recursive normative reference resolution), and semantic data models. Produces a full compliance brief with every MUST/SHOULD/MAY requirement extracted verbatim, JSON schemas, example payloads, and EDC configuration requirements.
+- **deploy-connector**: Step-by-step guided workflow to configure, deploy, and validate your connector(s) on AWS via the deployment pipeline and Cofinity-X Portal integration
+- **validate-data-exchange**: End-to-end validation workflow to create data offerings, negotiate contracts, transfer data, and troubleshoot issues
+- **prototype-use-case**: Research and compliance analysis workflow for a specific Catena-X use case. Loads KIT documentation, all applicable standards (with recursive normative reference resolution), and semantic data models. Produces a full compliance brief with every MUST/SHOULD/MAY requirement extracted verbatim, JSON schemas, example payloads, and EDC configuration requirements.
+- **cofinity-x-portal**: Reference for Catena-X and Cofinity-X Portal concepts and the Portal API used during deployment: obtaining identity credentials, technical users, and connector registration
 
 ## Available MCP Tools
 
 This power provides 19 tools covering the full EDC Management API workflow:
 
 ### Discovery tools (multi-connector deployments)
-- `list_connectors` — Discover all deployed connector IDs from CloudFormation (requires `EDC_MULTI_CONNECTOR=true`)
+- `list_connectors`: Discover all deployed connector IDs from CloudFormation (requires `EDC_MULTI_CONNECTOR=true`)
 
 ### Provider-side tools (create data offerings)
-- `create_asset` — Create a new asset with data address
-- `create_policy_definition` — Create a new policy definition with ODRL rules
-- `create_contract_definition` — Create a contract definition linking assets to policies
+- `create_asset`: Create a new asset with data address
+- `create_policy_definition`: Create a new policy definition with ODRL rules
+- `create_contract_definition`: Create a contract definition linking assets to policies
 
 ### Consumer-side tools (discover and consume data)
-- `request_catalog` — Request the catalog from another connector to discover available datasets
-- `initiate_contract_negotiation` — Start a contract negotiation (passes full policy from catalog)
-- `get_contract_negotiation` — Get the full contract negotiation object including state, contractAgreementId, and errorDetail
-- `get_contract_agreement` — Retrieve a finalized contract agreement
-- `initiate_transfer` — Start a data transfer using a contract agreement
-- `get_transfer_process` — Get the full transfer process object including state, correlationId, and errorDetail
-- `get_edr_data_address` — Get the endpoint data reference (EDR) for an active transfer
-- `fetch_data_with_edr` — Fetch actual data from the provider's data plane using an EDR (handles token refresh transparently)
-- `initiate_edr_negotiation` — Combined negotiation + transfer in one call (shortcut for the full consumer flow)
+- `request_catalog`: Request the catalog from another connector to discover available datasets
+- `initiate_contract_negotiation`: Start a contract negotiation (passes full policy from catalog)
+- `get_contract_negotiation`: Get the full contract negotiation object including state, contractAgreementId, and errorDetail
+- `get_contract_agreement`: Retrieve a finalized contract agreement
+- `initiate_transfer`: Start a data transfer using a contract agreement
+- `get_transfer_process`: Get the full transfer process object including state, correlationId, and errorDetail
+- `get_edr_data_address`: Get the endpoint data reference (EDR) for an active transfer
+- `fetch_data_with_edr`: Fetch actual data from the provider's data plane using an EDR (handles token refresh transparently)
+- `initiate_edr_negotiation`: Combined negotiation + transfer in one call (shortcut for the full consumer flow)
 
 ### Query tools
-- `query_assets` — List/search assets with filtering and pagination
-- `query_policy_definitions` — List/search policy definitions
-- `query_contract_definitions` — List/search contract definitions
-- `query_contract_negotiations` — List/search contract negotiations
-- `query_transfer_processes` — List/search transfer processes
-- `query_contract_agreements` — List/search contract agreements
+- `query_assets`: List/search assets with filtering and pagination
+- `query_policy_definitions`: List/search policy definitions
+- `query_contract_definitions`: List/search contract definitions
+- `query_contract_negotiations`: List/search contract negotiations
+- `query_transfer_processes`: List/search transfer processes
+- `query_contract_agreements`: List/search contract agreements
 
 ## Onboarding
 
 ### Prerequisites
 
 Before deploying, ensure the following are installed on your machine:
-- `corretto@17` (or any Java 17 JDK)
-- `docker` (running)
 - `node@24` and `npm`
 - `cdk` (AWS CDK CLI)
+- `aws` (AWS CLI) with credentials configured (`aws configure` or SSO)
 - `python@3.10+` and `uv` (for the MCP server)
-- AWS credentials configured (`aws configure` or SSO)
+- `git`
 
-If any of these are missing, review the project's README for setup instructions.
+Java and a container runtime are not needed locally: the EDC build and Docker images are built inside the pipeline's CodeBuild. If any of the above are missing, review the project's README for setup instructions.
 
 ### Catena-X Membership
 
@@ -91,14 +89,13 @@ Your organization must be onboarded to the Catena-X data space. You will need th
 
 To deploy your connector, activate the **deploy-connector** steering file which walks you through:
 1. Verifying prerequisites
-2. Choosing deployment mode (local single-connector or pipeline multi-connector)
+2. Setting up the required Cofinity-X Portal technical users
 3. Configuring your connector(s) with Catena-X membership details
 4. Setting AWS resource configuration (IAM principals, region)
-5. Running the deployment
-6. Post-deployment setup (OAuth client secret)
-7. Configuring and validating MCP access
+5. Running the deployment (`deploy.sh`)
+6. Configuring and validating MCP access
 
-Once deployed, activate the **validate-data-exchange** steering file to validate the full data exchange flow end-to-end — creating offerings, negotiating contracts, transferring data, and verifying the payload reaches the consumer.
+Once deployed, activate the **validate-data-exchange** steering file to validate the full data exchange flow end-to-end, creating offerings, negotiating contracts, transferring data, and verifying the payload reaches the consumer.
 
 ### Add Hooks
 
@@ -150,7 +147,7 @@ initiate_contract_negotiation(
     obligation=[]
 )
 
-# 2. Poll until FINALIZED — returns full object with contractAgreementId
+# 2. Poll until FINALIZED: returns full object with contractAgreementId
 get_contract_negotiation(negotiation_id="<negotiation-id>")
 
 # 3. Extract contractAgreementId from the response above, then retrieve agreement
@@ -225,7 +222,7 @@ create_policy_definition(
     }
 )
 
-# 2. Usage policy (controls contract negotiation — requires FrameworkAgreement + UsagePurpose)
+# 2. Usage policy (controls contract negotiation: requires FrameworkAgreement + UsagePurpose)
 create_policy_definition(
     policy_id="my-usage-policy",
     policy={
@@ -265,7 +262,7 @@ create_contract_definition(
 ## Troubleshooting
 
 ### MCP tools return 403 Forbidden
-Your AWS credentials don't have `execute-api:Invoke` permission for the Management API Gateway, or your IAM principal ARN isn't listed in `managementApiPrincipals` in your deployment config (`environments.ts` for local deploy, `deployment.yaml` for pipeline deploy).
+Your AWS credentials don't have `execute-api:Invoke` permission for the Management API Gateway, or your IAM principal ARN isn't listed in `managementApiPrincipals` in `deployment.yaml`.
 
 ### Contract negotiation returns "Policy not equal to offer"
 You must pass the full policy from the catalog offer (including `permission`, `prohibition`, `obligation` arrays) when calling `initiate_contract_negotiation`. Don't construct a minimal policy stub.
@@ -278,23 +275,22 @@ The MCP server refreshes AWS credentials on every request, so temporary credenti
 
 ## Configuration Reference
 
-### EDC IAM Settings (from Cofinity-X Portal)
+### EDC Identity Settings (from Cofinity-X Portal)
 
-These settings are configured in `cdk/lib/config/environments.ts` (local deploy) or `connectors/connector-<id>.yaml` in the config repository (pipeline deploy).
+These organization-wide values are configured once in the `portal.identity` section of `deployment.yaml` and are the same for every connector. The pipeline reads each connector's technical-user credentials from the portal (referenced by `edcTechnicalUserId` in the connector YAML) and assembles the rest of the EDC identity automatically.
 
-| Constant (environments.ts) | YAML Field | EDC Property | Description |
-|-------|------|------|-------------|
-| `TRUSTED_ISSUER` | `trustedIssuer` | `edc.iam.trusted-issuer.issuer-1.id` | Trusted issuer DID (Cofinity-X) |
-| `DCP_STS_OAUTH_TOKEN_URL` | `stsOauthTokenUrl` | `edc.iam.sts.oauth.token.url` | OAuth token endpoint URL |
-| `DCP_STS_OAUTH_CLIENT_ID` | `stsOauthClientId` | `edc.iam.sts.oauth.client.id` | Technical user OAuth client ID |
-| `DCP_STS_DIM_URL` | `stsDimUrl` | `tx.edc.iam.sts.dim.url` | DIM integration service URL |
-| `PARTICIPANT_ID` | `participantId` | `tractusx.edc.participant.bpn` | Your organization's BPNL number |
-| `DCP_ID` | `dcpId` | `edc.iam.issuer.id` | Your connector's Decentralized Identifier (DID) |
-| `DID_RESOLVER` | `didResolver` | `tx.edc.iam.iatp.bdrs.server.url` | BDRS server URL for DID resolution |
+| YAML Field (`portal.identity`) | EDC Property | Description |
+|------|------|-------------|
+| `trustedIssuer` | `edc.iam.trusted-issuer.issuer-1.id` | Trusted issuer DID (Cofinity-X) |
+| `stsOauthTokenUrl` | `edc.iam.sts.oauth.token.url` | OAuth token endpoint URL |
+| `stsDimUrl` | `tx.edc.iam.sts.dim.url` | DIM integration service URL |
+| `participantId` | `tractusx.edc.participant.bpn` | Your organization's BPN |
+| `dcpId` | `edc.iam.issuer.id` | Your organization's Decentralized Identifier (DID) |
+| `didResolver` | `tx.edc.iam.iatp.bdrs.server.url` | BDRS server URL for DID resolution |
 
 ### AWS Resource Settings
 
-Configured in `environments.ts` (local) or split between `deployment.yaml` (shared infra) and `connector-<id>.yaml` (per-connector):
+Split between `deployment.yaml` (shared infrastructure) and `connector-<id>.yaml` (per-connector):
 
 | Field | Default | Description |
 |-------|---------|-------------|
@@ -318,10 +314,8 @@ Before using this power, replace the following placeholders in `mcp.json` with y
 - **`PLACEHOLDER_MCP_DIRECTORY`**: Absolute path to the `mcp/` subdirectory of this project.
   - **How to get it:** After cloning the repository, use the full path to the `mcp/` folder, e.g., `/Users/yourname/Code/dataspace-connector-on-aws/mcp`
 
-- **`PLACEHOLDER_MANAGEMENT_API_URL`**: The EDC Management API endpoint URL from your CDK deployment output.
-  - **How to get it:** After running `deploy-local.sh` or after the pipeline deploys, look for the CDK output key starting with `EdcApiManagementApiEndpoint`. It looks like `https://<api-id>.execute-api.<region>.amazonaws.com/management/`
-  - **Multi-connector mode:** Use the base URL without a connector ID suffix (e.g., `https://xxx.execute-api.region.amazonaws.com/management`). The `connector_id` parameter on each tool call handles routing.
-  - **Single-connector mode:** Append the connector ID (e.g., `https://xxx.execute-api.region.amazonaws.com/management/default`)
+- **`PLACEHOLDER_MANAGEMENT_API_URL`**: The EDC Management API endpoint URL from your deployment.
+  - **How to get it:** After the pipeline's Deploy stage completes, read the `ManagementApiUrl` output of the `Deploy-DataspaceConnectorSharedInfraStack`. It looks like `https://<api-id>.execute-api.<region>.amazonaws.com/management/`. Use it as-is (the base URL without a connector suffix); the `connector_id` parameter on each tool call handles routing.
 
 - **`PLACEHOLDER_AWS_REGION`**: The AWS region where the connector is deployed.
   - **How to set it:** Use the region you chose during deployment (e.g., `eu-central-1`)
@@ -329,6 +323,6 @@ Before using this power, replace the following placeholders in `mcp.json` with y
 - **`PLACEHOLDER_AWS_PROFILE`**: The AWS CLI profile used for deployment.
   - **How to get it:** Run `echo $AWS_PROFILE` or `aws configure list-profiles` to see available profiles
 
-The `mcp.json` template includes `"EDC_MULTI_CONNECTOR": "true"` by default — this enables `list_connectors()` discovery and requires `connector_id` on all tool calls. For single-connector local deployments, either remove this env var or set it to `"false"`.
+The `mcp.json` template sets `"EDC_MULTI_CONNECTOR": "true"`, which enables `list_connectors()` discovery and requires `connector_id` on all tool calls. Keep this enabled for pipeline deployments.
 
-Note: The **deploy-connector** steering file automates this configuration — it collects all values during deployment and writes the MCP config automatically.
+Note: The **deploy-connector** steering file automates this configuration, it collects all values during deployment and writes the MCP config automatically.

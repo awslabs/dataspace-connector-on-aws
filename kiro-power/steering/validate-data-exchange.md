@@ -14,28 +14,9 @@ Before starting, confirm the MCP tools are working and identify the target conne
 
 ### Step 1.1: Identify the Target Connector
 
-This project supports two deployment modes with different stack naming conventions:
+All connectors are deployed by the pipeline, so their stacks are named `Deploy-DataspaceConnectorSharedInfraStack` (shared infrastructure) and `Deploy-DataspaceConnector-<connectorId>` (per connector).
 
-| Mode | Shared Infra Stack | Connector Stack | Deployed via |
-|------|-------------------|-----------------|--------------|
-| **Local** (`deploy-local.sh`) | `DataspaceConnectorSharedInfraStack` | `DataspaceConnector-<connectorId>` | `cdk deploy --all` |
-| **Pipeline** (`deploy-pipeline.sh`) | `Deploy-DataspaceConnectorSharedInfraStack` | `Deploy-DataspaceConnector-<connectorId>` | CodePipeline + config repo |
-
-To determine which mode is in use, check for the pipeline stack:
-```bash
-aws cloudformation describe-stacks --stack-name DataspaceConnectorPipelineStack --region <region> --query 'Stacks[0].StackStatus' --output text 2>&1
-```
-
-- If this returns a status like `CREATE_COMPLETE` or `UPDATE_COMPLETE` → **pipeline mode** (stacks are prefixed with `Deploy-`)
-- If it returns an error → **local mode** (no prefix)
-
-Store the stack prefix (either `Deploy-` or empty string) — it is used throughout this workflow.
-
-In **multi-connector mode** (pipeline deployments), use `list_connectors()` to discover all available connectors and ask the user which one to validate. All subsequent MCP tool calls MUST include the `connector_id` parameter.
-
-IMPORTANT: The `list_connectors()` tool discovers connectors by scanning CloudFormation for stacks matching the prefix `Deploy-DataspaceConnector-`. This means it **only works for pipeline-mode deployments**. For local-mode deployments, the agent must determine the connector ID from `cdk/lib/config/environments.ts` (the `connectorId` field) or ask the user directly.
-
-In **single-connector mode** (local deployments with one connector), the `connector_id` parameter can be omitted from MCP tool calls.
+Use `list_connectors()` to discover the deployed connector IDs (it scans CloudFormation for `Deploy-DataspaceConnector-` stacks) and ask the user which one to validate. All MCP tool calls include the `connector_id` parameter.
 
 ### Step 1.2: Verify MCP Connectivity
 
@@ -48,32 +29,30 @@ If this fails, the MCP connection isn't configured. Direct the user to the **dep
 
 ### Step 1.3: Discover CloudWatch Log Groups
 
-The AWS profile and region are needed — check the MCP config at `.kiro/settings/mcp.json` for `AWS_PROFILE` and `AWS_REGION` values:
+The AWS profile and region are needed, check the MCP config at `.kiro/settings/mcp.json` for `AWS_PROFILE` and `AWS_REGION` values:
 
 ```bash
-aws cloudformation list-stack-resources --stack-name <prefix>DataspaceConnector-<connectorId> --region <region> \
+aws cloudformation list-stack-resources --stack-name Deploy-DataspaceConnector-<connectorId> --region <region> \
     --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].[LogicalResourceId,PhysicalResourceId]' --output json
 ```
-
-Where `<prefix>` is `Deploy-` for pipeline mode or empty for local mode.
 
 This returns the log group physical resource IDs for the current deployment. Match by logical ID prefix:
 - `ControlPlane` → control plane log group
 - `DataPlane` → data plane log group
 
-Store both log group names — they are needed for diagnosing any issues in Phase 8.
+Store both log group names, they are needed for diagnosing any issues in Phase 8.
 
 ---
 
 ## Phase 2: Understand the User's Goal
 
 Ask the user:
-> "What would you like to do? The recommended first step is a full end-to-end validation using the loopback self-test — this creates a data offering on your connector and then consumes it from the same connector, verifying the entire flow.
+> "What would you like to do? The recommended first step is a full end-to-end validation using the loopback self-test, this creates a data offering on your connector and then consumes it from the same connector, verifying the entire flow.
 >
-> 1. **End-to-end validation with S3 (recommended)** — Uploads test data to S3, registers it as an asset, and validates the full AWS-native data path including S3 proxy, IAM roles, and token signing
-> 2. **Quick validation with HttpData** — Lighter self-test using an external HTTP endpoint as the data source (skips S3)
-> 3. **Create a data offering** — Register an asset, define access policies, and publish a contract offer so other connectors can discover and consume your data
-> 4. **Consume data from another connector** — Browse a provider's catalog, negotiate a contract, and transfer data
+> 1. **End-to-end validation with S3 (recommended)**: Uploads test data to S3, registers it as an asset, and validates the full AWS-native data path including S3 proxy, IAM roles, and token signing
+> 2. **Quick validation with HttpData**: Lighter self-test using an external HTTP endpoint as the data source (skips S3)
+> 3. **Create a data offering**: Register an asset, define access policies, and publish a contract offer so other connectors can discover and consume your data
+> 4. **Consume data from another connector**: Browse a provider's catalog, negotiate a contract, and transfer data
 >
 > Press Enter for the recommended S3 end-to-end validation, or choose another option."
 
@@ -91,12 +70,12 @@ Walk the user through creating a complete data offering. Ask for details or use 
 
 Tractus-X EDC requires separate access and usage policies with Catena-X-compliant constraints. Ask the user:
 > "What access policy should govern your data? Common options:
-> - **Open access** — Any Catena-X member can see and use the data (good for testing)
-> - **BPN-restricted** — Only specific business partners can access it
+> - **Open access**: Any Catena-X member can see and use the data (good for testing)
+> - **BPN-restricted**: Only specific business partners can access it
 >
 > For validation, open access is simplest. Want to go with that?"
 
-For open access, create two policies — one for access (who can see the offer) and one for usage (who can negotiate a contract):
+For open access, create two policies, one for access (who can see the offer) and one for usage (who can negotiate a contract):
 
 **Access policy** (controls catalog visibility):
 ```python
@@ -117,7 +96,7 @@ create_policy_definition(
 )
 ```
 
-**Usage/contract policy** (controls negotiation — requires FrameworkAgreement + UsagePurpose):
+**Usage/contract policy** (controls negotiation, requires FrameworkAgreement + UsagePurpose):
 ```python
 create_policy_definition(
     connector_id="<target-connector>",
@@ -244,7 +223,7 @@ Help the user interpret the catalog response:
 - The `odrl:hasPolicy` contains the offer details needed for negotiation
 - Point out the offer ID (`@id` of the policy), asset ID, and the permission/prohibition/obligation arrays
 
-NOTE: For a simpler flow, `initiate_edr_negotiation` can replace the separate negotiation + transfer steps (Steps 4.2–4.5) with a single call. However, the step-by-step flow below gives more control and visibility.
+NOTE: For a simpler flow, `initiate_edr_negotiation` can replace the separate negotiation + transfer steps (Steps 4.2-4.5) with a single call. However, the step-by-step flow below gives more control and visibility.
 
 ### Step 4.2: Negotiate a Contract
 
@@ -263,7 +242,7 @@ initiate_contract_negotiation(
 )
 ```
 
-IMPORTANT: The `permission`, `prohibition`, and `obligation` must be passed through exactly as they appear in the catalog offer. Do not construct a minimal stub — the provider will reject it with "Policy not equal to offer".
+IMPORTANT: The `permission`, `prohibition`, and `obligation` must be passed through exactly as they appear in the catalog offer. Do not construct a minimal stub, the provider will reject it with "Policy not equal to offer".
 
 ### Step 4.3: Wait for Negotiation to Complete
 
@@ -278,7 +257,7 @@ If the state is `TERMINATED`, check the `errorDetail` field in the response. Com
 - Policy mismatch (didn't pass full policy from catalog)
 - Provider-side policy evaluation failure (BPN not allowed)
 
-Once `FINALIZED`, extract the `contractAgreementId` directly from the `get_contract_negotiation` response — it returns the full negotiation object.
+Once `FINALIZED`, extract the `contractAgreementId` directly from the `get_contract_negotiation` response, it returns the full negotiation object.
 
 ### Step 4.4: Retrieve the Agreement
 
@@ -314,8 +293,8 @@ get_edr_data_address(connector_id="<target-connector>", transfer_process_id="<tr
 ```
 
 The EDR contains:
-- `endpoint` — URL to fetch the data from
-- `authorization` — Bearer token for authentication
+- `endpoint`: URL to fetch the data from
+- `authorization`: Bearer token for authentication
 
 Now fetch the actual data using the `fetch_data_with_edr` tool, which resolves the EDR and makes the HTTP request to the provider's data plane in one step:
 
@@ -325,9 +304,9 @@ fetch_data_with_edr(connector_id="<target-connector>", transfer_process_id="<tra
 
 NOTE: When no `path` parameter is provided, the MCP server defaults to appending `public/` to the EDR endpoint URL. This is the standard Tractus-X data plane public API path. If the data plane requires a different sub-path, pass it explicitly via the `path` parameter.
 
-This tool handles token refresh transparently — Tractus-X auto-refreshes expired EDR tokens when resolving the data address, so the agent can call this repeatedly over time without worrying about token expiry.
+This tool handles token refresh transparently, Tractus-X auto-refreshes expired EDR tokens when resolving the data address, so the agent can call this repeatedly over time without worrying about token expiry.
 
-The data plane acts as a proxy — it forwards the request to the provider's actual data source (the `baseUrl` or S3 object configured in the asset's data address) and returns the response.
+The data plane acts as a proxy, it forwards the request to the provider's actual data source (the `baseUrl` or S3 object configured in the asset's data address) and returns the response.
 
 If the response contains the expected data from the asset's data source, the end-to-end flow is validated.
 
@@ -355,48 +334,32 @@ This is the recommended validation path. It exercises the full AWS-native data f
 
 Retrieve the S3 bucket name, DSP endpoint, and BPNL. The bucket comes from the per-connector stack, API endpoints from the shared infra stack.
 
-**Determine the stack prefix** based on the deployment mode identified in Phase 1:
-- Pipeline mode → prefix is `Deploy-`
-- Local mode → no prefix
-
-**Shared infrastructure outputs** (API endpoints are shared across all connectors):
+**Shared infrastructure outputs** (the DSP endpoint is shared across all connectors):
 
 ```bash
-aws cloudformation describe-stacks --stack-name <prefix>DataspaceConnectorSharedInfraStack --region <region> \
-    --query 'Stacks[0].Outputs' --output json
+aws cloudformation describe-stacks --stack-name Deploy-DataspaceConnectorSharedInfraStack --region <region> \
+    --query "Stacks[0].Outputs" --output json
 ```
 
-Extract from shared infra outputs:
-- Key starting with `EdcApiDspApiEndpoint` → DSP endpoint base URL. Append the connector ID to form the full DSP address (e.g., `https://xxx.execute-api.region.amazonaws.com/protocol/<connectorId>`)
-- Key starting with `EdcApiManagementApiEndpoint` → Management API base URL (for reference)
+Extract:
+- `DspApiUrl` → the DSP endpoint base URL. Append the connector ID to form the full DSP address (e.g., `https://xxx.execute-api.<region>.amazonaws.com/protocol/<connectorId>`).
+- `ManagementApiUrl` → the Management API base URL (for reference).
 
-**Per-connector outputs** (each connector has its own stack with its own S3 bucket):
+**Per-connector output** (the S3 bucket for this connector's data plane):
 
 ```bash
-aws cloudformation describe-stacks --stack-name <prefix>DataspaceConnector-<connectorId> --region <region> \
-    --query 'Stacks[0].Outputs' --output json
+aws cloudformation describe-stacks --stack-name Deploy-DataspaceConnector-<connectorId> --region <region> \
+    --query "Stacks[0].Outputs[?OutputKey=='EdcDataPlaneBucketName'].OutputValue" --output text
 ```
 
-Extract from connector stack outputs:
-- Key `EdcDataPlaneBucketName` → the S3 bucket name for this connector's data plane
+**Business Partner Number (BPN):** the organization BPN is the `participantId` under `portal.identity` in `deployment.yaml` in the configuration repository. It is organization-wide, the same for every connector. Fetch it from CodeCommit:
 
-**Retrieve the BPNL (participantId) for the target connector:**
+```bash
+aws codecommit get-file --repository-name dataspace-connector-config \
+    --file-path deployment.yaml --region <region> --query 'fileContent' --output text | base64 -d
+```
 
-The connector's identity configuration depends on the deployment mode:
-
-- **Pipeline mode:** Config is stored in a CodeCommit (or GitHub) config repository. Discover the repo name from `pipeline.yaml` (field `configRepoName`, default: `dataspace-connector-config`). Then fetch the connector's YAML:
-  ```bash
-  aws codecommit get-file --repository-name <config-repo-name> \
-      --file-path connectors/connector-<connectorId>.yaml \
-      --region <region> --query 'fileContent' --output text | base64 -d
-  ```
-  The `participantId` field under `edcIam` contains the BPNL.
-
-- **Local mode:** Read `cdk/lib/config/environments.ts` (or the YAML config files if `cdk/config/` directory exists). Find the connector entry matching the `connectorId` and extract the value for `tractusx.edc.participant.bpn`.
-
-Use the BPNL as the `counter_party_id` for catalog requests and as the `assigner` for contract negotiations.
-
-If the user already has these values from a prior deployment, use them directly.
+Use the BPN as the `counter_party_id` for catalog requests and as the `assigner` for contract negotiations. If you already have these values from deployment, use them directly.
 
 ### Step 5.2: Upload Test Data to S3
 
@@ -510,7 +473,7 @@ request_catalog(
 )
 ```
 
-Locate the `test-s3-asset` entry in the catalog response and extract the offer details. Note that the `dspace:participantId` in the catalog response is the BPNL, and the `assigner` in the offer also uses the BPNL — use this value for `counter_party_id` and `assigner` in subsequent steps.
+Locate the `test-s3-asset` entry in the catalog response and extract the offer details. Note that the `dspace:participantId` in the catalog response is the BPNL, and the `assigner` in the offer also uses the BPNL, use this value for `counter_party_id` and `assigner` in subsequent steps.
 
 ### Step 5.5: Complete the Consumer Flow
 
@@ -524,7 +487,7 @@ After `fetch_data_with_edr` returns the data, verify it matches the document upl
 ```
 
 After successful completion:
-> "Your connector is fully operational — the complete S3 data exchange flow has been validated end-to-end. Data was uploaded to S3, registered as an asset, discovered via catalog, negotiated, transferred, and retrieved through the data plane proxy. The data plane successfully read from S3 using its IAM role and proxied the content to the consumer over HTTP. You're ready to start sharing data with other Catena-X participants."
+> "Your connector is fully operational, the complete S3 data exchange flow has been validated end-to-end. Data was uploaded to S3, registered as an asset, discovered via catalog, negotiated, transferred, and retrieved through the data plane proxy. The data plane successfully read from S3 using its IAM role and proxied the content to the consumer over HTTP. You're ready to start sharing data with other Catena-X participants."
 
 ---
 
@@ -559,7 +522,7 @@ request_catalog(
 Follow Phase 4 steps 4.2 through 4.6 using the user's own connector as both provider and consumer.
 
 After successful completion:
-> "Your connector's core data exchange flow is working — catalog, negotiation, transfer, and HTTP proxy are all operational. For a more thorough validation that includes S3 data sources, run the S3 self-test (option 1)."
+> "Your connector's core data exchange flow is working, catalog, negotiation, transfer, and HTTP proxy are all operational. For a more thorough validation that includes S3 data sources, run the S3 self-test (option 1)."
 
 ---
 
@@ -576,7 +539,7 @@ query_contract_agreements(connector_id="<target-connector>", limit=50)
 query_transfer_processes(connector_id="<target-connector>", limit=50)
 ```
 
-Note: The EDC Management API does not provide delete operations for assets, policies, or contract definitions through the standard endpoints used by this MCP server. Resources created during testing will persist, including any S3 test objects uploaded during the S3 self-test — do not delete them independently, as that would leave broken asset records. For a clean slate, the user can redeploy the stack (DynamoDB tables are set to `DESTROY` removal policy by default).
+Note: The EDC Management API does not provide delete operations for assets, policies, or contract definitions through the standard endpoints used by this MCP server. Resources created during testing will persist, including any S3 test objects uploaded during the S3 self-test, do not delete them independently, as that would leave broken asset records. For a clean slate, the user can redeploy the stack (DynamoDB tables are set to `DESTROY` removal policy by default).
 
 ---
 
@@ -616,21 +579,19 @@ The response includes the `errorDetail` field when the negotiation is `TERMINATE
 The control plane and data plane each write to their own CloudWatch log group. The names include CDK-generated suffixes, so discover them from the stack resources (this avoids picking up stale log groups from prior deployments):
 
 ```bash
-aws cloudformation list-stack-resources --stack-name <prefix>DataspaceConnector-<connectorId> --region <region> \
+aws cloudformation list-stack-resources --stack-name Deploy-DataspaceConnector-<connectorId> --region <region> \
     --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].[LogicalResourceId,PhysicalResourceId]' --output json
 ```
 
-Where `<prefix>` is `Deploy-` for pipeline mode or empty for local mode (determined in Phase 1).
-
 This returns entries like:
-- Logical ID containing `ControlPlane` → `<prefix>DataspaceConnector-<connectorId>-ControlPlaneLogGroup<suffix>`
-- Logical ID containing `DataPlane` → `<prefix>DataspaceConnector-<connectorId>-DataPlaneLogGroup<suffix>`
+- Logical ID containing `ControlPlane` → `Deploy-DataspaceConnector-<connectorId>-ControlPlaneLogGroup<suffix>`
+- Logical ID containing `DataPlane` → `Deploy-DataspaceConnector-<connectorId>-DataPlaneLogGroup<suffix>`
 
-Store both — you'll need them for log queries.
+Store both, you'll need them for log queries.
 
 ### Step 8.3: Pull Time-Correlated Logs from Both Services
 
-Using the timestamp from the failed process (the `stateTimestamp` field from Step 8.1), pull logs from BOTH the control plane and data plane in a window around that time. Always check both services — the root cause may be on either side.
+Using the timestamp from the failed process (the `stateTimestamp` field from Step 8.1), pull logs from BOTH the control plane and data plane in a window around that time. Always check both services, the root cause may be on either side.
 
 First, find the latest log stream for each service:
 ```bash
@@ -666,7 +627,7 @@ With the error detail from Step 8.1 and the correlated logs from Step 8.3, inter
 | `DataPlane not found` | Data plane registration expired or data plane not running | Control plane logs for `DataPlaneSelectorManagerImpl` state changes; data plane logs for `DataPlaneHealthCheck` registration |
 | `Policy not equal to offer` | Contract negotiation used a policy that doesn't match the catalog offer | Control plane logs for policy evaluation; verify `permission`/`prohibition`/`obligation` arrays match the catalog exactly |
 | `Contract agreement not found` | Invalid or expired contract agreement ID used for transfer | Control plane logs; verify the agreement ID exists via `get_contract_agreement` |
-| `Failed to decode token` | Token signing key mismatch between control plane and data plane | Verify the Secrets Manager secrets `<connectorId>/edc.transfer.proxy.token.signer.privatekey` and `<connectorId>/edc.transfer.proxy.token.verifier.publickey` exist and contain valid RSA keys (these are auto-generated on first deploy by the `EdcTokenKeyPair` construct — if missing, redeploy the connector stack) |
+| `Failed to decode token` | Token signing key mismatch between control plane and data plane | Verify the Secrets Manager secrets `<connectorId>/edc.transfer.proxy.token.signer.privatekey` and `<connectorId>/edc.transfer.proxy.token.verifier.publickey` exist and contain valid RSA keys (these are auto-generated on first deploy by the `EdcTokenKeyPair` construct, if missing, redeploy the connector stack) |
 | S3 `AccessDenied` | Data plane Fargate task role lacks `s3:GetObject` permission on the bucket | Check the task role policies; verify the bucket ARN matches |
 | No logs in data plane | Data plane task may have crashed or not started | Check ECS service status: `aws ecs describe-services --cluster <cluster> --services <service>` |
 

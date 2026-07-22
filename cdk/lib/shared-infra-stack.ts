@@ -48,6 +48,7 @@ export class SharedInfraStack extends Stack {
   readonly dataPlaneImage: DockerImageAsset;
   readonly dataPlaneUrl: string;
   readonly dspUrl: string;
+  readonly managementUrl: string;
   readonly ecsCluster: ICluster;
   readonly listenerArns: { [port: number]: string };
   readonly vpc: IVpc;
@@ -170,6 +171,7 @@ export class SharedInfraStack extends Stack {
 
     this.dspUrl = api.outputs.dspUrl;
     this.dataPlaneUrl = api.outputs.dataPlaneUrl;
+    this.managementUrl = api.outputs.managementUrl;
 
     // Scheduled cleanup of expired EDR secrets
     new EdcSecretCleanup(this, "EdcSecretCleanup");
@@ -179,5 +181,6 @@ export class SharedInfraStack extends Stack {
     new CfnOutput(this, "ClusterArn", { value: this.ecsCluster.clusterArn });
     new CfnOutput(this, "AlbDnsName", { value: this.albDnsName });
     new CfnOutput(this, "DspApiUrl", { value: this.dspUrl });
+    new CfnOutput(this, "ManagementApiUrl", { value: this.managementUrl });
   }
 }

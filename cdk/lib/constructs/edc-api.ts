@@ -52,6 +52,7 @@ export interface EdcApiProps {
 export interface EdcApiOutputs {
   readonly dataPlaneUrl: string;
   readonly dspUrl: string;
+  readonly managementUrl: string;
 }
 
 export class EdcApi extends Construct {
@@ -260,11 +261,13 @@ export class EdcApi extends Construct {
       this.outputs = {
         dataPlaneUrl: `https://${domainName.domainName}/${dataPlaneApiPath}`,
         dspUrl: `https://${domainName.domainName}/${dspApiPath}`,
+        managementUrl: `https://${domainName.domainName}/${managementApiPath}`,
       };
     } else {
       this.outputs = {
         dataPlaneUrl: dataPlaneApi.url,
         dspUrl: dspApi.url,
+        managementUrl: managementApi.url,
       };
     }
   }
