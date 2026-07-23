@@ -194,10 +194,13 @@ aws cloudformation delete-stack --stack-name DataspaceConnectorPipelineStack --r
 
 Baseline infrastructure cost drops significantly at scale because VPC, NAT Gateway, and ALB are shared. Per-connector cost is primarily Fargate compute + DynamoDB on-demand.
 
+These figures reflect baseline (idle) cost. DynamoDB consumption, and therefore variable cost, scales with the number of active (open) transfers a connector serves. See [Open Transfers and DynamoDB Cost](docs/open-transfers-and-dynamodb-cost.md).
+
 ## Considerations
 
 * **Per-connector access control:** When deploying multiple connectors, you can restrict which IAM principals can access which connector's Management API. Supports single-account, cross-account, and organization-level trust patterns. See [Management API Access Patterns](docs/management-api-access-patterns.md).
 * **API Gateway payload limit:** 10 MB per request (REST API). Does not affect Consumer Pull scenarios or S3-backed data transfers.
+* **Open transfers accrue provider cost:** Pull transfers stay in `STARTED` until explicitly terminated, and each open transfer keeps a provider-side data-plane flow active and consuming DynamoDB. Nothing reaps them automatically, so terminate transfers you no longer need via the Management API. See [Open Transfers and DynamoDB Cost](docs/open-transfers-and-dynamodb-cost.md).
 * **Fargate Spot availability:** In `development` profile, Spot capacity constraints may cause deployment delays during updates. Retry or use `production` profile for guaranteed placement.
 * **Connector ID constraints:** Must be 2–60 characters, lowercase alphanumeric + hyphens, cannot start/end with a hyphen. Used in ALB paths, DynamoDB table names, Secrets Manager prefixes, and CloudFormation stack names.
 
