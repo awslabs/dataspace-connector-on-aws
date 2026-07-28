@@ -6,9 +6,9 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = [
-    "fastmcp>=3.4.2",
+    "fastmcp>=3.4.5",
     "httpx>=0.28.1",
-    "boto3>=1.43.40",
+    "boto3>=1.43.58",
 ]
 
 [project.scripts]

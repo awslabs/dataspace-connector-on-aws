@@ -6,8 +6,10 @@ Provides tools for interacting with Eclipse Dataspace Components' Connector Mana
 
 Supports two modes:
 - Legacy (single connector): Set EDC_MANAGEMENT_URL only. All tools target that endpoint directly.
-- Multi-connector (Dataspace Connector on AWS): Set EDC_MANAGEMENT_URL + EDC_MULTI_CONNECTOR=true.
-  Enables dynamic connector discovery via CloudFormation and requires connector_id on all tools.
+- Multi-connector (Dataspace Connector on AWS): Set EDC_MULTI_CONNECTOR=true.
+  Connector IDs and the Management and DSP (protocol) base URLs are discovered from
+  CloudFormation, so EDC_MANAGEMENT_URL is optional (used as an override if set).
+  Requires connector_id on all tools.
 
 Provider-side tools:
 - create_asset: Create a new asset with data address
@@ -47,17 +49,28 @@ from botocore.awsrequest import AWSRequest
 from mcp.server.fastmcp import FastMCP
 
 # Configuration
-EDC_MANAGEMENT_URL = os.getenv("EDC_MANAGEMENT_URL", "http://localhost:8080/management").rstrip("/")
+# EDC_MANAGEMENT_URL is an explicit override. In single-connector mode it is the
+# endpoint (falling back to localhost). In multi-connector mode it is optional:
+# when unset, the Management and DSP endpoints are discovered from the shared
+# infrastructure stack's CloudFormation outputs.
+_ENV_MANAGEMENT_URL = os.getenv("EDC_MANAGEMENT_URL")
+_DEFAULT_MANAGEMENT_URL = "http://localhost:8080/management"
 EDC_API_KEY = os.getenv("EDC_API_KEY", "")
 USE_AWS_IAM = os.getenv("EDC_USE_AWS_IAM", "false").lower() == "true"
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 MULTI_CONNECTOR = os.getenv("EDC_MULTI_CONNECTOR", "false").lower() == "true"
 
-# CloudFormation stack prefix used by Dataspace Connector on AWS deployments
+# CloudFormation stack naming used by Dataspace Connector on AWS deployments
 _CFN_STACK_PREFIX = "Deploy-DataspaceConnector-"
-_CFN_SHARED_INFRA_SUFFIX = "SharedInfraStack"
+# Shared-infra stack name suffix. Matching on this handles both the pipeline
+# ("Deploy-DataspaceConnectorSharedInfraStack") and local cdk deploy
+# ("DataspaceConnectorSharedInfraStack") variants.
+_CFN_SHARED_INFRA_MATCH = "DataspaceConnectorSharedInfraStack"
 
-# Initialize FastMCP server with mode-dependent instructions
+# Cached CloudFormation discovery (connector IDs + endpoint URLs) for multi-connector
+# mode, populated once per process. Restart the server to pick up new connectors.
+_discovery_cache: Optional[dict[str, Any]] = None
+
 _MULTI_INSTRUCTIONS = (
     "This server manages multiple EDC connectors deployed via Dataspace Connector on AWS. "
     "ALWAYS call list_connectors first to discover available connector IDs before using any other tool. "
@@ -69,9 +82,7 @@ mcp = FastMCP(
     instructions=_MULTI_INSTRUCTIONS if MULTI_CONNECTOR else None,
 )
 
-# Initialize AWS session if IAM auth or multi-connector discovery is enabled
 _aws_session = None
-
 if USE_AWS_IAM or MULTI_CONNECTOR:
     _aws_session = boto3.Session()
 
@@ -79,18 +90,74 @@ if USE_AWS_IAM or MULTI_CONNECTOR:
 def _resolve_management_url(connector_id: Optional[str]) -> str:
     """Resolve the Management API base URL for a request.
 
-    In multi-connector mode, connector_id is prepended as a path segment.
-    In legacy mode, the EDC_MANAGEMENT_URL is used directly.
+    Single-connector mode: use EDC_MANAGEMENT_URL (falling back to localhost).
+    Multi-connector mode: connector_id is prepended as a path segment, and the
+    base is the explicit EDC_MANAGEMENT_URL override if set, otherwise the value
+    discovered from the shared-infra stack's ManagementApiUrl output.
     """
-    if MULTI_CONNECTOR:
-        if not connector_id:
-            raise ValueError(
-                "connector_id is required in multi-connector mode. "
-                "Call list_connectors first to discover available connector IDs."
-            )
-        return f"{EDC_MANAGEMENT_URL}/{connector_id}"
-    else:
-        return EDC_MANAGEMENT_URL
+    if not MULTI_CONNECTOR:
+        return (_ENV_MANAGEMENT_URL or _DEFAULT_MANAGEMENT_URL).rstrip("/")
+
+    if not connector_id:
+        raise ValueError(
+            "connector_id is required in multi-connector mode. "
+            "Call list_connectors first to discover available connector IDs."
+        )
+
+    base = _norm_url(_ENV_MANAGEMENT_URL) or _discover()["management_url"]
+    if not base:
+        raise ValueError(
+            "Could not resolve the EDC Management API URL. Set EDC_MANAGEMENT_URL, "
+            "or ensure the shared-infrastructure stack exports the ManagementApiUrl "
+            "output and your credentials allow cloudformation:ListStacks and DescribeStacks."
+        )
+    return f"{base}/{connector_id}"
+
+
+def _norm_url(value: Optional[str]) -> Optional[str]:
+    """Normalize a URL to a bare base with no trailing slash."""
+    return value.rstrip("/") if value else None
+
+
+def _discover() -> dict[str, Any]:
+    """Discover connector IDs and Management/DSP base URLs from CloudFormation.
+
+    One list_stacks pass (connector IDs + shared-infra stack) plus one
+    describe_stacks (endpoint outputs), cached for the process lifetime. Restart
+    the server to pick up newly deployed connectors or changed endpoints.
+    """
+    global _discovery_cache
+    if _discovery_cache is not None:
+        return _discovery_cache
+
+    cfn = _aws_session.client("cloudformation", region_name=AWS_REGION)
+    connector_ids: list[str] = []
+    shared_infra: Optional[str] = None
+    for page in cfn.get_paginator("list_stacks").paginate(
+        StackStatusFilter=["CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_ROLLBACK_COMPLETE"]
+    ):
+        for stack in page.get("StackSummaries", []):
+            name = stack["StackName"]
+            if name.endswith(_CFN_SHARED_INFRA_MATCH):
+                shared_infra = name
+            elif name.startswith(_CFN_STACK_PREFIX):
+                connector_ids.append(name[len(_CFN_STACK_PREFIX):])
+    connector_ids.sort()
+
+    management_url = dsp_url = None
+    if shared_infra:
+        stacks = cfn.describe_stacks(StackName=shared_infra).get("Stacks", [])
+        outputs = stacks[0].get("Outputs", []) if stacks else []
+        by_key = {o["OutputKey"]: o.get("OutputValue") for o in outputs}
+        management_url = _norm_url(by_key.get("ManagementApiUrl"))
+        dsp_url = _norm_url(by_key.get("DspApiUrl"))
+
+    _discovery_cache = {
+        "connector_ids": connector_ids,
+        "management_url": management_url,
+        "dsp_url": dsp_url,
+    }
+    return _discovery_cache
 
 
 def get_headers() -> dict[str, str]:
@@ -108,26 +175,15 @@ def sign_request(method: str, url: str, headers: dict[str, str], body: bytes = N
     if not USE_AWS_IAM:
         return headers
 
-    # Get fresh credentials each time to handle expiration of temporary credentials
+    # Fetch fresh credentials each call so temporary-credential expiry is handled.
     credentials = _aws_session.get_credentials()
     frozen_credentials = credentials.get_frozen_credentials()
 
-    # Ensure we have the required headers for signing
     if body and "Content-Type" not in headers:
         headers["Content-Type"] = "application/json"
 
-    # Create AWS request
-    aws_request = AWSRequest(
-        method=method,
-        url=url,
-        data=body,
-        headers=headers
-    )
-
-    # Sign it
+    aws_request = AWSRequest(method=method, url=url, data=body, headers=headers)
     SigV4Auth(frozen_credentials, "execute-api", AWS_REGION).add_auth(aws_request)
-
-    # Return signed headers
     return dict(aws_request.headers)
 
 
@@ -172,20 +228,28 @@ async def _api_request(method: str, path: str, payload: dict | None = None, conn
 @mcp.tool()
 async def list_connectors() -> dict[str, Any]:
     """
-    Discover deployed EDC connector IDs from CloudFormation.
+    Discover deployed EDC connectors and endpoints from CloudFormation.
 
     Queries AWS CloudFormation for stacks deployed by Dataspace Connector on AWS
-    and returns the list of active connector IDs. Use these IDs as the connector_id
-    parameter in all other tools.
+    and returns the active connector IDs plus the Management and DSP (protocol)
+    base URLs read from the shared-infrastructure stack outputs. Use the connector
+    IDs as the connector_id parameter in all other tools, and build a connector's
+    addresses as "{management_base_url}/{connector_id}" and
+    "{dsp_base_url}/{connector_id}" (the latter for counter_party_address).
 
-    Requires EDC_MULTI_CONNECTOR=true and cloudformation:ListStacks IAM permission.
+    Requires EDC_MULTI_CONNECTOR=true and cloudformation:ListStacks plus
+    cloudformation:DescribeStacks IAM permissions.
 
     Returns:
-        Dictionary with connector_ids list and management_base_url
+        Dictionary with connector_ids, count, management_base_url, dsp_base_url
+        (null if unavailable), and region.
 
     Example:
         list_connectors()
-        # → {"connector_ids": ["zentra-motors", "ferrotec", "voltwerk", ...], "management_base_url": "https://..."}
+        # → {"connector_ids": ["carbonex", "ferrotec", ...], "count": 6,
+        #    "management_base_url": "https://xxx.execute-api.eu-central-1.amazonaws.com/management",
+        #    "dsp_base_url": "https://yyy.execute-api.eu-central-1.amazonaws.com/protocol",
+        #    "region": "eu-central-1"}
     """
     if not MULTI_CONNECTOR:
         return {
@@ -198,25 +262,13 @@ async def list_connectors() -> dict[str, Any]:
         }
 
     try:
-        cfn_client = _aws_session.client("cloudformation", region_name=AWS_REGION)
-        paginator = cfn_client.get_paginator("list_stacks")
-
-        connector_ids = []
-        for page in paginator.paginate(
-            StackStatusFilter=["CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_ROLLBACK_COMPLETE"]
-        ):
-            for stack in page.get("StackSummaries", []):
-                name = stack["StackName"]
-                if name.startswith(_CFN_STACK_PREFIX) and not name.endswith(_CFN_SHARED_INFRA_SUFFIX):
-                    connector_id = name[len(_CFN_STACK_PREFIX):]
-                    connector_ids.append(connector_id)
-
-        connector_ids.sort()
-
+        discovery = _discover()
+        management_base_url = _norm_url(_ENV_MANAGEMENT_URL) or discovery["management_url"]
         return {
-            "connector_ids": connector_ids,
-            "count": len(connector_ids),
-            "management_base_url": EDC_MANAGEMENT_URL,
+            "connector_ids": discovery["connector_ids"],
+            "count": len(discovery["connector_ids"]),
+            "management_base_url": management_base_url,
+            "dsp_base_url": discovery["dsp_url"],
             "region": AWS_REGION,
         }
 
@@ -224,7 +276,10 @@ async def list_connectors() -> dict[str, Any]:
         return {
             "error": True,
             "message": f"Failed to discover connectors from CloudFormation: {str(e)}",
-            "hint": "Ensure your AWS credentials have cloudformation:ListStacks permission.",
+            "hint": (
+                "Ensure your AWS credentials have cloudformation:ListStacks and "
+                "cloudformation:DescribeStacks permissions."
+            ),
         }
 
 
@@ -428,6 +483,47 @@ async def request_catalog(
     return await _api_request("POST", "/v3/catalog/request", payload, connector_id=connector_id)
 
 
+def _contract_request_payload(
+    counter_party_address: str,
+    offer_id: str,
+    asset_id: str,
+    assigner: str,
+    protocol: str,
+    permission: Optional[list[dict[str, Any]]],
+    prohibition: Optional[list[dict[str, Any]]],
+    obligation: Optional[list[dict[str, Any]]],
+    callback_addresses: Optional[list[dict[str, Any]]],
+) -> dict[str, Any]:
+    """Build the ContractRequest payload shared by contract and EDR negotiations."""
+    policy: dict[str, Any] = {
+        "@type": "odrl:Offer",
+        "@id": offer_id,
+        "assigner": assigner,
+        "target": asset_id,
+    }
+    if permission is not None:
+        policy["odrl:permission"] = permission
+    if prohibition is not None:
+        policy["odrl:prohibition"] = prohibition
+    if obligation is not None:
+        policy["odrl:obligation"] = obligation
+
+    payload: dict[str, Any] = {
+        "@context": [
+            "https://w3id.org/dspace/2025/1/odrl-profile.jsonld",
+            "https://w3id.org/catenax/2025/9/policy/context.jsonld",
+            {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
+        ],
+        "@type": "ContractRequest",
+        "counterPartyAddress": counter_party_address,
+        "protocol": protocol,
+        "policy": policy,
+    }
+    if callback_addresses:
+        payload["callbackAddresses"] = callback_addresses
+    return payload
+
+
 @mcp.tool()
 async def initiate_contract_negotiation(
     counter_party_address: str,
@@ -474,33 +570,10 @@ async def initiate_contract_negotiation(
             connector_id="zentra-motors"
         )
     """
-    policy: dict[str, Any] = {
-        "@type": "odrl:Offer",
-        "@id": offer_id,
-        "assigner": assigner,
-        "target": asset_id,
-    }
-    if permission is not None:
-        policy["odrl:permission"] = permission
-    if prohibition is not None:
-        policy["odrl:prohibition"] = prohibition
-    if obligation is not None:
-        policy["odrl:obligation"] = obligation
-
-    payload: dict[str, Any] = {
-        "@context": [
-            "https://w3id.org/dspace/2025/1/odrl-profile.jsonld",
-            "https://w3id.org/catenax/2025/9/policy/context.jsonld",
-            {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
-        ],
-        "@type": "ContractRequest",
-        "counterPartyAddress": counter_party_address,
-        "protocol": protocol,
-        "policy": policy,
-    }
-    if callback_addresses:
-        payload["callbackAddresses"] = callback_addresses
-
+    payload = _contract_request_payload(
+        counter_party_address, offer_id, asset_id, assigner, protocol,
+        permission, prohibition, obligation, callback_addresses,
+    )
     return await _api_request("POST", "/v3/contractnegotiations", payload, connector_id=connector_id)
 
 
@@ -662,13 +735,11 @@ async def fetch_data_with_edr(
     Returns:
         Dictionary with "status", "headers", and "body"
     """
-    # Step 1: Resolve the EDR
     edr = await _api_request("GET", f"/v3/edrs/{transfer_process_id}/dataaddress", connector_id=connector_id)
 
     if edr.get("error"):
         return edr
 
-    # Step 2: Extract endpoint and authorization
     endpoint = (
         edr.get("endpoint")
         or edr.get("https://w3id.org/edc/v0.0.1/ns/endpoint")
@@ -683,17 +754,14 @@ async def fetch_data_with_edr(
     if not authorization:
         return {"error": "EDR does not contain an authorization token", "edr": edr}
 
-    # Step 3: Build the target URL
     target_url = endpoint.rstrip("/")
     sub_path = path if path is not None else "public/"
     target_url = f"{target_url}/{sub_path.lstrip('/')}"
 
-    # Step 4: Build headers
     headers: dict[str, str] = {"Authorization": authorization}
     if body is not None:
         headers["Content-Type"] = media_type or "application/json"
 
-    # Step 5: Make the request
     request_body = json.dumps(body).encode("utf-8") if body is not None else None
 
     async with httpx.AsyncClient() as client:
@@ -706,7 +774,6 @@ async def fetch_data_with_edr(
             timeout=60.0,
         )
 
-    # Step 6: Build the response
     response_headers = dict(response.headers)
     content_type = response.headers.get("content-type", "")
 
@@ -759,33 +826,10 @@ async def initiate_edr_negotiation(
     Returns:
         Response with negotiation ID and created timestamp
     """
-    policy: dict[str, Any] = {
-        "@type": "odrl:Offer",
-        "@id": offer_id,
-        "assigner": assigner,
-        "target": asset_id,
-    }
-    if permission is not None:
-        policy["odrl:permission"] = permission
-    if prohibition is not None:
-        policy["odrl:prohibition"] = prohibition
-    if obligation is not None:
-        policy["odrl:obligation"] = obligation
-
-    payload: dict[str, Any] = {
-        "@context": [
-            "https://w3id.org/dspace/2025/1/odrl-profile.jsonld",
-            "https://w3id.org/catenax/2025/9/policy/context.jsonld",
-            {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
-        ],
-        "@type": "ContractRequest",
-        "counterPartyAddress": counter_party_address,
-        "protocol": protocol,
-        "policy": policy,
-    }
-    if callback_addresses:
-        payload["callbackAddresses"] = callback_addresses
-
+    payload = _contract_request_payload(
+        counter_party_address, offer_id, asset_id, assigner, protocol,
+        permission, prohibition, obligation, callback_addresses,
+    )
     return await _api_request("POST", "/v3/edrs", payload, connector_id=connector_id)
 
 

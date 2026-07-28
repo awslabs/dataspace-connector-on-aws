@@ -31,7 +31,7 @@ This MCP server provides 19 tools covering the full EDC Management API workflow:
 - **query_contract_agreements** - List/search contract agreements
 
 ### Discovery tools (multi-connector mode)
-- **list_connectors** - Discover deployed connector IDs from CloudFormation (requires `EDC_MULTI_CONNECTOR=true`)
+- **list_connectors** - Discover deployed connectors and their Management/DSP endpoints from CloudFormation (requires `EDC_MULTI_CONNECTOR=true`)
 
 ## Installation
 
@@ -66,16 +66,19 @@ export EDC_MULTI_CONNECTOR="true"
 
 When `EDC_MULTI_CONNECTOR=true` is set, the MCP server enables dynamic connector discovery:
 
-- A `list_connectors` tool becomes available that queries AWS CloudFormation for deployed connector stacks
+- A `list_connectors` tool becomes available that queries AWS CloudFormation for the deployed connector stacks and the shared-infrastructure stack outputs
+- It returns the connector IDs plus the Management and DSP (protocol) base URLs (`management_base_url`, `dsp_base_url`); `dsp_base_url` is `null` if unavailable
 - All other tools require a `connector_id` parameter (discovered via `list_connectors`)
-- The Management API URL is constructed as `{EDC_MANAGEMENT_URL}/{connector_id}/v3/...`
+- Per-connector addresses are built as `{management_base_url}/{connector_id}` and `{dsp_base_url}/{connector_id}` (the latter is the `counter_party_address` for catalog requests and negotiations)
+- `EDC_MANAGEMENT_URL` is optional in this mode: when unset it is discovered from the stack's `ManagementApiUrl` output, and when set it overrides discovery (for example, a custom domain)
 
-This mode requires an additional IAM permission beyond `execute-api:Invoke`:
-- `cloudformation:ListStacks` — to discover deployed connector IDs
+This mode requires additional IAM permissions beyond `execute-api:Invoke`:
+- `cloudformation:ListStacks`: to discover deployed connector IDs
+- `cloudformation:DescribeStacks`: to read the Management and DSP endpoint outputs
 
 The MCP server instructions automatically guide agents to call `list_connectors` first when multi-connector mode is active.
 
-When `EDC_MULTI_CONNECTOR` is not set (default), the server operates in legacy single-connector mode where all tools target `EDC_MANAGEMENT_URL` directly — compatible with any EDC installation.
+When `EDC_MULTI_CONNECTOR` is not set (default), the server operates in legacy single-connector mode where all tools target `EDC_MANAGEMENT_URL` directly, compatible with any EDC installation.
 
 ### Authentication Modes
 
@@ -163,7 +166,6 @@ For deployments with multiple EDC connectors (e.g., via CDK Pipelines GitOps):
         "dataspace-connector-mcp"
       ],
       "env": {
-        "EDC_MANAGEMENT_URL": "https://<api-id>.execute-api.<aws-region>.amazonaws.com/management",
         "EDC_USE_AWS_IAM": "true",
         "EDC_MULTI_CONNECTOR": "true",
         "AWS_REGION": "eu-central-1",
@@ -174,7 +176,7 @@ For deployments with multiple EDC connectors (e.g., via CDK Pipelines GitOps):
 }
 ```
 
-In multi-connector mode, the agent calls `list_connectors` first to discover available connector IDs, then passes `connector_id` to all subsequent tool calls. The additional IAM permission required is `cloudformation:ListStacks`.
+In multi-connector mode, the agent calls `list_connectors` first to discover available connector IDs and the Management/DSP endpoints, then passes `connector_id` to all subsequent tool calls. `EDC_MANAGEMENT_URL` is optional here (discovered from CloudFormation; set it only to override). The additional IAM permissions required are `cloudformation:ListStacks` and `cloudformation:DescribeStacks`.
 
 ## Example Usage
 
