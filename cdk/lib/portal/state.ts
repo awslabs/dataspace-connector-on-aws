@@ -126,7 +126,6 @@ export class StateStore {
     return res.Item ? toState(res.Item) : undefined;
   }
 
-  /** All connector rows. A single query page holds the expected connector counts. */
   async list(): Promise<ConnectorState[]> {
     const res = await this.doc.send(
       new QueryCommand({
@@ -138,7 +137,6 @@ export class StateStore {
     return (res.Items ?? []).map(toState);
   }
 
-  /** Creates a PENDING row if absent (setting createdAt once); returns the current state. */
   async ensureRow(
     connectorId: string,
     orgKey: string,

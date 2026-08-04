@@ -41,7 +41,6 @@ export function writeProvisionOutput(
   );
 }
 
-/** Resolved edcIam per connector; empty when provision has not run (bare synth). */
 export function readResolvedEdcIam(configPath: string): ResolvedEdcIam {
   const path = join(configPath, DIR, EDC_IAM_FILE);
   return existsSync(path)
@@ -49,7 +48,6 @@ export function readResolvedEdcIam(configPath: string): ResolvedEdcIam {
     : {};
 }
 
-/** Union of config BPNLs and live DDB orgKeys; drives SharedInfra admin-secret placeholders. */
 export function readActiveBpnls(configPath: string): string[] {
   const path = join(configPath, DIR, BPNLS_FILE);
   return existsSync(path)

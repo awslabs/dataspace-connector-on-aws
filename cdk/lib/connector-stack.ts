@@ -67,13 +67,11 @@ export class ConnectorStack extends Stack {
     const cpPorts = CONTROL_PLANE_PORT_MAPPING_DEFAULT;
     const dpPorts = DATA_PLANE_PORT_MAPPING_DEFAULT;
 
-    // Per-connector DDB table (single-table design)
     const ddb = new EdcDdb(this, "EdcDdb", {
       removalPolicy,
       tableName: deriveConnectorTableName(deploymentName, connectorId),
     });
 
-    // Per-connector S3 bucket
     const s3Bucket = new Bucket(this, "DataPlaneBucket", {
       autoDeleteObjects: removalPolicy === RemovalPolicy.DESTROY,
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
@@ -82,7 +80,6 @@ export class ConnectorStack extends Stack {
       removalPolicy,
     });
 
-    // Per-connector secrets
     const secretPrefix = deriveSecretPrefix(deploymentName, connectorId);
     new Secret(this, "EdcOauthClientSecret", {
       secretName: `${secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`,
@@ -94,7 +91,6 @@ export class ConnectorStack extends Stack {
       publicKeySecretName: `${secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY}`,
     });
 
-    // ALB target groups and listener rules — one per EDC port
     const portConfigs: { name: string; port: number; healthPort: number }[] = [
       { name: "CpDefault", port: cpPorts.default, healthPort: cpPorts.default },
       {
@@ -146,7 +142,6 @@ export class ConnectorStack extends Stack {
       });
     }
 
-    // IAM policies
     const logsArn = `arn:aws:logs:${this.region}:${this.account}`;
     const secretArn = `arn:aws:secretsmanager:${this.region}:${this.account}:secret`;
 
@@ -154,9 +149,7 @@ export class ConnectorStack extends Stack {
       new PolicyStatement({
         actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
         effect: Effect.ALLOW,
-        resources: [
-          `${logsArn}:log-group:DataspaceConnector-${connectorId}*:*`,
-        ],
+        resources: [`${logsArn}:log-group:${deploymentName}-${connectorId}*:*`],
       }),
       new PolicyStatement({
         actions: [
@@ -198,7 +191,6 @@ export class ConnectorStack extends Stack {
       }),
     ];
 
-    // DSP callback and data plane public URL include connectorId
     const albOutputs = {
       dnsName: infra.albDnsName,
       securityGroupId: infra.albSecurityGroupId,

@@ -75,7 +75,6 @@ export class SharedInfraStack extends Stack {
     const cpPorts = CONTROL_PLANE_PORT_MAPPING_DEFAULT;
     const dpPorts = DATA_PLANE_PORT_MAPPING_DEFAULT;
 
-    // VPC — ALB requires minimum 2 AZs; use single NAT in dev to save cost
     this.vpc = new Vpc(this, "Vpc", {
       ipAddresses: IpAddresses.cidr(config.vpcIpAddresses),
       maxAzs: 2,
@@ -88,7 +87,6 @@ export class SharedInfraStack extends Stack {
       service: GatewayVpcEndpointAwsService.DYNAMODB,
     });
 
-    // ECS Cluster
     this.ecsCluster = new Cluster(this, "EcsCluster", {
       containerInsightsV2: config.containerInsights
         ? ContainerInsights.ENABLED
@@ -109,7 +107,6 @@ export class SharedInfraStack extends Stack {
       ignoreMode: IgnoreMode.DOCKER,
     });
 
-    // ALB
     const albSg = new SecurityGroup(this, "AlbSecurityGroup", {
       description: "Security group for ALB communication with EDC services",
       allowAllOutbound: false,
@@ -127,7 +124,6 @@ export class SharedInfraStack extends Stack {
       vpc: this.vpc,
     });
 
-    // One listener per EDC port (7 total: 4 CP + 3 DP)
     this.listenerArns = {};
     for (const port of new Set(allPorts)) {
       const listener = alb.addListener(`Listener${port}`, {
@@ -144,7 +140,6 @@ export class SharedInfraStack extends Stack {
     this.albDnsName = alb.loadBalancerDnsName;
     this.albSecurityGroupId = albSg.securityGroupId;
 
-    // VPC Link V2
     const vpcLink = new VpcLink(this, "VpcLink", {
       vpc: this.vpc,
       subnets: { subnetType: SubnetType.PRIVATE_WITH_EGRESS },
@@ -152,7 +147,6 @@ export class SharedInfraStack extends Stack {
     });
     this.vpcLinkId = vpcLink.vpcLinkId;
 
-    // Custom domain (optional)
     let certificate;
     let hostedZone;
     if (config.domainName && config.hostedZoneId && config.certificateArn) {
@@ -167,7 +161,6 @@ export class SharedInfraStack extends Stack {
       });
     }
 
-    // REST APIs (shared across all connectors — spec uses {connectorId} path param)
     const api = new EdcApi(this, "EdcApi", {
       albArn: this.albArn,
       certificate,
@@ -187,7 +180,6 @@ export class SharedInfraStack extends Stack {
     this.dataPlaneUrl = api.outputs.dataPlaneUrl;
     this.managementUrl = api.outputs.managementUrl;
 
-    // Scheduled cleanup of expired EDR secrets
     new EdcSecretCleanup(this, "EdcSecretCleanup");
 
     // Per-tenant portal admin secret placeholders (one per BPNL). Created empty
@@ -202,7 +194,6 @@ export class SharedInfraStack extends Stack {
       });
     }
 
-    // Outputs for cross-stack references
     new CfnOutput(this, "VpcId", { value: this.vpc.vpcId });
     new CfnOutput(this, "ClusterArn", { value: this.ecsCluster.clusterArn });
     new CfnOutput(this, "AlbDnsName", { value: this.albDnsName });

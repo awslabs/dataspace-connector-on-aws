@@ -58,7 +58,6 @@ export class PipelineStack extends Stack {
     const deploymentName = resolveDeploymentName(config);
     const stageId = deploymentName;
 
-    // Cross-run portal integration state, read and written by provision and finalize.
     const stateTable = new ConnectorStateTable(
       this,
       "ConnectorState",
@@ -85,8 +84,6 @@ export class PipelineStack extends Stack {
             this.getOrCreateConfigRepo(`${deploymentName}-config`),
             "main",
           );
-
-    // ─── Synth (clones the app, builds EDC, provisions portal identity) ──
 
     const synth = new CodeBuildStep("Synth", {
       input: configSource,
@@ -120,7 +117,6 @@ export class PipelineStack extends Stack {
       ],
     });
 
-    // Reuse the compiled CDK bundle in the finalization step — no re-clone/build.
     const cdkBundle = synth.addOutputDirectory("app/cdk");
 
     const pipeline = new CodePipeline(this, "Pipeline", {

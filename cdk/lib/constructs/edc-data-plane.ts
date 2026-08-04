@@ -20,19 +20,14 @@ import {
 import {
   CONTROL_PLANE_PORT_MAPPING_DEFAULT,
   DATA_PLANE_PORT_MAPPING_DEFAULT,
+  AlbOutputs,
 } from "../config/port-mappings";
 
-import { IApplicationTargetGroup } from "aws-cdk-lib/aws-elasticloadbalancingv2";
-
-export interface AlbOutputs {
-  readonly dnsName: string;
-  readonly securityGroupId: string;
-  readonly targetGroups: { [port: number]: IApplicationTargetGroup };
-}
-
-import { EDC_SECRETS_MANAGER_ALIASES } from "../config/config";
+import {
+  EDC_SECRETS_MANAGER_ALIASES,
+  DeploymentProfile,
+} from "../config/config";
 import { EdcFargateService } from "./edc-fargate-service";
-import { DeploymentProfile } from "../config/config";
 
 export interface EdcDataPlaneProps {
   readonly albOutputs: AlbOutputs;
@@ -155,7 +150,6 @@ export class EdcDataPlane extends Construct {
       taskDefinition: taskDefinition,
     });
 
-    // Register on all other DP target groups
     for (const port of Object.values(dataPlanePortMapping)) {
       if (port === dataPlanePortMapping.default) continue;
       const tg = props.albOutputs.targetGroups[port];

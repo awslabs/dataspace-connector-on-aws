@@ -1,6 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import { IApplicationTargetGroup } from "aws-cdk-lib/aws-elasticloadbalancingv2";
+
 export interface ControlPlanePortMapping {
   readonly control: number;
   readonly default: number;
@@ -26,3 +28,9 @@ export const DATA_PLANE_PORT_MAPPING_DEFAULT: DataPlanePortMapping = {
   default: 9181,
   public: 8185,
 };
+
+export interface AlbOutputs {
+  readonly dnsName: string;
+  readonly securityGroupId: string;
+  readonly targetGroups: { [port: number]: IApplicationTargetGroup };
+}
