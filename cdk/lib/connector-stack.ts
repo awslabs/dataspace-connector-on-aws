@@ -26,6 +26,8 @@ import {
   DeploymentYaml,
   EdcIam,
   EDC_SECRETS_MANAGER_ALIASES,
+  deriveConnectorTableName,
+  deriveSecretPrefix,
   toEdcIamEnvVars,
   toRemovalPolicy,
 } from "./config/config";
@@ -48,13 +50,14 @@ export interface ConnectorStackProps extends StackProps {
   readonly sharedInfra: SharedInfraStack;
   readonly priority: number;
   readonly edcIam: EdcIam;
+  readonly deploymentName: string;
 }
 
 export class ConnectorStack extends Stack {
   constructor(scope: Construct, id: string, props: ConnectorStackProps) {
     super(scope, id, props);
 
-    const { connector, deployment, sharedInfra: infra } = props;
+    const { connector, deployment, sharedInfra: infra, deploymentName } = props;
     const connectorId = connector.connectorId;
     const profile = connector.profile ?? deployment.profile;
     const removalPolicy = toRemovalPolicy(connector.edcStateRemovalPolicy);
@@ -67,7 +70,7 @@ export class ConnectorStack extends Stack {
     // Per-connector DDB table (single-table design)
     const ddb = new EdcDdb(this, "EdcDdb", {
       removalPolicy,
-      tableName: connectorId,
+      tableName: deriveConnectorTableName(deploymentName, connectorId),
     });
 
     // Per-connector S3 bucket
@@ -80,7 +83,7 @@ export class ConnectorStack extends Stack {
     });
 
     // Per-connector secrets
-    const secretPrefix = `${connectorId}/`;
+    const secretPrefix = deriveSecretPrefix(deploymentName, connectorId);
     new Secret(this, "EdcOauthClientSecret", {
       secretName: `${secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`,
       description: `EDC OAuth client secret for connector ${connectorId}`,
@@ -164,7 +167,7 @@ export class ConnectorStack extends Stack {
           "secretsmanager:UpdateSecret",
         ],
         effect: Effect.ALLOW,
-        resources: [`${secretArn}:${connectorId}/*`, `${secretArn}:edr--*`],
+        resources: [`${secretArn}:${secretPrefix}*`, `${secretArn}:edr--*`],
       }),
       new PolicyStatement({
         actions: [

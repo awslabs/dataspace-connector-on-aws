@@ -26,6 +26,7 @@
 import { resolve } from "path";
 
 import {
+  DEFAULT_DEPLOYMENT_NAME,
   EdcIam,
   deriveAdminSecretName,
   isIdentityComplete,
@@ -53,6 +54,7 @@ async function main(): Promise<void> {
 
   const { deployment, connectors } = loadDeploymentConfig(configPath);
   const environment = deployment.portal.environment as PortalEnvironment;
+  const deploymentName = process.env.DEPLOYMENT_NAME ?? DEFAULT_DEPLOYMENT_NAME;
 
   const store = new StateStore(tableName);
   const secrets = new SecretsHelper();
@@ -71,7 +73,7 @@ async function main(): Promise<void> {
   const clients = new Map<string, PortalClient | null>();
   const getClient = async (bpnl: string): Promise<PortalClient | null> => {
     if (clients.has(bpnl)) return clients.get(bpnl) ?? null;
-    const secretName = deriveAdminSecretName(bpnl);
+    const secretName = deriveAdminSecretName(deploymentName, bpnl);
     let client: PortalClient | null = null;
     try {
       const creds = await secrets.getAdminCredentials(secretName);

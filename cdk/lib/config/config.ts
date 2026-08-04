@@ -25,9 +25,12 @@ export interface PipelineYaml {
   readonly appRepo: string;
   readonly appVersion: string;
   readonly configSource: "codecommit" | "github";
-  readonly configRepoName: string;
+  /** External repo (owner/name) for configSource=github. For codecommit the repo is derived as `${deploymentName}-config`. */
+  readonly configRepoName?: string;
   readonly connectionArn?: string;
   readonly requireApproval?: boolean;
+  /** Namespaces all resources so instances coexist in one account/region. Default "DataspaceConnector". Set once at bootstrap. */
+  readonly deploymentName?: string;
 }
 
 // ─── deployment.yaml ──────────────────────────────────────────────────────────
@@ -186,9 +189,44 @@ export function isIdentityComplete(
   );
 }
 
-/** Derives the per-tenant admin secret name from a BPNL (participantId). */
-export function deriveAdminSecretName(bpnl: string): string {
-  return `dataspace-connector/portal-admin/${bpnl}`;
+export const DEFAULT_DEPLOYMENT_NAME = "DataspaceConnector";
+
+/** Resolves the deployment name (default "DataspaceConnector"); prefixes every named resource. */
+export function resolveDeploymentName(pipeline: PipelineYaml): string {
+  return pipeline.deploymentName ?? DEFAULT_DEPLOYMENT_NAME;
+}
+
+/** deploymentName prefixes stack, table, and secret names, so keep the charset conservative. */
+export function validateDeploymentName(name: string): void {
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,40}$/.test(name)) {
+    throw new Error(
+      `Invalid deploymentName "${name}". Must be 1-41 chars, alphanumeric and hyphens, not starting with a hyphen.`,
+    );
+  }
+}
+
+/** Derives the per-tenant admin secret name, namespaced by deployment. */
+export function deriveAdminSecretName(
+  deploymentName: string,
+  bpnl: string,
+): string {
+  return `${deploymentName}/portal-admin/${bpnl}`;
+}
+
+/** Derives a connector's Secrets Manager alias prefix, namespaced by deployment. */
+export function deriveSecretPrefix(
+  deploymentName: string,
+  connectorId: string,
+): string {
+  return `${deploymentName}/${connectorId}/`;
+}
+
+/** Derives the EDC runtime DynamoDB table name, namespaced by deployment. */
+export function deriveConnectorTableName(
+  deploymentName: string,
+  connectorId: string,
+): string {
+  return `${deploymentName}-${connectorId}`;
 }
 
 /** Maps the YAML removal-policy string to the CDK enum. */

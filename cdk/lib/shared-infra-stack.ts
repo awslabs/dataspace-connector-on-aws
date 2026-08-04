@@ -51,6 +51,7 @@ import { EdcSecretCleanup } from "./constructs/edc-secret-cleanup";
 export interface SharedInfraStackProps extends StackProps {
   readonly config: DeploymentYaml;
   readonly adminBpnls: string[];
+  readonly deploymentName: string;
 }
 
 export class SharedInfraStack extends Stack {
@@ -195,7 +196,7 @@ export class SharedInfraStack extends Stack {
     // config BPNLs and live DDB orgKeys, emitted by provision.
     for (const bpnl of props.adminBpnls) {
       new Secret(this, `PortalAdmin${bpnl}`, {
-        secretName: deriveAdminSecretName(bpnl),
+        secretName: deriveAdminSecretName(props.deploymentName, bpnl),
         description: `Cofinity-X portal admin credentials for BPNL ${bpnl} (JSON: clientId, clientSecret). Populate out-of-band.`,
         removalPolicy: RemovalPolicy.DESTROY,
       });

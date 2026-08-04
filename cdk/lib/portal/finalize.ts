@@ -39,8 +39,11 @@ import {
 
 import {
   ConnectorYaml,
+  DEFAULT_DEPLOYMENT_NAME,
   DeploymentYaml,
+  EDC_SECRETS_MANAGER_ALIASES,
   deriveAdminSecretName,
+  deriveSecretPrefix,
 } from "../config/config";
 import { ConnectorRegistration, PortalClient, SecretsHelper } from "./client";
 import { nextState, StateStore } from "./state";
@@ -76,6 +79,7 @@ async function main(): Promise<void> {
     return;
   }
   const { environment } = deployment.portal;
+  const deploymentName = process.env.DEPLOYMENT_NAME ?? DEFAULT_DEPLOYMENT_NAME;
 
   const currentConnectors = readCurrentConnectors(configPath);
   const currentIds = new Set(currentConnectors.map((c) => c.connectorId));
@@ -93,7 +97,7 @@ async function main(): Promise<void> {
     let client: PortalClient | null = null;
     try {
       const creds = await secrets.getAdminCredentials(
-        deriveAdminSecretName(orgKey),
+        deriveAdminSecretName(deploymentName, orgKey),
       );
       client = new PortalClient(environment, creds);
       await client.authenticate();
@@ -166,7 +170,8 @@ async function main(): Promise<void> {
     const techUser = await client.getTechUserDetails(
       connector.serviceAccountId,
     );
-    await secrets.putConnectorSecret(row.connectorId, techUser.secret);
+    const oauthSecretId = `${deriveSecretPrefix(deploymentName, row.connectorId)}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`;
+    await secrets.putConnectorSecret(oauthSecretId, techUser.secret);
     console.log(`[portal/finalize] ${row.connectorId}: OAuth secret written.`);
 
     if (!dspBaseUrl) {
@@ -215,7 +220,7 @@ async function main(): Promise<void> {
 
     // Delete the stack by deterministic name. A connector that stayed PENDING
     // never deployed a stack; treat "not found" as already clean.
-    const stackName = `${stackPrefix}-DataspaceConnector-${row.connectorId}`;
+    const stackName = `${stackPrefix}-Connector-${row.connectorId}`;
     try {
       await cfn.send(new DeleteStackCommand({ StackName: stackName }));
       await waitUntilStackDeleteComplete(
@@ -282,7 +287,7 @@ async function resolveDspBaseUrl(
   try {
     const result = await cfn.send(
       new DescribeStacksCommand({
-        StackName: `${stackPrefix}-DataspaceConnectorSharedInfraStack`,
+        StackName: `${stackPrefix}-SharedInfra`,
       }),
     );
     const output = (result.Stacks?.[0]?.Outputs ?? []).find(

@@ -39,8 +39,11 @@ npx tsc
 
 cdk bootstrap
 
+DEPLOYMENT_NAME=$(python3 -c "import yaml; print(yaml.safe_load(open('../${CONFIG_PATH}/pipeline.yaml')).get('deploymentName','DataspaceConnector'))")
+echo "Deployment name: ${DEPLOYMENT_NAME}"
+
 CDK_DEFAULT_ACCOUNT="${ACCOUNT_ID}" CDK_DEFAULT_REGION="${AWS_REGION}" \
-  npx cdk deploy DataspaceConnectorPipelineStack \
+  npx cdk deploy "${DEPLOYMENT_NAME}PipelineStack" \
   --context "config-path=../${CONFIG_PATH}" \
   --require-approval never
 

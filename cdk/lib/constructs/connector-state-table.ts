@@ -22,10 +22,11 @@ const SORT_KEY = { name: "sk", type: AttributeType.STRING };
 export class ConnectorStateTable extends Construct {
   readonly table: TableV2;
 
-  constructor(scope: Construct, id: string) {
+  constructor(scope: Construct, id: string, tableName: string) {
     super(scope, id);
 
     this.table = new TableV2(this, "Table", {
+      tableName,
       partitionKey: PARTITION_KEY,
       sortKey: SORT_KEY,
       billing: Billing.onDemand(),

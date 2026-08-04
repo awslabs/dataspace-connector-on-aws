@@ -260,9 +260,8 @@ export class SecretsHelper {
     return { clientId: parsed.clientId, clientSecret: parsed.clientSecret };
   }
 
-  /** Write the OAuth client secret for an EDC connector. */
-  async putConnectorSecret(connectorId: string, secret: string): Promise<void> {
-    const secretId = `${connectorId}/edc.iam.sts.oauth.client.secret`;
+  /** Write a connector's OAuth client secret to the given fully-qualified secret id. */
+  async putConnectorSecret(secretId: string, secret: string): Promise<void> {
     await this.client.send(
       new PutSecretValueCommand({ SecretId: secretId, SecretString: secret }),
     );
