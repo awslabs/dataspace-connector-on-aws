@@ -46,20 +46,5 @@ CDK_DEFAULT_ACCOUNT="${ACCOUNT_ID}" CDK_DEFAULT_REGION="${AWS_REGION}" \
 
 cd ..
 
-# Populate the Cofinity-X Portal admin credentials secret. The pipeline stack
-# created the (empty) secret; the value is injected here so it never passes
-# through CloudFormation.
-echo ""
-echo "Enter the Cofinity-X Portal admin technical user credentials"
-echo "(roles: Offer Management + Dataspace Discovery)."
-read -r -p "  Client ID: " PORTAL_CLIENT_ID
-read -r -s -p "  Client Secret: " PORTAL_CLIENT_SECRET
-echo ""
-aws secretsmanager put-secret-value \
-  --secret-id "dataspace-connector/portal-admin" \
-  --secret-string "{\"clientId\":\"${PORTAL_CLIENT_ID}\",\"clientSecret\":\"${PORTAL_CLIENT_SECRET}\"}" \
-  --region "${AWS_REGION}" >/dev/null
-echo "✅ Portal admin credentials stored in Secrets Manager."
-
 echo ""
 echo "✅ Pipeline deployed. Push changes to your config repository to trigger deployments."

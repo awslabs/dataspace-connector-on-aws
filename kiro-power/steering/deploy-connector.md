@@ -77,7 +77,7 @@ dataPlaneMemoryLimitMiB: 512
 interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-flow
 backgroundStateMachineIterationMillis: "60000"  # policy monitor + data-plane selector
 edcStateRemovalPolicy: DESTROY
-edcTechnicalUserId: "<service-account-id-from-phase-3>"
+serviceAccountId: "<service-account-id-from-phase-3>"
 ```
 
 `connectorId` must be 2-60 characters, lowercase alphanumeric and hyphens, and cannot start or end with a hyphen. Replace the example template file (`connector-example.yaml`) with the real connector file(s).

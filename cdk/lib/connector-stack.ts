@@ -24,6 +24,7 @@ import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import {
   ConnectorYaml,
   DeploymentYaml,
+  EdcIam,
   EDC_SECRETS_MANAGER_ALIASES,
   toEdcIamEnvVars,
   toRemovalPolicy,
@@ -46,6 +47,7 @@ export interface ConnectorStackProps extends StackProps {
   readonly deployment: DeploymentYaml;
   readonly sharedInfra: SharedInfraStack;
   readonly priority: number;
+  readonly edcIam: EdcIam;
 }
 
 export class ConnectorStack extends Stack {
@@ -57,12 +59,7 @@ export class ConnectorStack extends Stack {
     const profile = connector.profile ?? deployment.profile;
     const removalPolicy = toRemovalPolicy(connector.edcStateRemovalPolicy);
 
-    // edcIam is populated by portal/provision.ts before synth. It is absent
-    // only during a bare synth of the config templates (bootstrap deploy),
-    // where empty env vars are acceptable.
-    const edcIamEnvVars = connector.edcIam
-      ? toEdcIamEnvVars(connector.edcIam)
-      : {};
+    const edcIamEnvVars = toEdcIamEnvVars(props.edcIam);
 
     const cpPorts = CONTROL_PLANE_PORT_MAPPING_DEFAULT;
     const dpPorts = DATA_PLANE_PORT_MAPPING_DEFAULT;

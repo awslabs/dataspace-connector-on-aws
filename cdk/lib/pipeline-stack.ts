@@ -1,13 +1,11 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
+import { Stack, StackProps } from "aws-cdk-lib";
 import { LinuxArmBuildImage, LinuxBuildImage } from "aws-cdk-lib/aws-codebuild";
 import { Code, Repository } from "aws-cdk-lib/aws-codecommit";
 import { PipelineType } from "aws-cdk-lib/aws-codepipeline";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
-import { ISecret, Secret } from "aws-cdk-lib/aws-secretsmanager";
-import { resolve } from "path";
 
 import { Construct } from "constructs";
 
@@ -21,15 +19,34 @@ import {
 } from "aws-cdk-lib/pipelines";
 
 import { DeploymentStage } from "./deployment-stage";
+import { ConnectorStateTable } from "./constructs/connector-state-table";
 import { DeploymentConfig, PipelineYaml } from "./config/config";
+import { resolve } from "path";
+import { ResolvedEdcIam } from "./portal/provision-output";
 
 const STAGE_ID = "Deploy";
-const ADMIN_SECRET_NAME = "dataspace-connector/portal-admin";
 const CONNECTOR_STACK_PREFIX = `${STAGE_ID}-DataspaceConnector`;
+
+/** Least-privilege DynamoDB access to the connector state table for a pipeline step. */
+function stateTablePolicy(stateTable: ConnectorStateTable): PolicyStatement {
+  return new PolicyStatement({
+    effect: Effect.ALLOW,
+    actions: [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
+    ],
+    resources: [stateTable.table.tableArn],
+  });
+}
 
 export interface PipelineStackProps extends StackProps {
   readonly pipelineConfig: PipelineYaml;
   readonly deploymentConfig: DeploymentConfig;
+  readonly resolvedEdcIam: ResolvedEdcIam;
+  readonly activeBpnls: string[];
 }
 
 export class PipelineStack extends Stack {
@@ -38,16 +55,8 @@ export class PipelineStack extends Stack {
 
     const config = props.pipelineConfig;
 
-    // The stack owns the admin credentials secret (so its ARN is known for
-    // least-privilege scoping); the value — the Cofinity-X portal technical
-    // user's clientId and clientSecret as JSON — is populated out-of-band by
-    // deploy.sh and never enters CloudFormation.
-    const adminSecret = new Secret(this, "PortalAdminSecret", {
-      secretName: ADMIN_SECRET_NAME,
-      description:
-        "Cofinity-X Portal admin technical user credentials (JSON: clientId, clientSecret)",
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
+    // Cross-run portal integration state, read and written by provision and finalize.
+    const stateTable = new ConnectorStateTable(this, "ConnectorState");
 
     const configSource =
       config.configSource === "github"
@@ -64,7 +73,9 @@ export class PipelineStack extends Stack {
     const synth = new CodeBuildStep("Synth", {
       input: configSource,
       buildEnvironment: { buildImage: LinuxBuildImage.STANDARD_7_0 },
-      env: { PORTAL_ADMIN_SECRET: ADMIN_SECRET_NAME },
+      env: {
+        STATE_TABLE_NAME: stateTable.table.tableName,
+      },
       installCommands: ["n 24"],
       commands: [
         `APP_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('pipeline.yaml'))['appVersion'])")`,
@@ -82,8 +93,11 @@ export class PipelineStack extends Stack {
         new PolicyStatement({
           effect: Effect.ALLOW,
           actions: ["secretsmanager:GetSecretValue"],
-          resources: [adminSecret.secretArn],
+          resources: [
+            `arn:aws:secretsmanager:${this.region}:${this.account}:secret:dataspace-connector/portal-admin/*`,
+          ],
         }),
+        stateTablePolicy(stateTable),
       ],
     });
 
@@ -105,7 +119,11 @@ export class PipelineStack extends Stack {
     });
 
     const stage = pipeline.addStage(
-      new DeploymentStage(this, STAGE_ID, { config: props.deploymentConfig }),
+      new DeploymentStage(this, STAGE_ID, {
+        config: props.deploymentConfig,
+        resolvedEdcIam: props.resolvedEdcIam,
+        activeBpnls: props.activeBpnls,
+      }),
     );
 
     if (config.requireApproval) {
@@ -113,7 +131,7 @@ export class PipelineStack extends Stack {
     }
 
     stage.addPost(
-      this.portalFinalizationStep(configSource, cdkBundle, adminSecret),
+      this.portalFinalizationStep(configSource, cdkBundle, stateTable),
     );
   }
 
@@ -125,38 +143,32 @@ export class PipelineStack extends Stack {
   private portalFinalizationStep(
     configSource: IFileSetProducer,
     cdkBundle: FileSet,
-    adminSecret: ISecret,
+    stateTable: ConnectorStateTable,
   ): CodeBuildStep {
+    const adminSecretArn = `arn:aws:secretsmanager:${this.region}:${this.account}:secret:dataspace-connector/portal-admin/*`;
     const connectorSecretArn = `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*/edc.iam.sts.oauth.client.secret-*`;
     const connectorStackArn = `arn:aws:cloudformation:${this.region}:${this.account}:stack/${CONNECTOR_STACK_PREFIX}*/*`;
 
     return new CodeBuildStep("PortalFinalization", {
       input: configSource,
       additionalInputs: { "cdk-bundle": cdkBundle },
-      env: { PORTAL_ADMIN_SECRET: ADMIN_SECRET_NAME },
+      env: {
+        STATE_TABLE_NAME: stateTable.table.tableName,
+      },
       installCommands: ["n 24"],
       commands: [
-        // Config files are at the input root; compiled scripts + node_modules
-        // come from the Synth bundle.
         `node cdk-bundle/dist/portal/finalize.js --config-path=. --stack-prefix=${STAGE_ID}`,
       ],
       rolePolicyStatements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
           actions: ["secretsmanager:GetSecretValue"],
-          resources: [adminSecret.secretArn],
+          resources: [adminSecretArn],
         }),
         new PolicyStatement({
           effect: Effect.ALLOW,
           actions: ["secretsmanager:PutSecretValue"],
           resources: [connectorSecretArn],
-        }),
-        // ListStacks does not support resource-level scoping; the mutating
-        // actions are scoped to the connector stack namespace.
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          actions: ["cloudformation:ListStacks"],
-          resources: ["*"],
         }),
         new PolicyStatement({
           effect: Effect.ALLOW,
@@ -167,6 +179,7 @@ export class PipelineStack extends Stack {
           ],
           resources: [connectorStackArn],
         }),
+        stateTablePolicy(stateTable),
       ],
     });
   }

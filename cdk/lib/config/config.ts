@@ -43,7 +43,8 @@ export interface PortalIdentity {
 
 export interface PortalConfig {
   readonly environment: "beta" | "production";
-  readonly identity: PortalIdentity;
+  /** Deployment-wide default identity. Each field is an optional fallback a connector may override. */
+  readonly identity?: Partial<PortalIdentity>;
 }
 
 export interface DeploymentYaml {
@@ -70,6 +71,11 @@ export interface EdcIam {
   readonly didResolver: string;
 }
 
+/** Optional per-connector identity override, merged over the deployment default. */
+export interface ConnectorPortalOverride {
+  readonly identity?: Partial<PortalIdentity>;
+}
+
 export interface ConnectorYaml {
   readonly connectorId: string;
   readonly profile?: DeploymentProfile;
@@ -82,10 +88,10 @@ export interface ConnectorYaml {
   /** Iteration interval (ms) for the policy monitor and data-plane selector state machines. Default "60000". */
   readonly backgroundStateMachineIterationMillis?: string;
   readonly edcStateRemovalPolicy: "DESTROY" | "RETAIN";
-  /** Cofinity-X portal technical user (service account) ID — authored by the user. */
-  readonly edcTechnicalUserId: string;
-  /** Resolved EDC identity — populated by portal/provision.ts before synth. */
-  readonly edcIam?: EdcIam;
+  /** Cofinity-X portal technical user (service account) ID, authored by the operator. */
+  readonly serviceAccountId: string;
+  /** Per-connector identity override, merged over the deployment default. */
+  readonly portal?: ConnectorPortalOverride;
 }
 
 /** Loaded deployment configuration (raw YAML, validated). */
@@ -112,6 +118,16 @@ export const EDC_SECRETS_MANAGER_ALIASES = {
   TOKEN_SIGNER_PRIVATE_KEY: "edc.transfer.proxy.token.signer.privatekey",
   TOKEN_VERIFIER_PUBLIC_KEY: "edc.transfer.proxy.token.verifier.publickey",
 };
+
+/** Identity fields required for a connector to be deployable. */
+const PORTAL_IDENTITY_KEYS: (keyof PortalIdentity)[] = [
+  "trustedIssuer",
+  "stsOauthTokenUrl",
+  "stsDimUrl",
+  "participantId",
+  "dcpId",
+  "didResolver",
+];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -150,6 +166,31 @@ export function toEdcIamEnvVars(edcIam: EdcIam): Record<string, string> {
   );
 }
 
+/** Merges the deployment-wide default identity with a connector's override. */
+export function resolveConnectorIdentity(
+  deployment: DeploymentYaml,
+  connector: ConnectorYaml,
+): Partial<PortalIdentity> {
+  return {
+    ...(deployment.portal.identity ?? {}),
+    ...(connector.portal?.identity ?? {}),
+  };
+}
+
+/** True when every identity field required for deployment is present and non-empty. */
+export function isIdentityComplete(
+  identity: Partial<PortalIdentity>,
+): identity is PortalIdentity {
+  return PORTAL_IDENTITY_KEYS.every(
+    (key) => typeof identity[key] === "string" && identity[key] !== "",
+  );
+}
+
+/** Derives the per-tenant admin secret name from a BPNL (participantId). */
+export function deriveAdminSecretName(bpnl: string): string {
+  return `dataspace-connector/portal-admin/${bpnl}`;
+}
+
 /** Maps the YAML removal-policy string to the CDK enum. */
 export function toRemovalPolicy(value: "DESTROY" | "RETAIN"): RemovalPolicy {
   return value === "RETAIN" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY;
@@ -164,7 +205,9 @@ export function toPrincipals(arns?: string[] | null): IPrincipal[] {
 
 /**
  * Loads and validates deployment configuration from YAML files at configPath.
- * Throws if required files or fields are missing.
+ * Throws if required files or fields are missing. Deploy-gating (which
+ * connectors reached IDENTITY_READY) is applied by the deployment stage using
+ * provision's ephemeral edcIam map, not here.
  */
 export function loadDeploymentConfig(configPath: string): DeploymentConfig {
   const deploymentPath = join(configPath, "deployment.yaml");
@@ -221,10 +264,8 @@ function validateDeployment(data: DeploymentYaml, filePath: string): void {
       `${filePath}: profile must be "development" or "production", got "${data.profile}"`,
     );
   }
-  if (!data.portal.environment || !data.portal.identity) {
-    throw new Error(
-      `${filePath}: portal section requires 'environment' and 'identity'`,
-    );
+  if (!data.portal.environment) {
+    throw new Error(`${filePath}: portal section requires 'environment'`);
   }
 }
 
@@ -236,7 +277,7 @@ function validateConnector(data: ConnectorYaml, fileName: string): void {
     "dataPlaneCpu",
     "dataPlaneMemoryLimitMiB",
     "edcStateRemovalPolicy",
-    "edcTechnicalUserId",
+    "serviceAccountId",
   ];
   const missing = required.filter(
     (key) => data[key] === undefined || data[key] === null,
