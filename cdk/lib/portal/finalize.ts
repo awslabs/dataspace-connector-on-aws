@@ -46,10 +46,106 @@ import {
   deriveSecretPrefix,
 } from "../config/config";
 import { ConnectorRegistration, PortalClient, SecretsHelper } from "./client";
-import { nextState, StateStore } from "./state";
+import { ConnectorState, nextState, StateStore } from "./state";
 
 const DSP_URL_OUTPUT_KEY = "DspApiUrl";
 const STACK_DELETE_TIMEOUT_SECONDS = 600;
+
+interface RegisterDeps {
+  getClient: (orgKey: string) => Promise<PortalClient | null>;
+  registryByTenant: Map<string, Map<string, ConnectorRegistration>>;
+  store: Pick<StateStore, "save">;
+  secrets: Pick<SecretsHelper, "putConnectorSecret">;
+}
+
+/**
+ * Phase A: register every deployed connector, isolating per-connector failures.
+ * A connector already at the portal is self-healed (its id recorded, never
+ * re-registered); a failure is logged, left at IDENTITY_READY, and does not
+ * block the others. Returns the ids that failed so the caller can fail the step
+ * after Phase B cleanup has run.
+ */
+export async function registerReadyConnectors(
+  rows: ConnectorState[],
+  currentConnectors: ConnectorYaml[],
+  deploymentName: string,
+  dspBaseUrl: string | undefined,
+  deps: RegisterDeps,
+): Promise<string[]> {
+  const { getClient, registryByTenant, store, secrets } = deps;
+  const currentIds = new Set(currentConnectors.map((c) => c.connectorId));
+  const registrationFailures: string[] = [];
+
+  for (const row of rows) {
+    if (!currentIds.has(row.connectorId)) continue; // orphan — handled in Phase B
+    if (row.phase === "IDENTITY_PENDING") continue; // not deployed yet
+
+    const connector = currentConnectors.find(
+      (c) => c.connectorId === row.connectorId,
+    )!;
+    const client = await getClient(row.orgKey);
+    if (!client) continue;
+
+    const registry = registryByTenant.get(row.orgKey);
+    if (!registry) continue;
+
+    try {
+      const existing = registry.get(row.connectorId);
+      if (existing && row.phase === "REGISTERED") continue; // nothing to do
+      if (existing) {
+        // Registered on the portal but the row was not updated (previous crash).
+        const { state } = nextState(row, {
+          phase: "REGISTERED",
+          portalConnectorId: existing.id,
+        });
+        await store.save(state);
+        console.log(
+          `[portal/finalize] ${row.connectorId}: self-healed, recorded existing registration.`,
+        );
+        continue;
+      }
+
+      console.log(`[portal/finalize] ${row.connectorId}: finalizing...`);
+
+      // Write the OAuth secret before registering so the connector can
+      // authenticate the moment it becomes discoverable.
+      const techUser = await client.getTechUserDetails(
+        connector.serviceAccountId,
+      );
+      const oauthSecretId = `${deriveSecretPrefix(deploymentName, row.connectorId)}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`;
+      await secrets.putConnectorSecret(oauthSecretId, techUser.secret);
+      console.log(
+        `[portal/finalize] ${row.connectorId}: OAuth secret written.`,
+      );
+
+      if (!dspBaseUrl) {
+        console.warn(
+          `[portal/finalize] ${row.connectorId}: DSP URL unavailable, skipping registration (retries next run).`,
+        );
+        continue;
+      }
+
+      const reg = await client.registerConnector(
+        row.connectorId,
+        `${dspBaseUrl}${row.connectorId}`,
+        connector.serviceAccountId,
+      );
+      const { state } = nextState(row, {
+        phase: "REGISTERED",
+        portalConnectorId: reg.id,
+      });
+      await store.save(state);
+      console.log(`[portal/finalize] ${row.connectorId}: registered.`);
+    } catch (err) {
+      console.error(
+        `[portal/finalize] ${row.connectorId}: registration failed, left at IDENTITY_READY — ${(err as Error).message}`,
+      );
+      registrationFailures.push(row.connectorId);
+    }
+  }
+
+  return registrationFailures;
+}
 
 async function main(): Promise<void> {
   const configPath = requireArg("--config-path=");
@@ -135,64 +231,13 @@ async function main(): Promise<void> {
     }
   }
 
-  for (const row of rows) {
-    if (!currentIds.has(row.connectorId)) continue; // orphan — handled in Phase B
-    if (row.phase === "IDENTITY_PENDING") continue; // not deployed yet
-
-    const connector = currentConnectors.find(
-      (c) => c.connectorId === row.connectorId,
-    )!;
-    const client = await getClient(row.orgKey);
-    if (!client) continue;
-
-    const registry = registryByTenant.get(row.orgKey);
-    if (!registry) continue;
-
-    const existing = registry.get(row.connectorId);
-    if (existing && row.phase === "REGISTERED") continue; // nothing to do
-    if (existing) {
-      // Registered on the portal but the row was not updated (previous crash).
-      const { state } = nextState(row, {
-        phase: "REGISTERED",
-        portalConnectorId: existing.id,
-      });
-      await store.save(state);
-      console.log(
-        `[portal/finalize] ${row.connectorId}: self-healed, recorded existing registration.`,
-      );
-      continue;
-    }
-
-    console.log(`[portal/finalize] ${row.connectorId}: finalizing...`);
-
-    // Write the OAuth secret before registering so the connector can
-    // authenticate the moment it becomes discoverable.
-    const techUser = await client.getTechUserDetails(
-      connector.serviceAccountId,
-    );
-    const oauthSecretId = `${deriveSecretPrefix(deploymentName, row.connectorId)}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`;
-    await secrets.putConnectorSecret(oauthSecretId, techUser.secret);
-    console.log(`[portal/finalize] ${row.connectorId}: OAuth secret written.`);
-
-    if (!dspBaseUrl) {
-      console.warn(
-        `[portal/finalize] ${row.connectorId}: DSP URL unavailable, skipping registration (retries next run).`,
-      );
-      continue;
-    }
-
-    const reg = await client.registerConnector(
-      row.connectorId,
-      `${dspBaseUrl}${row.connectorId}`,
-      connector.serviceAccountId,
-    );
-    const { state } = nextState(row, {
-      phase: "REGISTERED",
-      portalConnectorId: reg.id,
-    });
-    await store.save(state);
-    console.log(`[portal/finalize] ${row.connectorId}: registered.`);
-  }
+  const registrationFailures = await registerReadyConnectors(
+    rows,
+    currentConnectors,
+    deploymentName,
+    dspBaseUrl,
+    { getClient, registryByTenant, store, secrets },
+  );
 
   // ── Phase B: orphan cleanup ───────────────────────────────────────────────
 
@@ -243,6 +288,13 @@ async function main(): Promise<void> {
 
     await store.remove(row.connectorId);
     console.log(`[portal/finalize] ${row.connectorId}: DDB row removed.`);
+  }
+
+  if (registrationFailures.length > 0) {
+    throw new Error(
+      `${registrationFailures.length} connector(s) failed to register (${registrationFailures.join(", ")}); ` +
+        `their state remains IDENTITY_READY and will be retried on the next run.`,
+    );
   }
 
   console.log("[portal/finalize] Done.");
@@ -306,7 +358,11 @@ async function resolveDspBaseUrl(
   return undefined;
 }
 
-main().catch((err) => {
-  console.error(`[portal/finalize] FATAL: ${err.message}`);
-  process.exit(1);
-});
+// Entrypoint guard: run only when invoked directly (node dist/portal/finalize.js),
+// not when imported by tests.
+if (process.argv[1]?.endsWith("finalize.js")) {
+  main().catch((err) => {
+    console.error(`[portal/finalize] FATAL: ${err.message}`);
+    process.exit(1);
+  });
+}

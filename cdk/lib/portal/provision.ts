@@ -26,7 +26,9 @@
 import { resolve } from "path";
 
 import {
+  ConnectorYaml,
   DEFAULT_DEPLOYMENT_NAME,
+  DeploymentYaml,
   EdcIam,
   deriveAdminSecretName,
   isIdentityComplete,
@@ -37,28 +39,19 @@ import { PortalClient, PortalEnvironment, SecretsHelper } from "./client";
 import { nextState, StateStore } from "./state";
 import { ResolvedEdcIam, writeProvisionOutput } from "./provision-output";
 
-async function main(): Promise<void> {
-  const configPathArg = process.argv.find((a) =>
-    a.startsWith("--config-path="),
-  );
-  if (!configPathArg) {
-    console.error("Usage: node dist/portal/provision.js --config-path=<path>");
-    process.exit(1);
-  }
-  const configPath = resolve(configPathArg.split("=")[1]);
-
-  const tableName = process.env.STATE_TABLE_NAME;
-  if (!tableName) {
-    throw new Error("[portal/provision] STATE_TABLE_NAME env var is required.");
-  }
-
-  const { deployment, connectors } = loadDeploymentConfig(configPath);
-  const environment = deployment.portal.environment as PortalEnvironment;
-  const deploymentName = process.env.DEPLOYMENT_NAME ?? DEFAULT_DEPLOYMENT_NAME;
-
-  const store = new StateStore(tableName);
-  const secrets = new SecretsHelper();
-
+/**
+ * Reconciles desired config against observed state for each connector and
+ * returns the resolved edcIam map (READY connectors only) plus the active-BPNL
+ * set. Dependencies (state store, per-tenant portal client factory) are injected
+ * so the gating logic is testable without AWS or the portal. A per-connector
+ * prerequisite failure leaves that connector PENDING and never throws.
+ */
+export async function reconcile(
+  deployment: DeploymentYaml,
+  connectors: ConnectorYaml[],
+  store: StateStore,
+  getClient: (bpnl: string) => Promise<PortalClient | null>,
+): Promise<{ resolved: ResolvedEdcIam; activeBpnls: string[] }> {
   // Union of config BPNLs and live DDB orgKeys. Seeding from existing rows keeps
   // a tenant's admin secret alive through the run that offboards its last connector.
   const activeBpnls = new Set<string>();
@@ -67,26 +60,6 @@ async function main(): Promise<void> {
   }
 
   const resolved: ResolvedEdcIam = {};
-
-  // One authenticated PortalClient per tenant (BPNL). null means the admin
-  // secret is missing or unpopulated, so that tenant's connectors stay PENDING.
-  const clients = new Map<string, PortalClient | null>();
-  const getClient = async (bpnl: string): Promise<PortalClient | null> => {
-    if (clients.has(bpnl)) return clients.get(bpnl) ?? null;
-    const secretName = deriveAdminSecretName(deploymentName, bpnl);
-    let client: PortalClient | null = null;
-    try {
-      const creds = await secrets.getAdminCredentials(secretName);
-      client = new PortalClient(environment, creds);
-      await client.authenticate();
-    } catch (err) {
-      console.warn(
-        `[portal/provision] admin secret ${secretName} unavailable: ${(err as Error).message}`,
-      );
-    }
-    clients.set(bpnl, client);
-    return client;
-  };
 
   for (const connector of connectors) {
     const { connectorId, serviceAccountId } = connector;
@@ -143,13 +116,69 @@ async function main(): Promise<void> {
     console.log(`[portal/provision] ${connectorId}: IDENTITY_READY.`);
   }
 
-  writeProvisionOutput(configPath, resolved, [...activeBpnls]);
+  return { resolved, activeBpnls: [...activeBpnls] };
+}
+
+async function main(): Promise<void> {
+  const configPathArg = process.argv.find((a) =>
+    a.startsWith("--config-path="),
+  );
+  if (!configPathArg) {
+    console.error("Usage: node dist/portal/provision.js --config-path=<path>");
+    process.exit(1);
+  }
+  const configPath = resolve(configPathArg.split("=")[1]);
+
+  const tableName = process.env.STATE_TABLE_NAME;
+  if (!tableName) {
+    throw new Error("[portal/provision] STATE_TABLE_NAME env var is required.");
+  }
+
+  const { deployment, connectors } = loadDeploymentConfig(configPath);
+  const environment = deployment.portal.environment as PortalEnvironment;
+  const deploymentName = process.env.DEPLOYMENT_NAME ?? DEFAULT_DEPLOYMENT_NAME;
+
+  const store = new StateStore(tableName);
+  const secrets = new SecretsHelper();
+
+  // One authenticated PortalClient per tenant (BPNL). null means the admin
+  // secret is missing or unpopulated, so that tenant's connectors stay PENDING.
+  const clients = new Map<string, PortalClient | null>();
+  const getClient = async (bpnl: string): Promise<PortalClient | null> => {
+    if (clients.has(bpnl)) return clients.get(bpnl) ?? null;
+    const secretName = deriveAdminSecretName(deploymentName, bpnl);
+    let client: PortalClient | null = null;
+    try {
+      const creds = await secrets.getAdminCredentials(secretName);
+      client = new PortalClient(environment, creds);
+      await client.authenticate();
+    } catch (err) {
+      console.warn(
+        `[portal/provision] admin secret ${secretName} unavailable: ${(err as Error).message}`,
+      );
+    }
+    clients.set(bpnl, client);
+    return client;
+  };
+
+  const { resolved, activeBpnls } = await reconcile(
+    deployment,
+    connectors,
+    store,
+    getClient,
+  );
+
+  writeProvisionOutput(configPath, resolved, activeBpnls);
   console.log(
-    `[portal/provision] Done. ${Object.keys(resolved).length} connector(s) ready, ${activeBpnls.size} tenant(s).`,
+    `[portal/provision] Done. ${Object.keys(resolved).length} connector(s) ready, ${activeBpnls.length} tenant(s).`,
   );
 }
 
-main().catch((err) => {
-  console.error(`[portal/provision] FATAL: ${err.message}`);
-  process.exit(1);
-});
+// Entrypoint guard: run only when invoked directly (node dist/portal/provision.js),
+// not when imported by tests.
+if (process.argv[1]?.endsWith("provision.js")) {
+  main().catch((err) => {
+    console.error(`[portal/provision] FATAL: ${err.message}`);
+    process.exit(1);
+  });
+}

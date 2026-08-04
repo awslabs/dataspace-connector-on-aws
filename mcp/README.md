@@ -67,6 +67,7 @@ export EDC_MULTI_CONNECTOR="true"
 When `EDC_MULTI_CONNECTOR=true` is set, the MCP server enables dynamic connector discovery:
 
 - A `list_connectors` tool becomes available that queries AWS CloudFormation for the deployed connector stacks and the shared-infrastructure stack outputs
+- Discovery targets stacks prefixed by `DEPLOYMENT_NAME` (default `DataspaceConnector`); set it to match a custom `deploymentName` so the server addresses the right deployment when several share an account and region
 - It returns the connector IDs plus the Management and DSP (protocol) base URLs (`management_base_url`, `dsp_base_url`); `dsp_base_url` is `null` if unavailable
 - All other tools require a `connector_id` parameter (discovered via `list_connectors`)
 - Per-connector addresses are built as `{management_base_url}/{connector_id}` and `{dsp_base_url}/{connector_id}` (the latter is the `counter_party_address` for catalog requests and negotiations)
@@ -176,7 +177,7 @@ For deployments with multiple EDC connectors (e.g., via CDK Pipelines GitOps):
 }
 ```
 
-In multi-connector mode, the agent calls `list_connectors` first to discover available connector IDs and the Management/DSP endpoints, then passes `connector_id` to all subsequent tool calls. `EDC_MANAGEMENT_URL` is optional here (discovered from CloudFormation; set it only to override). The additional IAM permissions required are `cloudformation:ListStacks` and `cloudformation:DescribeStacks`.
+In multi-connector mode, the agent calls `list_connectors` first to discover available connector IDs and the Management/DSP endpoints, then passes `connector_id` to all subsequent tool calls. `EDC_MANAGEMENT_URL` is optional here (discovered from CloudFormation; set it only to override). Set `DEPLOYMENT_NAME` in `env` if your deployment uses a custom `deploymentName` (it defaults to `DataspaceConnector`). The additional IAM permissions required are `cloudformation:ListStacks` and `cloudformation:DescribeStacks`.
 
 ## Example Usage
 

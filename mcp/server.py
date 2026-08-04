@@ -60,12 +60,12 @@ USE_AWS_IAM = os.getenv("EDC_USE_AWS_IAM", "false").lower() == "true"
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 MULTI_CONNECTOR = os.getenv("EDC_MULTI_CONNECTOR", "false").lower() == "true"
 
-# CloudFormation stack naming used by Dataspace Connector on AWS deployments
-_CFN_STACK_PREFIX = "Deploy-DataspaceConnector-"
-# Shared-infra stack name suffix. Matching on this handles both the pipeline
-# ("Deploy-DataspaceConnectorSharedInfraStack") and local cdk deploy
-# ("DataspaceConnectorSharedInfraStack") variants.
-_CFN_SHARED_INFRA_MATCH = "DataspaceConnectorSharedInfraStack"
+# CloudFormation stack naming. Every stack is prefixed by the deployment name
+# (DEPLOYMENT_NAME, default "DataspaceConnector"), so a server instance targets
+# exactly one deployment even when several share an account and region.
+DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME", "DataspaceConnector")
+_CFN_STACK_PREFIX = f"{DEPLOYMENT_NAME}-Connector-"
+_CFN_SHARED_INFRA_NAME = f"{DEPLOYMENT_NAME}-SharedInfra"
 
 # Cached CloudFormation discovery (connector IDs + endpoint URLs) for multi-connector
 # mode, populated once per process. Restart the server to pick up new connectors.
@@ -138,10 +138,10 @@ def _discover() -> dict[str, Any]:
     ):
         for stack in page.get("StackSummaries", []):
             name = stack["StackName"]
-            if name.endswith(_CFN_SHARED_INFRA_MATCH):
+            if name == _CFN_SHARED_INFRA_NAME:
                 shared_infra = name
             elif name.startswith(_CFN_STACK_PREFIX):
-                connector_ids.append(name[len(_CFN_STACK_PREFIX):])
+                connector_ids.append(name[len(_CFN_STACK_PREFIX) :])
     connector_ids.sort()
 
     management_url = dsp_url = None

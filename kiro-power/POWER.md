@@ -315,7 +315,7 @@ Before using this power, replace the following placeholders in `mcp.json` with y
   - **How to get it:** After cloning the repository, use the full path to the `mcp/` folder, e.g., `/Users/yourname/Code/dataspace-connector-on-aws/mcp`
 
 - **`PLACEHOLDER_MANAGEMENT_API_URL`**: The EDC Management API endpoint URL from your deployment.
-  - **How to get it:** After the pipeline's Deploy stage completes, read the `ManagementApiUrl` output of the `Deploy-DataspaceConnectorSharedInfraStack`. It looks like `https://<api-id>.execute-api.<region>.amazonaws.com/management/`. Use it as-is (the base URL without a connector suffix); the `connector_id` parameter on each tool call handles routing.
+  - **How to get it:** After the pipeline's Deploy stage completes, read the `ManagementApiUrl` output of the `DataspaceConnector-SharedInfra`. It looks like `https://<api-id>.execute-api.<region>.amazonaws.com/management/`. Use it as-is (the base URL without a connector suffix); the `connector_id` parameter on each tool call handles routing.
 
 - **`PLACEHOLDER_AWS_REGION`**: The AWS region where the connector is deployed.
   - **How to set it:** Use the region you chose during deployment (e.g., `eu-central-1`)

@@ -14,9 +14,9 @@ Before starting, confirm the MCP tools are working and identify the target conne
 
 ### Step 1.1: Identify the Target Connector
 
-All connectors are deployed by the pipeline, so their stacks are named `Deploy-DataspaceConnectorSharedInfraStack` (shared infrastructure) and `Deploy-DataspaceConnector-<connectorId>` (per connector).
+All connectors are deployed by the pipeline, so their stacks are named `DataspaceConnector-SharedInfra` (shared infrastructure) and `DataspaceConnector-Connector-<connectorId>` (per connector).
 
-Use `list_connectors()` to discover the deployed connector IDs (it scans CloudFormation for `Deploy-DataspaceConnector-` stacks) and ask the user which one to validate. All MCP tool calls include the `connector_id` parameter.
+Use `list_connectors()` to discover the deployed connector IDs (it scans CloudFormation for `DataspaceConnector-Connector-` stacks) and ask the user which one to validate. All MCP tool calls include the `connector_id` parameter.
 
 ### Step 1.2: Verify MCP Connectivity
 
@@ -32,7 +32,7 @@ If this fails, the MCP connection isn't configured. Direct the user to the **dep
 The AWS profile and region are needed, check the MCP config at `.kiro/settings/mcp.json` for `AWS_PROFILE` and `AWS_REGION` values:
 
 ```bash
-aws cloudformation list-stack-resources --stack-name Deploy-DataspaceConnector-<connectorId> --region <region> \
+aws cloudformation list-stack-resources --stack-name DataspaceConnector-Connector-<connectorId> --region <region> \
     --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].[LogicalResourceId,PhysicalResourceId]' --output json
 ```
 
@@ -337,7 +337,7 @@ Retrieve the S3 bucket name, DSP endpoint, and BPNL. The bucket comes from the p
 **Shared infrastructure outputs** (the DSP endpoint is shared across all connectors):
 
 ```bash
-aws cloudformation describe-stacks --stack-name Deploy-DataspaceConnectorSharedInfraStack --region <region> \
+aws cloudformation describe-stacks --stack-name DataspaceConnector-SharedInfra --region <region> \
     --query "Stacks[0].Outputs" --output json
 ```
 
@@ -348,14 +348,14 @@ Extract:
 **Per-connector output** (the S3 bucket for this connector's data plane):
 
 ```bash
-aws cloudformation describe-stacks --stack-name Deploy-DataspaceConnector-<connectorId> --region <region> \
+aws cloudformation describe-stacks --stack-name DataspaceConnector-Connector-<connectorId> --region <region> \
     --query "Stacks[0].Outputs[?OutputKey=='EdcDataPlaneBucketName'].OutputValue" --output text
 ```
 
 **Business Partner Number (BPN):** the organization BPN is the `participantId` under `portal.identity` in `deployment.yaml` in the configuration repository. It is organization-wide, the same for every connector. Fetch it from CodeCommit:
 
 ```bash
-aws codecommit get-file --repository-name dataspace-connector-config \
+aws codecommit get-file --repository-name DataspaceConnector-config \
     --file-path deployment.yaml --region <region> --query 'fileContent' --output text | base64 -d
 ```
 
@@ -579,13 +579,13 @@ The response includes the `errorDetail` field when the negotiation is `TERMINATE
 The control plane and data plane each write to their own CloudWatch log group. The names include CDK-generated suffixes, so discover them from the stack resources (this avoids picking up stale log groups from prior deployments):
 
 ```bash
-aws cloudformation list-stack-resources --stack-name Deploy-DataspaceConnector-<connectorId> --region <region> \
+aws cloudformation list-stack-resources --stack-name DataspaceConnector-Connector-<connectorId> --region <region> \
     --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].[LogicalResourceId,PhysicalResourceId]' --output json
 ```
 
 This returns entries like:
-- Logical ID containing `ControlPlane` → `Deploy-DataspaceConnector-<connectorId>-ControlPlaneLogGroup<suffix>`
-- Logical ID containing `DataPlane` → `Deploy-DataspaceConnector-<connectorId>-DataPlaneLogGroup<suffix>`
+- Logical ID containing `ControlPlane` → `DataspaceConnector-Connector-<connectorId>-ControlPlaneLogGroup<suffix>`
+- Logical ID containing `DataPlane` → `DataspaceConnector-Connector-<connectorId>-DataPlaneLogGroup<suffix>`
 
 Store both, you'll need them for log queries.
 

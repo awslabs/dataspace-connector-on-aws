@@ -141,7 +141,7 @@ const PORTAL_IDENTITY_KEYS: (keyof PortalIdentity)[] = [
  * prefixes, CloudFormation stack names, DynamoDB table names, ECS runtime IDs.
  */
 export function validateConnectorId(connectorId: string): void {
-  if (!/^[a-z0-9]([a-z0-9-]{0,58}[a-z0-9])?$/.test(connectorId)) {
+  if (!/^[a-z0-9][a-z0-9-]{0,58}[a-z0-9]$/.test(connectorId)) {
     throw new Error(
       `Invalid connectorId "${connectorId}". Must be 2-60 chars, lowercase alphanumeric + hyphens, cannot start/end with hyphen.`,
     );

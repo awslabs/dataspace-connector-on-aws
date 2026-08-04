@@ -36,7 +36,9 @@ Deployment is fully GitOps-driven via AWS CDK Pipelines. You run `./deploy.sh` o
 
 ### Deploy the Pipeline
 
-**1. Create the portal admin technical user.** In the Cofinity-X Portal, create a technical user with the **Offer Management** and **Dataspace Discovery** roles. The pipeline uses it to read per-connector credentials and register connectors.
+Admin credentials are managed through AWS Secrets Manager, never through CloudFormation or the deploy script: the first pipeline run creates an empty secret, you populate it, and the next run completes the deployment.
+
+**1. Create the portal admin technical user.** In the Cofinity-X Portal, create a technical user with the **Offer Management** and **Dataspace Discovery** roles. The pipeline uses it to read per-connector credentials and register connectors. For a deployment that hosts connectors for more than one organization, create one admin user per organization (BPNL).
 
 **2. Run the deploy script:**
 
@@ -46,18 +48,26 @@ export AWS_REGION=eu-central-1
 ./deploy.sh
 ```
 
-This bootstraps the account, deploys the pipeline stack, creates a CodeCommit configuration repository (`dataspace-connector-config`) pre-populated with template YAML files, and prompts for the portal admin user's Client ID and Secret, stored in AWS Secrets Manager, never in CloudFormation.
+This bootstraps the account, deploys the pipeline stack, and creates a CodeCommit configuration repository pre-populated with template YAML files. For `configSource: codecommit` the repository is named `<deploymentName>-config` (default `DataspaceConnector-config`).
 
-**3. Configure and push.** Clone the config repo, edit the YAML files (see [Configuration](#configuration)), and push to trigger the first deployment:
+**3. Configure and push.** Clone the config repo, edit the YAML files (see [Configuration](#configuration)), and push:
 
 ```bash
-git clone codecommit::eu-central-1://<your-profile>@dataspace-connector-config
-cd dataspace-connector-config
-# edit deployment.yaml and connectors/*.yaml
+git clone codecommit::eu-central-1://<your-profile>@DataspaceConnector-config
+cd DataspaceConnector-config
+# edit pipeline.yaml, deployment.yaml, and connectors/*.yaml
 git add -A && git commit -m "Initial configuration" && git push origin main
 ```
 
-All subsequent changes flow through Git pushes to the config repository.
+The first pipeline run deploys the shared infrastructure and creates an empty admin secret named `<deploymentName>/portal-admin/<BPNL>` in AWS Secrets Manager for each organization (BPNL) in your config. Connectors stay pending until the secret holds valid credentials.
+
+**4. Populate the admin secret and re-run.** Set each `<deploymentName>/portal-admin/<BPNL>` secret to the admin technical user's credentials:
+
+```json
+{ "clientId": "<client-id>", "clientSecret": "<client-secret>" }
+```
+
+Then re-run the pipeline (release the change in the CodePipeline console, or push again). It reads each connector's credentials from the portal, provisions the connector, stores its OAuth secret, and registers it for discovery. All subsequent changes flow through Git pushes to the config repository.
 
 ## AI-Assisted Connector Management
 
@@ -87,14 +97,17 @@ your-config-repo/
 appRepo: awslabs/dataspace-connector-on-aws   # App source (public GitHub)
 appVersion: main                              # Git tag, branch, or commit hash
 configSource: codecommit                      # "codecommit" (auto-created) or "github"
-configRepoName: dataspace-connector-config    # Repository name
-# connectionArn: "arn:aws:codestar-connections:..."  # Required for GitHub
+deploymentName: DataspaceConnector            # Namespaces all resources (default "DataspaceConnector")
+# configRepoName: my-org/config-repo          # Required only for configSource: github
+# connectionArn: "arn:aws:codestar-connections:..."  # Required only for configSource: github
 requireApproval: false                        # Optional manual gate before deploy
 ```
 
+`deploymentName` prefixes every resource this project creates (pipeline, stacks, configuration repository, state table, and secrets), so you can run multiple independent deployments in the same account and region. It defaults to `DataspaceConnector` and should be set once, before the first deploy. For `configSource: codecommit` the configuration repository is created automatically as `<deploymentName>-config`; `configRepoName` is used only for `configSource: github`, where it names the external repository and requires `connectionArn`.
+
 ### `deployment.yaml`
 
-Shared infrastructure plus Cofinity-X Portal integration. The `portal.identity` values are organization-wide (shared across all connectors) and come from the portal's "Configure Your Connector" dialog. See [Obtaining EDC Identity Credentials from the Cofinity-X Portal](docs/obtaining-edc-identity-credentials.md).
+Shared infrastructure plus Cofinity-X Portal integration. The `portal.identity` values are the deployment-wide default identity and come from the portal's "Configure Your Connector" dialog. See [Obtaining EDC Identity Credentials from the Cofinity-X Portal](docs/obtaining-edc-identity-credentials.md). To host connectors for more than one organization in a single deployment, a connector can override any identity field (see [`connectors/connector-<id>.yaml`](#connectorsconnector-idyaml)); each organization (BPNL) needs its own admin technical user and its own `<deploymentName>/portal-admin/<BPNL>` secret.
 
 ```yaml
 profile: development                 # "development" (1 NAT, Fargate Spot) or "production" (2 NATs, On-Demand)
@@ -135,7 +148,16 @@ dataPlaneMemoryLimitMiB: 512
 interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-flow
 backgroundStateMachineIterationMillis: "60000"  # policy monitor + data-plane selector
 edcStateRemovalPolicy: DESTROY       # DESTROY or RETAIN
-edcTechnicalUserId: "<portal-technical-user-service-account-id>"
+serviceAccountId: "<portal-technical-user-service-account-id>"
+# Optional per-connector identity override (multi-organization deployments):
+# portal:
+#   identity:
+#     participantId: "BPNL..."       # this connector's organization (BPNL)
+#     dcpId: "did:web:..."
+#     trustedIssuer: "did:web:..."
+#     stsOauthTokenUrl: "https://..."
+#     stsDimUrl: "https://..."
+#     didResolver: "https://..."
 ```
 
 ### Custom Domain
@@ -164,17 +186,19 @@ To completely remove all deployed resources, follow these steps in order:
 
 **1. Remove all connector YAML files** from the config repo and push. This triggers the pipeline's cleanup step, which deregisters the connectors from the portal and destroys their stacks.
 
-**2. Delete the shared infrastructure stack:**
+**2. Delete the shared infrastructure stack** (removes shared networking, the ALB, and the admin secrets):
 
 ```bash
-aws cloudformation delete-stack --stack-name Deploy-DataspaceConnectorSharedInfraStack --region <region>
+aws cloudformation delete-stack --stack-name DataspaceConnector-SharedInfra --region <region>
 ```
 
-**3. Delete the pipeline stack** (removes the pipeline, config repo, and admin secret):
+**3. Delete the pipeline stack** (removes the pipeline and the configuration repository):
 
 ```bash
 aws cloudformation delete-stack --stack-name DataspaceConnectorPipelineStack --region <region>
 ```
+
+Stack and repository names are prefixed by `deploymentName` (default `DataspaceConnector`); substitute your own if you set it.
 
 ## Deployment Profiles
 
@@ -202,7 +226,7 @@ These figures reflect baseline (idle) cost. DynamoDB consumption, and therefore 
 * **API Gateway payload limit:** 10 MB per request (REST API). Does not affect Consumer Pull scenarios or S3-backed data transfers.
 * **Open transfers accrue provider cost:** Pull transfers stay in `STARTED` until explicitly terminated, and each open transfer keeps a provider-side data-plane flow active and consuming DynamoDB. Nothing reaps them automatically, so terminate transfers you no longer need via the Management API. See [Open Transfers and DynamoDB Cost](docs/open-transfers-and-dynamodb-cost.md).
 * **Fargate Spot availability:** In `development` profile, Spot capacity constraints may cause deployment delays during updates. Retry or use `production` profile for guaranteed placement.
-* **Connector ID constraints:** Must be 2–60 characters, lowercase alphanumeric + hyphens, cannot start/end with a hyphen. Used in ALB paths, DynamoDB table names, Secrets Manager prefixes, and CloudFormation stack names.
+* **Connector ID constraints:** Must be 2–60 characters, lowercase alphanumeric + hyphens, cannot start/end with a hyphen. Used in ALB paths, DynamoDB table names, Secrets Manager prefixes, and CloudFormation stack names, all prefixed by `deploymentName`, so connector IDs need to be unique only within a deployment.
 
 ## Learn More
 
