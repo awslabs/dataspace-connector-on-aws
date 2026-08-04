@@ -175,6 +175,7 @@ export class PipelineStack extends Stack {
     const adminSecretArn = `${secretArn}:${deploymentName}/portal-admin/*`;
     const connectorSecretArn = `${secretArn}:${deploymentName}/*/edc.iam.sts.oauth.client.secret-*`;
     const connectorStackArn = `arn:aws:cloudformation:${this.region}:${this.account}:stack/${deploymentName}-Connector*/*`;
+    const sharedInfraStackArn = `arn:aws:cloudformation:${this.region}:${this.account}:stack/${deploymentName}-SharedInfra/*`;
 
     return new CodeBuildStep("PortalFinalization", {
       input: configSource,
@@ -200,8 +201,14 @@ export class PipelineStack extends Stack {
         }),
         new PolicyStatement({
           effect: Effect.ALLOW,
+          // Read-only on SharedInfra (DSP base URL) and connector stacks.
+          actions: ["cloudformation:DescribeStacks"],
+          resources: [sharedInfraStackArn, connectorStackArn],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          // Orphan cleanup deletes connector stacks only, never SharedInfra.
           actions: [
-            "cloudformation:DescribeStacks",
             "cloudformation:DeleteStack",
             "cloudformation:DescribeStackEvents",
           ],
