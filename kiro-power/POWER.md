@@ -277,7 +277,7 @@ The MCP server refreshes AWS credentials on every request, so temporary credenti
 
 ### EDC Identity Settings (from Cofinity-X Portal)
 
-These organization-wide values are configured once in the `portal.identity` section of `deployment.yaml` and are the same for every connector. The pipeline reads each connector's technical-user credentials from the portal (referenced by `serviceAccountId` in the connector YAML) and assembles the rest of the EDC identity automatically.
+These values are the deployment-wide default, configured once in the `portal.identity` section of `deployment.yaml`; a connector may override any of them under its own `portal.identity` to host multiple organizations (BPNLs) in one deployment. The pipeline reads each connector's technical-user credentials from the portal (referenced by `serviceAccountId` in the connector YAML) and assembles the rest of the EDC identity automatically.
 
 | YAML Field (`portal.identity`) | EDC Property | Description |
 |------|------|-------------|

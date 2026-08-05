@@ -201,6 +201,6 @@ In this project, the stage name is `management` (the API Gateway deployment stag
 | `arn:aws:execute-api:eu-central-1:111122223333:1234567890/management/*/connector-a/v3/assets` | All methods on `/v3/assets` only |
 | `arn:aws:execute-api:eu-central-1:111122223333:1234567890/management/*/*` | All connectors (admin access) |
 
-Use wildcards (`*`) for stage, HTTP verb, or path segments as needed. The API ID is found in the CDK stack output `EdcApiManagementApiEndpoint`.
+Use wildcards (`*`) for stage, HTTP verb, or path segments as needed. The API ID is the first hostname label of the `ManagementApiUrl` output on the `DataspaceConnector-SharedInfra` stack (e.g., `https://{api-id}.execute-api.{region}.amazonaws.com/management/`).
 
 For the full resource ARN specification, see the [API Gateway IAM policy reference](https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-control-access-using-iam-policies-to-invoke-api.html).

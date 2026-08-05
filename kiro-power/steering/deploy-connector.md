@@ -32,7 +32,7 @@ These steps are done by the user in the Cofinity-X Portal. See `docs/obtaining-e
 
 1. **Admin technical user (once per organization).** Create a technical user with the **Offer Management** and **Dataspace Discovery** roles. The pipeline authenticates as this user to read per-connector credentials and register connectors. You add its Client ID and Secret to AWS Secrets Manager after the first deploy (Phase 5).
 2. **Per-connector technical user.** For each connector, create a technical user with the **Identity Wallet Management** role, wait for its status to become `ACTIVE`, and copy its **service account ID** (the `ID` field on the Technical User Details page).
-3. **Organization identity values.** From the portal's "Configure Your Connector" dialog, collect the organization-wide values: trusted issuer, OAuth token URL, DIM URL, participant Business Partner Number (BPN), organization Decentralized Identifier (DID), and BPN/DID Resolution Service (BDRS) URL. These are the same for every connector.
+3. **Organization identity values.** From the portal's "Configure Your Connector" dialog, collect the values: trusted issuer, OAuth token URL, DIM URL, participant Business Partner Number (BPN), organization Decentralized Identifier (DID), and BPN/DID Resolution Service (BDRS) URL. These are the deployment-wide default; a connector may override any of them under its own `portal.identity` for multi-organization deployments.
 
 ---
 
