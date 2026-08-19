@@ -73,7 +73,7 @@ Then re-run the pipeline (release the change in the CodePipeline console, or pus
 
 This project includes tooling for AI-assisted deployment and operation:
 
-* **[MCP Server](mcp/)**: A Model Context Protocol server with 19 tools for interacting with the EDC Management API. Create assets, negotiate contracts, transfer data, and troubleshoot, all through natural language.
+* **[MCP Server](mcp/)**: A Model Context Protocol server with 12 tools for interacting with the EDC Management API. Create assets, negotiate contracts, transfer data, and troubleshoot, all through natural language.
 
 * **[Kiro Power](kiro-power/)**: Guided workflows for [Kiro](https://kiro.dev) that walk you through deploying your connector and validating end-to-end data exchange, including S3 loopback testing.
 

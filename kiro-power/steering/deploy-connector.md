@@ -146,9 +146,9 @@ After Kiro picks up the MCP server, verify discovery and one connector:
 
 ```python
 list_connectors()
-query_assets(connector_id="<connectorId>", limit=1)
+query_resources(connector_id="<connectorId>", resource_type="assets", limit=1)
 ```
 
-`list_connectors()` returns the deployed connector IDs (it scans CloudFormation for `DataspaceConnector-Connector-` stacks). If the calls succeed, the connector is deployed and the MCP tools are connected (19 tools available). Then move to the **validate-data-exchange** steering file for an end-to-end data exchange test.
+`list_connectors()` returns the deployed connector IDs (it scans CloudFormation for `DataspaceConnector-Connector-` stacks). If the calls succeed, the connector is deployed and the MCP tools are connected (12 tools available). Then move to the **validate-data-exchange** steering file for an end-to-end data exchange test.
 
 If a call fails, check: AWS credentials are valid, the IAM principal ARN matches `managementApiPrincipals`, `EDC_MANAGEMENT_URL` matches the `ManagementApiUrl` output, `EDC_MULTI_CONNECTOR=true` is set, and the region is correct.

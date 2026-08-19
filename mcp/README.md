@@ -4,34 +4,27 @@ A Model Context Protocol (MCP) server for interacting with the Eclipse Dataspace
 
 ## Features
 
-This MCP server provides 19 tools covering the full EDC Management API workflow:
+This MCP server provides 12 general-purpose EDC primitives that map closely to the EDC Management API. Workflow orchestration (the consumer and provider sequences) lives in the consuming skill/agent, keeping the server workflow-agnostic, so new dataspace use cases need no new server tools.
 
-### Provider-side tools
-- **create_asset** - Create a new asset with data address
-- **create_policy_definition** - Create a new policy definition with ODRL rules
-- **create_contract_definition** - Create a contract definition linking assets to policies
+### Discovery
+- **list_connectors** - Discover deployed connector IDs and the Management/DSP base URLs from CloudFormation (requires `EDC_MULTI_CONNECTOR=true`). Call this first in multi-connector mode.
 
-### Consumer-side tools
-- **request_catalog** - Request the catalog from another EDC connector to discover available datasets
-- **initiate_contract_negotiation** - Start a contract negotiation with a provider (passes full policy from catalog)
-- **get_contract_negotiation** - Get the full contract negotiation object including state and agreement ID
-- **get_contract_agreement** - Retrieve a finalized contract agreement
-- **initiate_transfer** - Start a data transfer using a contract agreement
-- **get_transfer_process** - Get the full transfer process object including state and error details
-- **get_edr_data_address** - Get the endpoint data reference (EDR) for an active transfer
-- **fetch_data_with_edr** - Fetch actual data from the provider's data plane using an EDR (handles token refresh transparently)
-- **initiate_edr_negotiation** - Combined negotiation + transfer in one call (shortcut for the full consumer flow)
+### Generic resource operations
+- **query_resources** - List/query a resource collection by `resource_type`: `assets`, `policy_definitions`, `contract_definitions`, `contract_negotiations`, `contract_agreements`, `transfer_processes`. Optional filter/sort/pagination.
+- **get_resource** - Read one resource by id for the same types, plus `edr` (the raw endpoint data reference for a transfer, for inspection). Its description carries the negotiation and transfer state-machine progressions for polling.
+- **delete_resource** - Delete a deletable resource (`assets`, `policy_definitions`, `contract_definitions`). Negotiations/agreements are immutable; end a transfer via `manage_transfer`.
 
-### Query tools
-- **query_assets** - List/search assets with filtering and pagination
-- **query_policy_definitions** - List/search policy definitions
-- **query_contract_definitions** - List/search contract definitions
-- **query_contract_negotiations** - List/search contract negotiations
-- **query_transfer_processes** - List/search transfer processes
-- **query_contract_agreements** - List/search contract agreements
+### Provider
+- **create_asset** - Register a data asset (descriptor + data address).
+- **create_policy** - Create an ODRL policy definition (access or usage).
+- **create_contract_definition** - Link assets to access + contract policies, making them catalog-visible.
 
-### Discovery tools (multi-connector mode)
-- **list_connectors** - Discover deployed connectors and their Management/DSP endpoints from CloudFormation (requires `EDC_MULTI_CONNECTOR=true`)
+### Consumer
+- **request_catalog** - Request a provider's DCAT catalog over DSP.
+- **initiate_negotiation** - Start a contract negotiation for a catalog offer (pass the offer's permission/prohibition/obligation through exactly).
+- **initiate_transfer** - Start a data transfer against a finalized agreement.
+- **manage_transfer** - Suspend / resume / complete / terminate a transfer. Pass `transfer_process_id="all_started"` to apply the action to every STARTED transfer (reaps idle provider-side pull transfers, which keep consuming DynamoDB on this AWS deployment).
+- **fetch_data** - Resolve the EDR and fetch the payload from the data plane public API (appends `public/` by default; refreshes the token transparently).
 
 ## Installation
 
@@ -184,136 +177,120 @@ In multi-connector mode, the agent calls `list_connectors` first to discover ava
 ### End-to-end consumer flow
 
 ```python
+# 0. (multi-connector) discover connectors + endpoints
+info = list_connectors()
+cid = "carbonex"
+provider_dsp = f"{info['dsp_base_url']}/provider-connector"
+
 # 1. Discover available datasets from a provider
 catalog = request_catalog(
-    counter_party_address="https://provider.example.com/protocol",
-    counter_party_id="BPNL000000000001"
+    connector_id=cid,
+    counter_party_address=provider_dsp,
+    counter_party_id="BPNL000000000001",
 )
 
-# 2. Extract offer details from catalog and negotiate a contract
-# The permission/prohibition/obligation must be passed through exactly from the catalog offer
+# 2. Extract the offer and negotiate.
+# permission/prohibition/obligation MUST be passed through exactly from the offer,
+# or the provider rejects the negotiation with "Policy not equal to offer".
 offer = catalog["dcat:dataset"][0]["odrl:hasPolicy"]
-negotiation = initiate_contract_negotiation(
-    counter_party_address="https://provider.example.com/protocol",
+negotiation = initiate_negotiation(
+    connector_id=cid,
+    counter_party_address=provider_dsp,
     offer_id=offer["@id"],
     asset_id="dataset-id",
     assigner="BPNL000000000001",
-    permission=[offer["odrl:permission"]],
-    prohibition=offer["odrl:prohibition"],
-    obligation=offer["odrl:obligation"]
+    permission=offer.get("odrl:permission"),
+    prohibition=offer.get("odrl:prohibition"),
+    obligation=offer.get("odrl:obligation"),
 )
 
-# 3. Poll until negotiation is finalized
-state = get_contract_negotiation(negotiation_id=negotiation["@id"])
+# 3. Poll until FINALIZED, then read the agreement id
+neg = get_resource(connector_id=cid, resource_type="contract_negotiations", resource_id=negotiation["@id"])
+agreement_id = neg["contractAgreementId"]
 
-# 4. Retrieve the contract agreement (get agreement ID from negotiation query)
-agreement = get_contract_agreement(agreement_id="<agreement-id>")
-
-# 5. Initiate a data transfer
+# 4. Transfer, then poll until STARTED
 transfer = initiate_transfer(
-    counter_party_address="https://provider.example.com/protocol",
-    contract_id=agreement["@id"],
-    transfer_type="HttpData-PULL"
+    connector_id=cid,
+    counter_party_address=provider_dsp,
+    contract_id=agreement_id,
+    transfer_type="HttpData-PULL",
 )
+tp = get_resource(connector_id=cid, resource_type="transfer_processes", resource_id=transfer["@id"])
 
-# 6. Poll until transfer is started
-state = get_transfer_process(transfer_process_id=transfer["@id"])
+# 5. Fetch the payload (the /public/ sub-path is appended automatically)
+data = fetch_data(connector_id=cid, transfer_process_id=transfer["@id"])
 
-# 7. Get the endpoint data reference with access token
-edr = get_edr_data_address(transfer_process_id=transfer["@id"])
-
-# 8. Fetch the actual data from the provider's data plane
-data = fetch_data_with_edr(transfer_process_id=transfer["@id"])
+# (optional) inspect the raw EDR instead of fetching
+edr = get_resource(connector_id=cid, resource_type="edr", resource_id=transfer["@id"])
 ```
 
 ### Create a data offering (provider side)
 
 ```python
-# 1. Create an access policy (controls catalog visibility)
-create_policy_definition(
+# 1. Access policy (controls catalog visibility)
+create_policy(
+    connector_id=cid,
     policy_id="my-access-policy",
     policy={
         "@type": "Set",
         "permission": [{
             "action": "access",
-            "constraint": {
-                "leftOperand": "Membership",
-                "operator": "eq",
-                "rightOperand": "active"
-            }
-        }]
-    }
+            "constraint": {"leftOperand": "Membership", "operator": "eq", "rightOperand": "active"},
+        }],
+    },
 )
 
-# 2. Create a usage policy (controls contract negotiation)
-create_policy_definition(
+# 2. Usage policy (controls negotiation)
+create_policy(
+    connector_id=cid,
     policy_id="my-usage-policy",
     policy={
         "@type": "Set",
         "permission": [{
             "action": "use",
-            "constraint": [{
-                "and": [
-                    {"leftOperand": "FrameworkAgreement", "operator": "eq", "rightOperand": "DataExchangeGovernance:1.0"},
-                    {"leftOperand": "UsagePurpose", "operator": "isAnyOf", "rightOperand": "cx.core.industrycore:1"}
-                ]
-            }]
-        }]
-    }
-)
-
-# 3. Create an asset
-create_asset(
-    asset_id="my-dataset",
-    properties={
-        "name": "Sample Dataset",
-        "description": "A shared dataset",
-        "contentType": "application/json"
+            "constraint": [{"and": [
+                {"leftOperand": "FrameworkAgreement", "operator": "eq", "rightOperand": "DataExchangeGovernance:1.0"},
+                {"leftOperand": "UsagePurpose", "operator": "isAnyOf", "rightOperand": "cx.core.industrycore:1"},
+            ]}],
+        }],
     },
-    data_address={
-        "type": "HttpData",
-        "baseUrl": "https://example.com/api/data"
-    }
 )
 
-# 4. Create contract definition linking asset to both policies
+# 3. Asset (S3 data source)
+create_asset(
+    connector_id=cid,
+    asset_id="my-dataset",
+    properties={"name": "Sample Dataset", "contentType": "application/json"},
+    data_address={"type": "AmazonS3", "region": "eu-central-1", "bucketName": "my-bucket", "objectName": "path/to/object.json"},
+)
+
+# 4. Contract definition (links asset to both policies)
 create_contract_definition(
+    connector_id=cid,
     contract_definition_id="my-contract-def",
     access_policy_id="my-access-policy",
     contract_policy_id="my-usage-policy",
-    assets_selector=[{
-        "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id",
-        "operator": "=",
-        "operandRight": "my-dataset"
-    }]
+    assets_selector=[{"operandLeft": "https://w3id.org/edc/v0.0.1/ns/id", "operator": "=", "operandRight": "my-dataset"}],
 )
 ```
 
-### Query existing resources
+### Query, manage, and clean up
 
 ```python
-# List all assets
-query_assets(limit=10)
+# List a resource collection
+query_resources(connector_id=cid, resource_type="assets", limit=10)
 
-# List all policy definitions
-query_policy_definitions(limit=10)
-
-# List all contract definitions
-query_contract_definitions(limit=10)
-
-# Find finalized negotiations
-query_contract_negotiations(filter_expression=[{
-    "operandLeft": "state",
-    "operator": "=",
-    "operandRight": "FINALIZED"
+# Find STARTED transfers
+query_resources(connector_id=cid, resource_type="transfer_processes", filter_expression=[{
+    "operandLeft": "state", "operator": "=", "operandRight": "STARTED",
 }])
 
-# List active transfers
-query_transfer_processes(filter_expression=[{
-    "operandLeft": "state",
-    "operator": "=",
-    "operandRight": "STARTED"
-}])
+# Terminate one transfer, or reap ALL started transfers (provider-side DynamoDB cost cleanup)
+manage_transfer(connector_id=cid, transfer_process_id="<transfer-id>", action="terminate", reason="done")
+manage_transfer(connector_id=cid, transfer_process_id="all_started", action="terminate", reason="idle cleanup")
+
+# Delete a test asset / policy / contract definition
+delete_resource(connector_id=cid, resource_type="contract_definitions", resource_id="my-contract-def")
 ```
 
 ## Development
