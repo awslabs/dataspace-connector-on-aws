@@ -1,6 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import org.gradle.api.file.DuplicatesStrategy
+
 plugins {
     `java-library`
     application
@@ -26,6 +28,9 @@ application {
 tasks {
     shadowJar {
         mergeServiceFiles()
+        filesMatching("META-INF/services/**") {
+            duplicatesStrategy = DuplicatesStrategy.INCLUDE
+        }
         archiveFileName.set("data-plane.jar")
         isZip64 = true
     }
