@@ -155,12 +155,15 @@ export class ConnectorStack extends Stack {
         actions: [
           "secretsmanager:CreateSecret",
           "secretsmanager:DeleteSecret",
-          "secretsmanager:DescribeSecret",
           "secretsmanager:GetSecretValue",
           "secretsmanager:UpdateSecret",
         ],
         effect: Effect.ALLOW,
-        resources: [`${secretArn}:${secretPrefix}*`, `${secretArn}:edr--*`],
+        resources: [
+          `${secretArn}:${secretPrefix}*`,
+          `${secretArn}:edr--*`,
+          `${secretArn}:????????-????-????-????-????????????-*`,
+        ],
       }),
       new PolicyStatement({
         actions: [
