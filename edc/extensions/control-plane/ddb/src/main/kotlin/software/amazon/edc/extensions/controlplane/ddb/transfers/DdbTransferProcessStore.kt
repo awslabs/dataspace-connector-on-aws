@@ -88,12 +88,18 @@ class DdbTransferProcessStore(
         }
     }
 
-    override fun save(transferProcess: EdcTransferProcess) {
+    override fun save(transferProcess: EdcTransferProcess): StoreResult<Void> {
         val leaseId =
             if (getTransferProcess(transferProcess.id) == null) {
                 null
             } else {
-                acquireLease(transferProcess.id)
+                try {
+                    acquireLease(transferProcess.id)
+                } catch (e: IllegalStateException) {
+                    return StoreResult.alreadyLeased(
+                        e.message ?: "TransferProcess ${transferProcess.id} is already leased!",
+                    )
+                }
             }
         try {
             table.putItem(transferProcess.toDdbTransferProcess(objectMapper, leaseId))
@@ -103,6 +109,7 @@ class DdbTransferProcessStore(
             }
         }
         stateCache.invalidate()
+        return StoreResult.success()
     }
 
     override fun findForCorrelationId(correlationId: String): EdcTransferProcess? =
@@ -113,12 +120,13 @@ class DdbTransferProcessStore(
             .firstOrNull()
             ?.toEdcTransferProcess(objectMapper)
 
-    override fun delete(id: String) {
+    override fun delete(id: String): StoreResult<Void> {
         if (hasLease(id)) {
-            throw IllegalStateException("TransferProcess $id cannot be deleted because it is currently leased!")
+            return StoreResult.alreadyLeased("TransferProcess $id cannot be deleted because it is currently leased!")
         }
         table.deleteItem(keyFromPkSk(EntityType.TRANSFER_PROCESS, id))
         stateCache.invalidate()
+        return StoreResult.success()
     }
 
     override fun findAll(querySpec: QuerySpec): Stream<EdcTransferProcess> =

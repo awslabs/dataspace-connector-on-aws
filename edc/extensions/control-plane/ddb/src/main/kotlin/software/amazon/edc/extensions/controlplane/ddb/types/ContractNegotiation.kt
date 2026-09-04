@@ -76,6 +76,8 @@ data class ContractNegotiation(
     var type: String = "",
     @get:DynamoDbAttribute(UPDATED_AT)
     var updatedAt: Long = 0L,
+    @get:DynamoDbAttribute(PARTICIPANT_CONTEXT_ID)
+    var participantContextId: String? = null,
 ) : Leasable {
     val id: String get() = sk
 
@@ -104,6 +106,7 @@ data class ContractNegotiation(
                 traceContext?.let { traceContext(it) }
                 type(EdcContractNegotiation.Type.valueOf(type))
                 updatedAt(updatedAt)
+                participantContextId(participantContextId)
             }.build()
 
     companion object {
@@ -117,6 +120,7 @@ data class ContractNegotiation(
         const val ERROR_DETAIL = "errorDetail"
         const val GSI_STATE_PK = "gsiStatePk"
         const val LEASE_ID = "leaseId"
+        const val PARTICIPANT_CONTEXT_ID = "participantContextId"
         const val PENDING = "pending"
         const val PROTOCOL = "protocol"
         const val PROTOCOL_MESSAGES = "protocolMessages"
@@ -158,4 +162,5 @@ fun EdcContractNegotiation.toDdbContractNegotiation(
         traceContext = traceContext,
         type = type.toString(),
         updatedAt = updatedAt,
+        participantContextId = participantContextId,
     )

@@ -3,6 +3,7 @@
 
 package software.amazon.edc.extensions.controlplane.ddb.assets
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.eclipse.edc.connector.controlplane.asset.spi.index.AssetIndex
 import org.eclipse.edc.spi.query.Criterion
 import org.eclipse.edc.spi.query.CriterionOperatorRegistry
@@ -24,9 +25,10 @@ import org.eclipse.edc.connector.controlplane.asset.spi.domain.Asset as EdcAsset
 
 class DdbAssetIndex(
     private val criterionOperatorRegistry: CriterionOperatorRegistry,
+    private val objectMapper: ObjectMapper,
     private val table: DynamoDbTable<Asset>,
 ) : AssetIndex {
-    override fun resolveForAsset(assetId: String): DataAddress? = getAsset(assetId)?.toEdcAsset()?.dataAddress
+    override fun resolveForAsset(assetId: String): DataAddress? = getAsset(assetId)?.toEdcAsset(objectMapper)?.dataAddress
 
     override fun queryAssets(querySpec: QuerySpec): Stream<EdcAsset> {
         val predicate = querySpec.filterExpression.toPredicate<Any>(criterionOperatorRegistry)
@@ -35,20 +37,20 @@ class DdbAssetIndex(
             .query(queryRequestFromPk(EntityType.ASSET))
             .flatMap { it.items() }
             .asSequence()
-            .map { it.toEdcAsset() }
+            .map { it.toEdcAsset(objectMapper) }
             .filter { predicate.test(it) }
             .sortedWith(EdcAssetComparator(querySpec.sortField, querySpec.sortOrder))
             .applyOffsetAndLimit(querySpec)
             .asStream()
     }
 
-    override fun findById(assetId: String): EdcAsset? = getAsset(assetId)?.toEdcAsset()
+    override fun findById(assetId: String): EdcAsset? = getAsset(assetId)?.toEdcAsset(objectMapper)
 
     override fun create(asset: EdcAsset): StoreResult<Void> {
         if (getAsset(asset.id) != null) {
             return StoreResult.alreadyExists("Asset with ID ${asset.id} already exists!")
         }
-        table.putItem(asset.toDdbAsset())
+        table.putItem(asset.toDdbAsset(objectMapper))
         return StoreResult.success()
     }
 
@@ -57,7 +59,7 @@ class DdbAssetIndex(
         if (asset != null) {
             val result = table.deleteItem(asset)
             if (result != null) {
-                return StoreResult.success(result.toEdcAsset())
+                return StoreResult.success(result.toEdcAsset(objectMapper))
             }
         }
         return StoreResult.notFound("Asset with ID $assetId not found!")
@@ -78,7 +80,7 @@ class DdbAssetIndex(
         if (getAsset(asset.id) == null) {
             StoreResult.notFound("Asset with ID ${asset.id} not found!")
         } else {
-            StoreResult.success(table.updateItem(asset.toDdbAsset()).toEdcAsset())
+            StoreResult.success(table.updateItem(asset.toDdbAsset(objectMapper)).toEdcAsset(objectMapper))
         }
 
     private fun getAsset(id: String): Asset? = table.getItem(keyFromPkSk(EntityType.ASSET, id))

@@ -4,6 +4,7 @@
 package software.amazon.edc.extensions.controlplane.ddb.types
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.eclipse.edc.connector.controlplane.asset.spi.domain.DataplaneMetadata
 import org.eclipse.edc.connector.controlplane.transfer.spi.types.DeprovisionedResource
 import org.eclipse.edc.connector.controlplane.transfer.spi.types.ProvisionedResourceSet
 import org.eclipse.edc.connector.controlplane.transfer.spi.types.ResourceManifest
@@ -97,6 +98,11 @@ data class TransferProcess(
     var type: String = "",
     @get:DynamoDbAttribute(UPDATED_AT)
     var updatedAt: Long = 0,
+    @get:DynamoDbAttribute(PARTICIPANT_CONTEXT_ID)
+    var participantContextId: String? = null,
+    @get:DynamoDbAttribute(DATAPLANE_METADATA)
+    @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
+    var dataplaneMetadata: Map<String, Any>? = null,
 ) : Leasable {
     val id: String get() = sk
 
@@ -145,6 +151,8 @@ data class TransferProcess(
                 transferType(transferType)
                 type(EdcTransferProcess.Type.valueOf(type))
                 updatedAt(updatedAt)
+                participantContextId(participantContextId)
+                dataplaneMetadata?.let { dataplaneMetadata(objectMapper.convertValue(it, DataplaneMetadata::class.java)) }
             }.build()
 
     companion object {
@@ -155,12 +163,14 @@ data class TransferProcess(
         const val CORRELATION_ID = "correlationId"
         const val COUNTER_PARTY_ADDRESS = "counterPartyAddress"
         const val CREATED_AT = "createdAt"
+        const val DATAPLANE_METADATA = "dataplaneMetadata"
         const val DATA_DESTINATION = "dataDestination"
         const val DATA_PLANE_ID = "dataPlaneId"
         const val DEPROVISIONED_RESOURCES = "deprovisionedResources"
         const val ERROR_DETAIL = "errorDetail"
         const val GSI_STATE_PK = "gsiStatePk"
         const val LEASE_ID = "leaseId"
+        const val PARTICIPANT_CONTEXT_ID = "participantContextId"
         const val PENDING = "pending"
         const val PRIVATE_PROPERTIES = "privateProperties"
         const val PROTOCOL = "protocol"
@@ -213,4 +223,6 @@ fun EdcTransferProcess.toDdbTransferProcess(
         transferType = transferType,
         type = type.toString(),
         updatedAt = updatedAt,
+        participantContextId = participantContextId,
+        dataplaneMetadata = dataplaneMetadata?.let { objectMapper.convertValueToMapStringAny(it) },
     )

@@ -38,6 +38,10 @@ data class ContractAgreement(
     var providerAgentId: String? = null,
     @get:DynamoDbAttribute(START_DATE)
     var startDate: Long? = null,
+    @get:DynamoDbAttribute(AGREEMENT_ID)
+    var agreementId: String? = null,
+    @get:DynamoDbAttribute(PARTICIPANT_CONTEXT_ID)
+    var participantContextId: String? = null,
 ) {
     val id: String get() = sk
 
@@ -51,12 +55,16 @@ data class ContractAgreement(
                 consumerId(consumerAgentId)
                 policy(objectMapper.convertValue(policy, Policy::class.java))
                 providerId(providerAgentId)
+                agreementId(agreementId)
+                participantContextId(participantContextId)
             }.build()
 
     companion object {
+        const val AGREEMENT_ID = "agreementId"
         const val ASSET_ID = "assetId"
         const val CONSUMER_AGENT_ID = "consumerAgentId"
         const val END_DATE = "endDate"
+        const val PARTICIPANT_CONTEXT_ID = "participantContextId"
         const val POLICY = "policy"
         const val PROVIDER_AGENT_ID = "providerAgentId"
         const val SIGNING_DATE = "signingDate"
@@ -73,4 +81,6 @@ fun EdcContractAgreement.toDdbContractAgreement(objectMapper: ObjectMapper): Con
         consumerAgentId = consumerId,
         policy = objectMapper.convertValueToMapStringAny(policy),
         providerAgentId = providerId,
+        agreementId = agreementId,
+        participantContextId = participantContextId,
     )

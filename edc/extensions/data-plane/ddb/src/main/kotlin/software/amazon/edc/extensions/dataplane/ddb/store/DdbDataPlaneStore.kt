@@ -78,7 +78,7 @@ class DdbDataPlaneStore(
         }
     }
 
-    override fun save(dataFlow: EdcDataFlow) {
+    override fun save(dataFlow: EdcDataFlow): StoreResult<Void> {
         val leaseId =
             if (getDataFlow(dataFlow.id) == null) {
                 null
@@ -93,6 +93,7 @@ class DdbDataPlaneStore(
             }
         }
         stateCache.invalidate()
+        return StoreResult.success()
     }
 
     override fun getLeasableById(id: String): Leasable? = getDataFlow(id)

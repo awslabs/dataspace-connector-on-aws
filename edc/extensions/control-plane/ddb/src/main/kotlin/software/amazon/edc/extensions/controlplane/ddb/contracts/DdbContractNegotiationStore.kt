@@ -115,8 +115,17 @@ class DdbContractNegotiationStore(
         }
     }
 
-    override fun save(contractNegotiation: EdcContractNegotiation) {
-        val leaseId = getContractNegotiation(contractNegotiation.id)?.let { acquireLease(it) }
+    override fun save(contractNegotiation: EdcContractNegotiation): StoreResult<Void> {
+        val leaseId =
+            getContractNegotiation(contractNegotiation.id)?.let {
+                try {
+                    acquireLease(it)
+                } catch (e: IllegalStateException) {
+                    return StoreResult.alreadyLeased(
+                        e.message ?: "ContractNegotiation ${contractNegotiation.id} is already leased!",
+                    )
+                }
+            }
         try {
             contractNegotiationTable.putItem(contractNegotiation.toDdbContractNegotiation(objectMapper, leaseId))
             if (contractNegotiation.contractAgreement != null) {
@@ -128,6 +137,7 @@ class DdbContractNegotiationStore(
             }
         }
         stateCache.invalidate()
+        return StoreResult.success()
     }
 
     override fun findContractAgreement(contractId: String): EdcContractAgreement? =
@@ -144,7 +154,7 @@ class DdbContractNegotiationStore(
             )
         }
         if (hasLease(negotiationId)) {
-            throw IllegalStateException(
+            return StoreResult.alreadyLeased(
                 "ContractNegotiation with ID $negotiationId cannot be deleted because it is currently leased!",
             )
         }

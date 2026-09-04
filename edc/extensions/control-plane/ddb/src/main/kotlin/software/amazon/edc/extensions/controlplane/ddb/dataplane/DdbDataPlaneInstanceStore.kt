@@ -88,7 +88,7 @@ class DdbDataPlaneInstanceStore(
         }
     }
 
-    override fun save(dataPlaneInstance: EdcDataPlaneInstance) {
+    override fun save(dataPlaneInstance: EdcDataPlaneInstance): StoreResult<Void> {
         val leaseId =
             if (getDataPlaneInstance(dataPlaneInstance.id) == null) {
                 null
@@ -103,6 +103,7 @@ class DdbDataPlaneInstanceStore(
             }
         }
         stateCache.invalidate()
+        return StoreResult.success()
     }
 
     override fun deleteById(id: String): StoreResult<EdcDataPlaneInstance> {

@@ -84,7 +84,7 @@ class DdbPolicyMonitorStore(
         }
     }
 
-    override fun save(entry: PolicyMonitorEntry) {
+    override fun save(entry: PolicyMonitorEntry): StoreResult<Void> {
         val leaseId =
             if (getPolicyMonitor(entry.id) == null) {
                 null
@@ -99,6 +99,7 @@ class DdbPolicyMonitorStore(
             }
         }
         stateCache.invalidate()
+        return StoreResult.success()
     }
 
     override fun getLeasableById(id: String): Leasable? = getPolicyMonitor(id)

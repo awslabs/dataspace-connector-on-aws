@@ -36,6 +36,8 @@ data class ContractDefinition(
     @get:DynamoDbAttribute(PRIVATE_PROPERTIES)
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var privateProperties: Map<String, Any>? = null,
+    @get:DynamoDbAttribute(PARTICIPANT_CONTEXT_ID)
+    var participantContextId: String? = null,
 ) {
     val id: String get() = sk
 
@@ -49,6 +51,7 @@ data class ContractDefinition(
                 assetsSelector(assetsSelector.map { objectMapper.convertValue(it, Criterion::class.java) })
                 contractPolicyId(contractPolicyId)
                 privateProperties(privateProperties)
+                participantContextId(participantContextId)
             }.build()
 
     companion object {
@@ -56,6 +59,7 @@ data class ContractDefinition(
         const val ASSETS_SELECTOR = "assetSelector"
         const val CONTRACT_POLICY_ID = "contractPolicyId"
         const val CREATED_AT = "createdAt"
+        const val PARTICIPANT_CONTEXT_ID = "participantContextId"
         const val PRIVATE_PROPERTIES = "privateProperties"
     }
 }
@@ -69,4 +73,5 @@ fun EdcContractDefinition.toDdbContractDefinition(objectMapper: ObjectMapper): C
         assetsSelector = assetsSelector.map { objectMapper.convertValueToMapStringAny(it) },
         contractPolicyId = contractPolicyId,
         privateProperties = privateProperties,
+        participantContextId = participantContextId,
     )
