@@ -11,6 +11,12 @@ import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.TTL_BUFFER_SECONDS
 import java.time.Clock
 
+/**
+ * Lease record for state-machine entities. Keyed by the leased entity's id (sk), so a lease is a
+ * single small item decoupled from the entity itself: acquiring or releasing a lease never rewrites
+ * the entity (and therefore never touches the entity's gsi-state index). [expiresAt] is stored so the
+ * atomic conditional acquire can compare against it (DynamoDB condition expressions cannot do arithmetic).
+ */
 @DynamoDbBean
 data class Lease(
     @get:DynamoDbPartitionKey
@@ -25,19 +31,26 @@ data class Lease(
     var leasedBy: String = "",
     @get:DynamoDbAttribute(LEASE_DURATION)
     var leaseDuration: Long = 60000,
+    @get:DynamoDbAttribute(EXPIRES_AT)
+    var expiresAt: Long = 0L,
     @get:DynamoDbAttribute("ttl")
     var ttl: Long? = null,
 ) {
-    val leaseId: String get() = sk
+    /** The leased entity's id (this lease's sort key). */
+    val entityId: String get() = sk
 
-    fun isExpired(clock: Clock): Boolean = leasedAt + leaseDuration < clock.millis()
+    fun isExpired(clock: Clock): Boolean = expiresAt < clock.millis()
 
-    /** Compute TTL: lease expiry + buffer, in epoch seconds */
-    fun withTtl(): Lease = copy(ttl = (leasedAt + leaseDuration) / 1000 + TTL_BUFFER_SECONDS)
+    /** Populate [expiresAt] and the DynamoDB [ttl] (epoch seconds + buffer) from leasedAt + duration. */
+    fun withExpiry(): Lease {
+        val expiry = leasedAt + leaseDuration
+        return copy(expiresAt = expiry, ttl = expiry / 1000 + TTL_BUFFER_SECONDS)
+    }
 
     companion object {
         const val LEASED_AT = "leasedAt"
         const val LEASED_BY = "leasedBy"
         const val LEASE_DURATION = "leaseDuration"
+        const val EXPIRES_AT = "expiresAt"
     }
 }

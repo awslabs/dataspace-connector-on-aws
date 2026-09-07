@@ -22,7 +22,6 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortK
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.ListOfMapsConverter
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
-import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.utility.convertValueToMapStringAny
 import org.eclipse.edc.connector.controlplane.transfer.spi.types.TransferProcess as EdcTransferProcess
 
@@ -65,8 +64,6 @@ data class TransferProcess(
     @get:DynamoDbAttribute(GSI_STATE_PK)
     @get:DynamoDbSecondaryPartitionKey(indexNames = [GSI_STATE])
     var gsiStatePk: String? = null,
-    @get:DynamoDbAttribute(LEASE_ID)
-    override var leaseId: String? = null,
     @get:DynamoDbAttribute(PENDING)
     var pending: Boolean = false,
     @get:DynamoDbAttribute(PRIVATE_PROPERTIES)
@@ -103,7 +100,7 @@ data class TransferProcess(
     @get:DynamoDbAttribute(DATAPLANE_METADATA)
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var dataplaneMetadata: Map<String, Any>? = null,
-) : Leasable {
+) {
     val id: String get() = sk
 
     fun toEdcTransferProcess(objectMapper: ObjectMapper): EdcTransferProcess =
@@ -169,7 +166,6 @@ data class TransferProcess(
         const val DEPROVISIONED_RESOURCES = "deprovisionedResources"
         const val ERROR_DETAIL = "errorDetail"
         const val GSI_STATE_PK = "gsiStatePk"
-        const val LEASE_ID = "leaseId"
         const val PARTICIPANT_CONTEXT_ID = "participantContextId"
         const val PENDING = "pending"
         const val PRIVATE_PROPERTIES = "privateProperties"
@@ -190,10 +186,7 @@ data class TransferProcess(
     }
 }
 
-fun EdcTransferProcess.toDdbTransferProcess(
-    objectMapper: ObjectMapper,
-    leaseId: String? = null,
-): TransferProcess =
+fun EdcTransferProcess.toDdbTransferProcess(objectMapper: ObjectMapper): TransferProcess =
     TransferProcess(
         pk = EntityType.TRANSFER_PROCESS,
         sk = id,
@@ -209,7 +202,6 @@ fun EdcTransferProcess.toDdbTransferProcess(
         deprovisionedResources = deprovisionedResources.map { objectMapper.convertValueToMapStringAny(it) },
         errorDetail = errorDetail,
         gsiStatePk = if (TransferProcessStates.isFinal(state)) null else EntityType.TRANSFER_PROCESS,
-        leaseId = leaseId,
         pending = isPending,
         privateProperties = privateProperties,
         protocol = protocol,

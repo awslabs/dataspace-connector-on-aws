@@ -12,7 +12,6 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.STATE_INDEX_CACHE_TTL_MILLIS
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
-import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.IterationCache
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
@@ -67,11 +66,12 @@ class DdbDataPlaneInstanceStore(
             } else {
                 indexed.asSequence()
             }
+        val leased = activeLeaseIds()
         return items
-            .filterNot { hasActiveLease(it) }
+            .filterNot { it.sk in leased }
             .sortedWith(querySpec.getGenericPropertyComparator())
             .applyOffsetAndLimit(querySpec)
-            .onEach { acquireLease(it) }
+            .onEach { acquireLease(it.sk) }
             .map { it.toEdcDataPlaneInstance() }
             .toMutableList()
     }
@@ -81,7 +81,7 @@ class DdbDataPlaneInstanceStore(
             getDataPlaneInstance(id)
                 ?: return StoreResult.notFound("DataPlaneInstance $id not found!")
         return try {
-            acquireLease(dataPlaneInstance)
+            acquireLease(dataPlaneInstance.sk)
             StoreResult.success(dataPlaneInstance.toEdcDataPlaneInstance())
         } catch (e: IllegalStateException) {
             StoreResult.alreadyLeased("DataPlaneInstance $id is already leased!")
@@ -89,18 +89,23 @@ class DdbDataPlaneInstanceStore(
     }
 
     override fun save(dataPlaneInstance: EdcDataPlaneInstance): StoreResult<Void> {
-        val leaseId =
-            if (getDataPlaneInstance(dataPlaneInstance.id) == null) {
-                null
-            } else {
+        val incoming = dataPlaneInstance.toDdbDataPlaneInstance()
+        val current = getDataPlaneInstance(dataPlaneInstance.id)
+        // Unchanged — skip the entity+GSI write; still release the lease (EDC save-releases-lease contract).
+        if (current != null && current == incoming.copy(updatedAt = current.updatedAt)) {
+            breakLease(dataPlaneInstance.id)
+            return StoreResult.success()
+        }
+        if (current != null) {
+            try {
                 acquireLease(dataPlaneInstance.id)
+            } catch (e: IllegalStateException) {
+                return StoreResult.alreadyLeased("DataPlaneInstance ${dataPlaneInstance.id} is already leased!")
             }
-        try {
-            table.putItem(dataPlaneInstance.toDdbDataPlaneInstance(leaseId))
-        } finally {
-            if (leaseId != null) {
-                breakLease(dataPlaneInstance.id)
-            }
+        }
+        table.putItem(incoming)
+        if (current != null) {
+            breakLease(dataPlaneInstance.id)
         }
         stateCache.invalidate()
         return StoreResult.success()
@@ -120,13 +125,6 @@ class DdbDataPlaneInstanceStore(
             .asSequence()
             .map { it.toEdcDataPlaneInstance() }
             .asStream()
-
-    override fun getLeasableById(id: String): Leasable? = getDataPlaneInstance(id)
-
-    override fun updateLeaseId(leasable: Leasable) {
-        table.updateItem(leasable as DataPlaneInstance)
-        stateCache.invalidate()
-    }
 
     private fun getDataPlaneInstance(id: String): DataPlaneInstance? = table.getItem(keyFromPkSk(EntityType.DATA_PLANE_INSTANCE, id))
 }

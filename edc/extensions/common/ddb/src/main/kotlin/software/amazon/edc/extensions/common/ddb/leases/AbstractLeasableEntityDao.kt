@@ -4,106 +4,104 @@
 package software.amazon.edc.extensions.common.ddb.leases
 
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
+import software.amazon.awssdk.enhanced.dynamodb.Expression
+import software.amazon.awssdk.enhanced.dynamodb.model.PutItemEnhancedRequest
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException
 import software.amazon.edc.extensions.common.ddb.EntityType
-import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import java.time.Clock
 import java.time.Duration
-import java.util.UUID
 
+/**
+ * Lease management for state-machine entities, decoupled from the entity item.
+ *
+ * A lease is a single small [Lease] item keyed by the entity id ([EntityType.LEASE], sk = entityId).
+ * Acquiring is an atomic conditional put (succeeds only if there is no lease, it is expired, or it is
+ * already held by this holder); releasing is a delete. Neither touches the entity item, so lease churn
+ * no longer rewrites the entity or its gsi-state index — the dominant historical write-cost driver.
+ */
 abstract class AbstractLeasableEntityDao(
     private val clock: Clock,
     private val leaseDuration: Duration = Duration.ofMillis(60000),
     private val leaseHolder: String,
     private val leaseTable: DynamoDbTable<Lease>,
 ) {
-    abstract fun getLeasableById(id: String): Leasable?
-
-    abstract fun updateLeaseId(leasable: Leasable)
-
-    protected fun breakLease(entityId: String) {
-        val leasable = getLeasableById(entityId) ?: return
-        breakLease(leasable)
-    }
-
-    private fun breakLease(leasable: Leasable) {
-        val leaseId = leasable.leaseId ?: return
-        val lease = getLease(leaseId) ?: return
-
-        leasable.leaseId = null
-        updateLeaseId(leasable)
-        leaseTable.deleteItem(lease)
-    }
-
+    /**
+     * Atomically acquire the lease for [entityId]. Throws [IllegalStateException] if it is currently
+     * held by another holder and not yet expired.
+     */
     fun acquireLease(
         entityId: String,
         leaseHolder: String = this.leaseHolder,
         duration: Duration = leaseDuration,
-    ): String {
-        val leasable =
-            getLeasableById(entityId)
-                ?: throw IllegalArgumentException("Entity with ID $entityId not found!")
-        return acquireLease(leasable, leaseHolder, duration)
-    }
-
-    protected fun acquireLease(
-        leasable: Leasable,
-        leaseHolder: String = this.leaseHolder,
-        duration: Duration = leaseDuration,
-    ): String {
+    ) {
         val now = clock.millis()
-        val leaseId = leasable.leaseId
-        val lease = if (leaseId == null) null else getLease(leaseId)
-
-        if (lease != null) {
-            if (lease.isExpired(clock) || lease.leasedBy == leaseHolder) {
-                leaseTable.deleteItem(lease)
-            } else {
-                throw IllegalStateException("Entity is currently leased!")
-            }
-        }
-
-        val id = UUID.randomUUID().toString()
-        leasable.leaseId = id
-        updateLeaseId(leasable)
-        leaseTable.putItem(
+        val lease =
             Lease(
                 pk = EntityType.LEASE,
-                sk = id,
+                sk = entityId,
                 leasedAt = now,
                 leasedBy = leaseHolder,
                 leaseDuration = duration.toMillis(),
-            ).withTtl(),
-        )
-        return id
-    }
-
-    protected fun hasLease(entityId: String): Boolean {
-        val leasable = getLeasableById(entityId) ?: return false
-        return hasActiveLease(leasable)
-    }
-
-    protected fun hasActiveLease(leasable: Leasable): Boolean {
-        val leaseId = leasable.leaseId ?: return false
-        val lease = getLease(leaseId) ?: return false
-        return if (lease.isExpired(clock)) {
-            leaseTable.deleteItem(lease)
-            false
-        } else {
-            true
+            ).withExpiry()
+        val condition =
+            Expression
+                .builder()
+                .expression("attribute_not_exists(sk) OR expiresAt < :now OR leasedBy = :holder")
+                .putExpressionValue(":now", AttributeValue.builder().n(now.toString()).build())
+                .putExpressionValue(":holder", AttributeValue.builder().s(leaseHolder).build())
+                .build()
+        try {
+            leaseTable.putItem(
+                PutItemEnhancedRequest
+                    .builder(Lease::class.java)
+                    .item(lease)
+                    .conditionExpression(condition)
+                    .build(),
+            )
+        } catch (e: ConditionalCheckFailedException) {
+            throw IllegalStateException("Entity $entityId is currently leased!")
         }
+    }
+
+    /** Release the lease for [entityId] (no-op if none). */
+    fun breakLease(entityId: String) {
+        leaseTable.deleteItem(keyFromPkSk(EntityType.LEASE, entityId))
+    }
+
+    /** True if [entityId] currently holds a non-expired lease. */
+    fun hasLease(entityId: String): Boolean {
+        val lease = getLease(entityId) ?: return false
+        return !lease.isExpired(clock)
     }
 
     fun isLeasedBy(
         entityId: String,
         leaseHolder: String = this.leaseHolder,
     ): Boolean {
-        val leasable = getLeasableById(entityId) ?: return false
-        val leaseId = leasable.leaseId ?: return false
-        val lease = getLease(leaseId) ?: return false
+        val lease = getLease(entityId) ?: return false
         return !lease.isExpired(clock) && lease.leasedBy == leaseHolder
     }
 
-    private fun getLease(id: String): Lease? = leaseTable.getItem(keyFromPkSk(EntityType.LEASE, id))
+    /**
+     * One-query snapshot of the entity ids that currently hold a non-expired lease, via a single Query on
+     * the Lease partition. Lets the nextNotLeased implementations filter leased candidates in memory instead
+     * of a getItem per candidate. The atomic conditional acquire remains the concurrency guard, so a
+     * momentarily stale snapshot can never cause double-processing.
+     */
+    protected fun activeLeaseIds(): Set<String> {
+        val now = clock.millis()
+        return leaseTable
+            .query(queryRequestFromPk(EntityType.LEASE))
+            .flatMap { it.items() }
+            .asSequence()
+            .filter { it.expiresAt >= now }
+            .map { it.entityId }
+            .toSet()
+    }
+
+    private fun getLease(entityId: String): Lease? = leaseTable.getItem(keyFromPkSk(EntityType.LEASE, entityId))
 }
