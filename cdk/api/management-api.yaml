@@ -49,9 +49,7 @@ paths:
         - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/assets/{id}:
     delete:
-      description:
-        "Removes an asset with the given ID if possible. Deleting an asset is only possible if that asset is not yet referenced by a contract agreement, in which case an error is returned. DANGER
-        ZONE: Note that deleting assets can have unexpected results, especially for contract offers that have been sent out or ongoing or contract negotiations."
+      description: "Removes an asset with the given ID if possible. Deleting an asset is only possible if that asset is not yet referenced by a contract agreement, in which case an error is returned. DANGER ZONE: Note that deleting assets can have unexpected results, especially for contract offers that have been sent out or ongoing or contract negotiations."
       operationId: removeAssetV3
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
@@ -148,39 +146,6 @@ paths:
           integration.request.path.connectorId: method.request.path.connectorId
         uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/assets/{id}
         integrationTarget: ${albArn}
-  /{connectorId}/callback/{processId}/provision:
-    post:
-      operationId: callProvisionWebhook
-      parameters:
-        - $ref: "#/components/parameters/ConnectorId"
-        - in: path
-          name: processId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        default:
-          content:
-            application/json: {}
-          description: default response
-      tags:
-        - HTTP Provisioner Webhook
-      x-amazon-apigateway-auth:
-        type: AWS_IAM
-      x-amazon-apigateway-integration:
-        type: http_proxy
-        httpMethod: POST
-        connectionId: ${vpcLinkId}
-        connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/callback/{processId}/provision
-        integrationTarget: ${albArn}
-        requestParameters:
-          integration.request.path.connectorId: method.request.path.connectorId
   /{connectorId}/v3/contractnegotiations/{id}/agreement:
     get:
       description: Gets a contract agreement for a contract negotiation with the given ID
@@ -231,9 +196,7 @@ paths:
         integrationTarget: ${albArn}
   /{connectorId}/v3/contractnegotiations:
     post:
-      description:
-        Initiates a contract negotiation for a given offer and with the given counter part. Please note that successfully invoking this endpoint only means that the negotiation was initiated.
-        Clients must poll the /{id}/state endpoint to track the state
+      description: Initiates a contract negotiation for a given offer and with the given counter part. Please note that successfully invoking this endpoint only means that the negotiation was initiated. Clients must poll the /{id}/state endpoint to track the state
       operationId: initiateContractNegotiationV3
       requestBody:
         content:
@@ -455,94 +418,9 @@ paths:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
-  /{connectorId}/v3/secrets:
-    post:
-      description: Creates a new secret.
-      operationId: createSecretV3
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                type: object
-          description: Secret was created successfully. Returns the secret Id and created timestamp
-        "400":
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-          description: Request body was malformed
-        "409":
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-          description: Could not create secret, because a secret with that ID already exists
-      tags:
-        - Secret V3
-      x-amazon-apigateway-auth:
-        type: AWS_IAM
-      x-amazon-apigateway-integration:
-        type: http_proxy
-        httpMethod: POST
-        connectionId: ${vpcLinkId}
-        connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/secrets
-        integrationTarget: ${albArn}
-        requestParameters:
-          integration.request.path.connectorId: method.request.path.connectorId
-      parameters:
-        - $ref: "#/components/parameters/ConnectorId"
-    put:
-      description: "Updates a secret with the given ID if it exists. If the secret is not found, no further action is taken. "
-      operationId: updateSecretV3
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        "204":
-          description: Secret was updated successfully
-        "400":
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-          description: Request was malformed, e.g. id was null
-        "404":
-          description: Secret could not be updated, because it does not exist.
-      tags:
-        - Secret V3
-      x-amazon-apigateway-auth:
-        type: AWS_IAM
-      x-amazon-apigateway-integration:
-        type: http_proxy
-        httpMethod: PUT
-        connectionId: ${vpcLinkId}
-        connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/secrets
-        integrationTarget: ${albArn}
-        requestParameters:
-          integration.request.path.connectorId: method.request.path.connectorId
-      parameters:
-        - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/transferprocesses/{id}/suspend:
     post:
-      description:
-        Requests the suspension of a transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received. This may take
-        a long time, so clients must poll the /{id}/state endpoint to track the state.
+      description: Requests the suspension of a transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received. This may take a long time, so clients must poll the /{id}/state endpoint to track the state.
       operationId: suspendTransferProcessV3
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
@@ -730,134 +608,6 @@ paths:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
-  /{connectorId}/v3/secrets/{id}:
-    delete:
-      description: Removes a secret with the given ID if possible.
-      operationId: removeSecretV3
-      parameters:
-        - $ref: "#/components/parameters/ConnectorId"
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: Secret was deleted successfully
-        "400":
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-          description: Request was malformed, e.g. id was null
-        "404":
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-          description: A secret with the given ID does not exist
-      tags:
-        - Secret V3
-      x-amazon-apigateway-auth:
-        type: AWS_IAM
-      x-amazon-apigateway-integration:
-        type: http_proxy
-        httpMethod: DELETE
-        connectionId: ${vpcLinkId}
-        connectionType: VPC_LINK
-        requestParameters:
-          integration.request.path.id: method.request.path.id
-          integration.request.path.connectorId: method.request.path.connectorId
-        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/secrets/{id}
-        integrationTarget: ${albArn}
-    get:
-      description: Gets a secret with the given ID
-      operationId: getSecretV3
-      parameters:
-        - $ref: "#/components/parameters/ConnectorId"
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                type: object
-          description: The secret
-        "400":
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-          description: Request was malformed, e.g. id was null
-        "404":
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-          description: A secret with the given ID does not exist
-      tags:
-        - Secret V3
-      x-amazon-apigateway-auth:
-        type: AWS_IAM
-      x-amazon-apigateway-integration:
-        type: http_proxy
-        httpMethod: GET
-        connectionId: ${vpcLinkId}
-        connectionType: VPC_LINK
-        requestParameters:
-          integration.request.path.id: method.request.path.id
-          integration.request.path.connectorId: method.request.path.connectorId
-        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/secrets/{id}
-        integrationTarget: ${albArn}
-  /{connectorId}/{flowId}/{resourceId}/deprovision:
-    post:
-      operationId: deprovision
-      parameters:
-        - $ref: "#/components/parameters/ConnectorId"
-        - name: flowId
-          in: path
-          required: true
-          style: simple
-          explode: false
-          schema:
-            type: string
-        - name: resourceId
-          in: path
-          required: true
-          style: simple
-          explode: false
-          schema:
-            type: string
-      responses:
-        default:
-          description: default response
-          content:
-            "*/*": {}
-      x-amazon-apigateway-auth:
-        type: AWS_IAM
-      x-amazon-apigateway-integration:
-        type: http_proxy
-        httpMethod: ANY
-        connectionId: ${vpcLinkId}
-        connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/{flowId}/{resourceId}/deprovision
-        requestParameters:
-          integration.request.path.flowId: method.request.path.flowId
-          integration.request.path.resourceId: method.request.path.resourceId
-          integration.request.path.connectorId: method.request.path.connectorId
-        integrationTarget: ${albArn}
   /{connectorId}/v3/assets:
     post:
       description: Creates a new asset together with a data address
@@ -906,9 +656,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
     put:
-      description:
-        "Updates an asset with the given ID if it exists. If the asset is not found, no further action is taken. DANGER ZONE: Note that updating assets can have unexpected results, especially
-        for contract offers that have been sent out or are ongoing in contract negotiations."
+      description: "Updates an asset with the given ID if it exists. If the asset is not found, no further action is taken. DANGER ZONE: Note that updating assets can have unexpected results, especially for contract offers that have been sent out or are ongoing in contract negotiations."
       operationId: updateAssetV3
       requestBody:
         content:
@@ -1034,9 +782,7 @@ paths:
         - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/policydefinitions/{id}:
     delete:
-      description:
-        "Removes a policy definition with the given ID if possible. Deleting a policy definition is only possible if that policy definition is not yet referenced by a contract definition, in
-        which case an error is returned. DANGER ZONE: Note that deleting policy definitions can have unexpected results, do this at your own risk!"
+      description: "Removes a policy definition with the given ID if possible. Deleting a policy definition is only possible if that policy definition is not yet referenced by a contract definition, in which case an error is returned. DANGER ZONE: Note that deleting policy definitions can have unexpected results, do this at your own risk!"
       operationId: deletePolicyDefinitionV3
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
@@ -1183,9 +929,7 @@ paths:
     post:
       tags:
         - EDR Cache V3
-      description:
-        Initiates an EDR negotiation by handling a contract negotiation first and then a transfer process for a given offer and with the given counter part. Please note that successfully invoking
-        this endpoint only means that the negotiation was initiated.
+      description: Initiates an EDR negotiation by handling a contract negotiation first and then a transfer process for a given offer and with the given counter part. Please note that successfully invoking this endpoint only means that the negotiation was initiated.
       operationId: initiateEdrNegotiationV3
       requestBody:
         content:
@@ -1293,9 +1037,7 @@ paths:
         - $ref: "#/components/parameters/ConnectorId"
   /{connectorId}/v3/transferprocesses/{id}/terminate:
     post:
-      description:
-        Requests the termination of a transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received. This may
-        take a long time, so clients must poll the /{id}/state endpoint to track the state.
+      description: Requests the termination of a transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received. This may take a long time, so clients must poll the /{id}/state endpoint to track the state.
       operationId: terminateTransferProcessV3
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
@@ -1452,9 +1194,7 @@ paths:
         integrationTarget: ${albArn}
   /{connectorId}/v3/transferprocesses/{id}/deprovision:
     post:
-      description:
-        Requests the deprovisioning of resources associated with a transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully
-        received. This may take a long time, so clients must poll the /{id}/state endpoint to track the state.
+      description: Requests the deprovisioning of resources associated with a transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received. This may take a long time, so clients must poll the /{id}/state endpoint to track the state.
       operationId: deprovisionTransferProcessV3
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
@@ -1527,48 +1267,6 @@ paths:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
-  /{connectorId}/{flowId}/{resourceId}/provision:
-    post:
-      operationId: provision
-      parameters:
-        - $ref: "#/components/parameters/ConnectorId"
-        - name: flowId
-          in: path
-          required: true
-          style: simple
-          explode: false
-          schema:
-            type: string
-        - name: resourceId
-          in: path
-          required: true
-          style: simple
-          explode: false
-          schema:
-            type: string
-      requestBody:
-        content:
-          "*/*":
-            schema:
-              type: object
-      responses:
-        default:
-          description: default response
-          content:
-            "*/*": {}
-      x-amazon-apigateway-auth:
-        type: AWS_IAM
-      x-amazon-apigateway-integration:
-        type: http_proxy
-        httpMethod: ANY
-        connectionId: ${vpcLinkId}
-        connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/{flowId}/{resourceId}/provision
-        requestParameters:
-          integration.request.path.flowId: method.request.path.flowId
-          integration.request.path.resourceId: method.request.path.resourceId
-          integration.request.path.connectorId: method.request.path.connectorId
-        integrationTarget: ${albArn}
   /{connectorId}/v3/catalog/dataset/request:
     post:
       operationId: getDatasetV3
@@ -1690,9 +1388,7 @@ paths:
         integrationTarget: ${albArn}
   /{connectorId}/v3/contractdefinitions/{id}:
     delete:
-      description:
-        "Removes a contract definition with the given ID if possible. DANGER ZONE: Note that deleting contract definitions can have unexpected results, especially for contract offers that have
-        been sent out or ongoing or contract negotiations."
+      description: "Removes a contract definition with the given ID if possible. DANGER ZONE: Note that deleting contract definitions can have unexpected results, especially for contract offers that have been sent out or ongoing or contract negotiations."
       operationId: deleteContractDefinitionV3
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
@@ -1879,9 +1575,7 @@ paths:
         integrationTarget: ${albArn}
   /{connectorId}/v3/transferprocesses/{id}/resume:
     post:
-      description:
-        Requests the resumption of a suspended transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received.
-        This may take a long time, so clients must poll the /{id}/state endpoint to track the state.
+      description: Requests the resumption of a suspended transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received. This may take a long time, so clients must poll the /{id}/state endpoint to track the state.
       operationId: resumeTransferProcessV3
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
@@ -2061,44 +1755,9 @@ paths:
           integration.request.path.id: method.request.path.id
           integration.request.path.connectorId: method.request.path.connectorId
         integrationTarget: ${albArn}
-  /{connectorId}/callback/{processId}/deprovision:
-    post:
-      operationId: callDeprovisionWebhook
-      parameters:
-        - $ref: "#/components/parameters/ConnectorId"
-        - in: path
-          name: processId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        default:
-          content:
-            application/json: {}
-          description: default response
-      tags:
-        - HTTP Provisioner Webhook
-      x-amazon-apigateway-auth:
-        type: AWS_IAM
-      x-amazon-apigateway-integration:
-        type: http_proxy
-        httpMethod: POST
-        connectionId: ${vpcLinkId}
-        connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/callback/{processId}/deprovision
-        integrationTarget: ${albArn}
-        requestParameters:
-          integration.request.path.connectorId: method.request.path.connectorId
   /{connectorId}/v3/transferprocesses:
     post:
-      description:
-        Initiates a data transfer with the given parameters. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received. This
-        may take a long time, so clients must poll the /{id}/state endpoint to track the state.
+      description: Initiates a data transfer with the given parameters. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received. This may take a long time, so clients must poll the /{id}/state endpoint to track the state.
       operationId: initiateTransferProcessV3
       requestBody:
         content:
@@ -2379,6 +2038,503 @@ paths:
           integration.request.path.connectorId: method.request.path.connectorId
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
+  /{connectorId}/transferprocess/{processId}/complete:
+    post:
+      description: Requests completion of the transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received
+      operationId: complete
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+        - in: path
+          name: processId
+          required: true
+          schema:
+            type: string
+      responses:
+        '400':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          description: Request was malformed, e.g. id was null
+      tags:
+        - Transfer Process Control Api
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+          integration.request.path.processId: method.request.path.processId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/transferprocess/{processId}/complete
+        integrationTarget: ${albArn}
+  /{connectorId}/transferprocess/{processId}/fail:
+    post:
+      description: Requests completion of the transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received
+      operationId: fail
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+        - in: path
+          name: processId
+          required: true
+          schema:
+            type: string
+      responses:
+        '400':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          description: Request was malformed, e.g. id was null
+      tags:
+        - Transfer Process Control Api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+          integration.request.path.processId: method.request.path.processId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/transferprocess/{processId}/fail
+        integrationTarget: ${albArn}
+  /{connectorId}/transferprocess/{processId}/provisioned:
+    post:
+      description: Notify provisioning completion.
+      operationId: provisioned
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+        - in: path
+          name: processId
+          required: true
+          schema:
+            type: string
+      responses:
+        '400':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          description: Request was malformed, e.g. id was null
+      tags:
+        - Transfer Process Control Api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+          integration.request.path.processId: method.request.path.processId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/transferprocess/{processId}/provisioned
+        integrationTarget: ${albArn}
+  /{connectorId}/v3/business-partner-groups:
+    post:
+      description: Creates an entry for a particular BPN
+      operationId: createEntryV3
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+      responses:
+        '204':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: The object was successfully created
+        '400':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          description: Request body was malformed
+        '409':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: An entry already exists for that BPN
+      tags:
+        - Business Partner Group
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/business-partner-groups
+        integrationTarget: ${albArn}
+    put:
+      description: Updates the entry for a particular BPN
+      operationId: updateEntryV3
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+      responses:
+        '204':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: The object was successfully updated
+        '400':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          description: Request body was malformed
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: No entry for the given BPN was found
+      tags:
+        - Business Partner Group
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: PUT
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/business-partner-groups
+        integrationTarget: ${albArn}
+  /{connectorId}/v3/business-partner-groups/group/{group}:
+    get:
+      description: Resolves all BPNs for a particular BPN group
+      operationId: resolveGroupV3
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+        - in: path
+          name: group
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: An object containing an array with the bpns assigned to the group
+        '400':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          description: Request body was malformed
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: No entry for the given BPN group was found
+      tags:
+        - Business Partner Group
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+          integration.request.path.group: method.request.path.group
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/business-partner-groups/group/{group}
+        integrationTarget: ${albArn}
+  /{connectorId}/v3/business-partner-groups/groups:
+    get:
+      description: Resolves all BPN Groups
+      operationId: resolveGroupsV3
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: An object containing an array with the all BPN groups
+        '400':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          description: Request body was malformed
+      tags:
+        - Business Partner Group
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/business-partner-groups/groups
+        integrationTarget: ${albArn}
+  /{connectorId}/v3/business-partner-groups/{bpn}:
+    delete:
+      description: Deletes the entry for a particular BPN
+      operationId: deleteEntryV3
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+        - in: path
+          name: bpn
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: The object was successfully deleted
+        '400':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          description: Request body was malformed
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: No entry for the given BPN was found
+      tags:
+        - Business Partner Group
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: DELETE
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+          integration.request.path.bpn: method.request.path.bpn
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/business-partner-groups/{bpn}
+        integrationTarget: ${albArn}
+    get:
+      description: Resolves all groups for a particular BPN
+      operationId: resolveV3
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+        - in: path
+          name: bpn
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: An object containing an array with the assigned groups
+        '400':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          description: Request body was malformed
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: No entry for the given BPN was found
+      tags:
+        - Business Partner Group
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+          integration.request.path.bpn: method.request.path.bpn
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/business-partner-groups/{bpn}
+        integrationTarget: ${albArn}
+  /{connectorId}/v3/contractagreements/retirements:
+    post:
+      description: Retires an active contract agreement.
+      operationId: retireAgreementV3
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+      responses:
+        '204':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: The contract agreement was successfully retired
+        '400':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          description: Request body was malformed
+        '409':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: The contract agreement is already retired
+      tags:
+        - Agreements Retirement
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractagreements/retirements
+        integrationTarget: ${albArn}
+  /{connectorId}/v3/contractagreements/retirements/request:
+    post:
+      description: Get all retired contract agreements.
+      operationId: getAllRetiredV3
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: A list of retired contract agreements
+        '400':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          description: Request body was malformed
+      tags:
+        - Agreements Retirement
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractagreements/retirements/request
+        integrationTarget: ${albArn}
+  /{connectorId}/v3/contractagreements/retirements/{agreementId}:
+    delete:
+      description: Removes a contract agreement from the retired list, reactivating it.
+      operationId: reactivateRetiredV3
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+        - in: path
+          name: agreementId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: The contract agreement is reactivated
+        '400':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          description: Request body was malformed
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: No entry for the given agreementId was found
+      tags:
+        - Agreements Retirement
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: DELETE
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+          integration.request.path.agreementId: method.request.path.agreementId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractagreements/retirements/{agreementId}
+        integrationTarget: ${albArn}
 components:
   parameters:
     ConnectorId:
