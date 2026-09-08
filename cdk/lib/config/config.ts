@@ -25,9 +25,12 @@ export interface PipelineYaml {
   readonly appRepo: string;
   readonly appVersion: string;
   readonly configSource: "codecommit" | "github";
-  readonly configRepoName: string;
+  /** External repo (owner/name) for configSource=github. For codecommit the repo is derived as `${deploymentName}-config`. */
+  readonly configRepoName?: string;
   readonly connectionArn?: string;
   readonly requireApproval?: boolean;
+  /** Namespaces all resources so instances coexist in one account/region. Default "DataspaceConnector". Set once at bootstrap. */
+  readonly deploymentName?: string;
 }
 
 // ─── deployment.yaml ──────────────────────────────────────────────────────────
@@ -43,7 +46,8 @@ export interface PortalIdentity {
 
 export interface PortalConfig {
   readonly environment: "beta" | "production";
-  readonly identity: PortalIdentity;
+  /** Deployment-wide default identity. Each field is an optional fallback a connector may override. */
+  readonly identity?: Partial<PortalIdentity>;
 }
 
 export interface DeploymentYaml {
@@ -70,6 +74,11 @@ export interface EdcIam {
   readonly didResolver: string;
 }
 
+/** Optional per-connector identity override, merged over the deployment default. */
+export interface ConnectorPortalOverride {
+  readonly identity?: Partial<PortalIdentity>;
+}
+
 export interface ConnectorYaml {
   readonly connectorId: string;
   readonly profile?: DeploymentProfile;
@@ -81,11 +90,19 @@ export interface ConnectorYaml {
   readonly interactiveStateMachineIterationMillis?: string;
   /** Iteration interval (ms) for the policy monitor and data-plane selector state machines. Default "60000". */
   readonly backgroundStateMachineIterationMillis?: string;
+  /**
+   * Data-plane flow-lease heartbeat interval (ms) for in-flight (STARTED) PULL flows. Each open flow
+   * re-stamps its ownership this often (a DynamoDB write), and after value × 5 an unrefreshed flow is
+   * considered abandoned so another data-plane runtime may take it over. Lower = faster multi-runtime
+   * failover but higher DynamoDB write cost; raise it to cut cost on single-runtime deployments. Set
+   * independently of the poll intervals. Default "10000" (abandon window 50s); EDC's own default is 500ms.
+   */
+  readonly dataPlaneFlowLeaseMillis?: string;
   readonly edcStateRemovalPolicy: "DESTROY" | "RETAIN";
-  /** Cofinity-X portal technical user (service account) ID — authored by the user. */
-  readonly edcTechnicalUserId: string;
-  /** Resolved EDC identity — populated by portal/provision.ts before synth. */
-  readonly edcIam?: EdcIam;
+  /** Cofinity-X portal technical user (service account) ID, authored by the operator. */
+  readonly serviceAccountId: string;
+  /** Per-connector identity override, merged over the deployment default. */
+  readonly portal?: ConnectorPortalOverride;
 }
 
 /** Loaded deployment configuration (raw YAML, validated). */
@@ -113,6 +130,16 @@ export const EDC_SECRETS_MANAGER_ALIASES = {
   TOKEN_VERIFIER_PUBLIC_KEY: "edc.transfer.proxy.token.verifier.publickey",
 };
 
+/** Identity fields required for a connector to be deployable. */
+const PORTAL_IDENTITY_KEYS: (keyof PortalIdentity)[] = [
+  "trustedIssuer",
+  "stsOauthTokenUrl",
+  "stsDimUrl",
+  "participantId",
+  "dcpId",
+  "didResolver",
+];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
@@ -122,7 +149,7 @@ export const EDC_SECRETS_MANAGER_ALIASES = {
  * prefixes, CloudFormation stack names, DynamoDB table names, ECS runtime IDs.
  */
 export function validateConnectorId(connectorId: string): void {
-  if (!/^[a-z0-9]([a-z0-9-]{0,58}[a-z0-9])?$/.test(connectorId)) {
+  if (!/^[a-z0-9][a-z0-9-]{0,58}[a-z0-9]$/.test(connectorId)) {
     throw new Error(
       `Invalid connectorId "${connectorId}". Must be 2-60 chars, lowercase alphanumeric + hyphens, cannot start/end with hyphen.`,
     );
@@ -150,6 +177,66 @@ export function toEdcIamEnvVars(edcIam: EdcIam): Record<string, string> {
   );
 }
 
+/** Merges the deployment-wide default identity with a connector's override. */
+export function resolveConnectorIdentity(
+  deployment: DeploymentYaml,
+  connector: ConnectorYaml,
+): Partial<PortalIdentity> {
+  return {
+    ...(deployment.portal.identity ?? {}),
+    ...(connector.portal?.identity ?? {}),
+  };
+}
+
+/** True when every identity field required for deployment is present and non-empty. */
+export function isIdentityComplete(
+  identity: Partial<PortalIdentity>,
+): identity is PortalIdentity {
+  return PORTAL_IDENTITY_KEYS.every(
+    (key) => typeof identity[key] === "string" && identity[key] !== "",
+  );
+}
+
+export const DEFAULT_DEPLOYMENT_NAME = "DataspaceConnector";
+
+/** Resolves the deployment name (default "DataspaceConnector"); prefixes every named resource. */
+export function resolveDeploymentName(pipeline: PipelineYaml): string {
+  return pipeline.deploymentName ?? DEFAULT_DEPLOYMENT_NAME;
+}
+
+/** deploymentName prefixes stack, table, and secret names, so keep the charset conservative. */
+export function validateDeploymentName(name: string): void {
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,40}$/.test(name)) {
+    throw new Error(
+      `Invalid deploymentName "${name}". Must be 1-41 chars, alphanumeric and hyphens, not starting with a hyphen.`,
+    );
+  }
+}
+
+/** Derives the per-tenant admin secret name, namespaced by deployment. */
+export function deriveAdminSecretName(
+  deploymentName: string,
+  bpnl: string,
+): string {
+  return `${deploymentName}/portal-admin/${bpnl}`;
+}
+
+/** Derives a connector's Secrets Manager alias prefix, namespaced by deployment. */
+export function deriveSecretPrefix(
+  deploymentName: string,
+  connectorId: string,
+): string {
+  return `${deploymentName}/${connectorId}/`;
+}
+
+/** Derives the EDC runtime DynamoDB table name, namespaced by deployment. */
+export function deriveConnectorTableName(
+  deploymentName: string,
+  connectorId: string,
+): string {
+  return `${deploymentName}-${connectorId}`;
+}
+
 /** Maps the YAML removal-policy string to the CDK enum. */
 export function toRemovalPolicy(value: "DESTROY" | "RETAIN"): RemovalPolicy {
   return value === "RETAIN" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY;
@@ -164,7 +251,9 @@ export function toPrincipals(arns?: string[] | null): IPrincipal[] {
 
 /**
  * Loads and validates deployment configuration from YAML files at configPath.
- * Throws if required files or fields are missing.
+ * Throws if required files or fields are missing. Deploy-gating (which
+ * connectors reached IDENTITY_READY) is applied by the deployment stage using
+ * provision's ephemeral edcIam map, not here.
  */
 export function loadDeploymentConfig(configPath: string): DeploymentConfig {
   const deploymentPath = join(configPath, "deployment.yaml");
@@ -221,10 +310,8 @@ function validateDeployment(data: DeploymentYaml, filePath: string): void {
       `${filePath}: profile must be "development" or "production", got "${data.profile}"`,
     );
   }
-  if (!data.portal.environment || !data.portal.identity) {
-    throw new Error(
-      `${filePath}: portal section requires 'environment' and 'identity'`,
-    );
+  if (!data.portal.environment) {
+    throw new Error(`${filePath}: portal section requires 'environment'`);
   }
 }
 
@@ -236,7 +323,7 @@ function validateConnector(data: ConnectorYaml, fileName: string): void {
     "dataPlaneCpu",
     "dataPlaneMemoryLimitMiB",
     "edcStateRemovalPolicy",
-    "edcTechnicalUserId",
+    "serviceAccountId",
   ];
   const missing = required.filter(
     (key) => data[key] === undefined || data[key] === null,

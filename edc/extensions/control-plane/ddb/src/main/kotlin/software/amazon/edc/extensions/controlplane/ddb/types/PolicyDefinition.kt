@@ -57,6 +57,8 @@ data class PolicyDefinition(
     var prohibitions: List<Map<String, Any>>? = null,
     @get:DynamoDbAttribute(TARGET)
     var target: String? = null,
+    @get:DynamoDbAttribute(PARTICIPANT_CONTEXT_ID)
+    var participantContextId: String? = null,
 ) {
     val id: String get() = sk
 
@@ -83,6 +85,7 @@ data class PolicyDefinition(
                         }.build(),
                 )
                 privateProperties(privateProperties)
+                participantContextId(participantContextId)
             }.build()
 
     companion object {
@@ -92,6 +95,7 @@ data class PolicyDefinition(
         const val DUTIES = "duties"
         const val EXTENSIBLE_PROPERTIES = "extensibleProperties"
         const val INHERITS_FROM = "inheritsFrom"
+        const val PARTICIPANT_CONTEXT_ID = "participantContextId"
         const val PERMISSIONS = "permissions"
         const val POLICY_TYPE = "policyType"
         const val PRIVATE_PROPERTIES = "privateProperties"
@@ -117,4 +121,5 @@ fun EdcPolicyDefinition.toDdbPolicyDefinition(objectMapper: ObjectMapper): Polic
         profiles = policy.profiles?.let { if (it.isEmpty()) null else it },
         prohibitions = policy.prohibitions.map { objectMapper.convertValueToMapStringAny(it) },
         target = policy.target,
+        participantContextId = participantContextId,
     )

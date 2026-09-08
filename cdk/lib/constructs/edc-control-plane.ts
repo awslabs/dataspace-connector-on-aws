@@ -17,18 +17,15 @@ import {
   LogDriver,
 } from "aws-cdk-lib/aws-ecs";
 
-import { IApplicationTargetGroup } from "aws-cdk-lib/aws-elasticloadbalancingv2";
-
-export interface AlbOutputs {
-  readonly dnsName: string;
-  readonly securityGroupId: string;
-  readonly targetGroups: { [port: number]: IApplicationTargetGroup };
-}
-
-import { EDC_SECRETS_MANAGER_ALIASES } from "../config/config";
+import {
+  AlbOutputs,
+  CONTROL_PLANE_PORT_MAPPING_DEFAULT,
+} from "../config/port-mappings";
+import {
+  DeploymentProfile,
+  EDC_SECRETS_MANAGER_ALIASES,
+} from "../config/config";
 import { EdcFargateService } from "./edc-fargate-service";
-import { CONTROL_PLANE_PORT_MAPPING_DEFAULT } from "../config/port-mappings";
-import { DeploymentProfile } from "../config/config";
 
 export interface EdcControlPlaneProps {
   readonly albOutputs: AlbOutputs;
@@ -158,7 +155,6 @@ export class EdcControlPlane extends Construct {
       taskDefinition: taskDefinition,
     });
 
-    // Register on all other CP target groups
     for (const port of Object.values(portMapping)) {
       if (port === portMapping.default) continue;
       const tg = props.albOutputs.targetGroups[port];

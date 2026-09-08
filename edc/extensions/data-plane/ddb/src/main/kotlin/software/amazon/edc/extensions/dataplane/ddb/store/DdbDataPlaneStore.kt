@@ -12,7 +12,6 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.STATE_INDEX_CACHE_TTL_MILLIS
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
-import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.IterationCache
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
@@ -58,8 +57,9 @@ class DdbDataPlaneStore(
             } else {
                 indexed.asSequence()
             }
+        val leased = activeLeaseIds()
         return items
-            .filterNot { hasActiveLease(it) }
+            .filterNot { it.sk in leased }
             .map { it.toEdcDataFlow(objectMapper) }
             .filter { predicate.test(it) }
             .sortedBy { it.stateTimestamp }
@@ -71,35 +71,18 @@ class DdbDataPlaneStore(
     override fun findByIdAndLease(id: String): StoreResult<EdcDataFlow> {
         val dataFlow = getDataFlow(id) ?: return StoreResult.notFound("DataFlow with ID $id was not found!")
         return try {
-            acquireLease(dataFlow)
+            acquireLease(dataFlow.sk)
             StoreResult.success(dataFlow.toEdcDataFlow(objectMapper))
         } catch (e: IllegalStateException) {
             StoreResult.alreadyLeased("DataFlow $id is already leased!")
         }
     }
 
-    override fun save(dataFlow: EdcDataFlow) {
-        val leaseId =
-            if (getDataFlow(dataFlow.id) == null) {
-                null
-            } else {
-                acquireLease(dataFlow.id)
-            }
-        try {
-            table.putItem(dataFlow.toDdbDataFlow(objectMapper, leaseId))
-        } finally {
-            if (leaseId != null) {
-                breakLease(dataFlow.id)
-            }
-        }
+    override fun save(dataFlow: EdcDataFlow): StoreResult<Void> {
+        table.putItem(dataFlow.toDdbDataFlow(objectMapper))
+        breakLease(dataFlow.id)
         stateCache.invalidate()
-    }
-
-    override fun getLeasableById(id: String): Leasable? = getDataFlow(id)
-
-    override fun updateLeaseId(leasable: Leasable) {
-        table.updateItem(leasable as DataFlow)
-        stateCache.invalidate()
+        return StoreResult.success()
     }
 
     private fun getDataFlow(id: String): DataFlow? = table.getItem(keyFromPkSk(EntityType.DATA_FLOW, id))

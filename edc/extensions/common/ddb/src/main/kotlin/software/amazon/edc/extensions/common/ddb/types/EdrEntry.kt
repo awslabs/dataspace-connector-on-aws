@@ -28,6 +28,8 @@ data class EdrEntry(
     var contractNegotiationId: String? = null,
     @get:DynamoDbAttribute(PROVIDER_ID)
     var providerId: String = "",
+    @get:DynamoDbAttribute(PARTICIPANT_CONTEXT_ID)
+    var participantContextId: String? = null,
 ) {
     val transferProcessId: String get() = sk
 
@@ -41,6 +43,7 @@ data class EdrEntry(
                 contractNegotiationId(contractNegotiationId)
                 createdAt(createdAt)
                 providerId(providerId)
+                participantContextId(participantContextId)
             }.build()
 
     companion object {
@@ -48,6 +51,7 @@ data class EdrEntry(
         const val ASSET_ID = "assetId"
         const val CONTRACT_NEGOTIATION_ID = "contractNegotiationId"
         const val CREATED_AT = "createdAt"
+        const val PARTICIPANT_CONTEXT_ID = "participantContextId"
         const val PROVIDER_ID = "providerId"
     }
 }
@@ -61,4 +65,5 @@ fun EndpointDataReferenceEntry.toDdbEdrEntry(): EdrEntry =
         contractNegotiationId = contractNegotiationId,
         createdAt = createdAt,
         providerId = providerId,
+        participantContextId = participantContextId,
     )

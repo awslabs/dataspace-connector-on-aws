@@ -4,9 +4,9 @@ On this project's DynamoDB-backed stores, an idle-looking connector can run up a
 
 ## How open transfers drive cost
 
-DynamoDB consumption scales with the number of **open** transfers a connector serves, not with how much data moves through them. Each active transfer keeps a `DataFlow` on the provider data plane, which the data plane and its selector poll and re-lease on every state-machine iteration. Three properties make this easy to miss:
+DynamoDB consumption scales with the number of **open** transfers a connector serves, not with how much data moves through them. Each active transfer keeps a `DataFlow` in the `STARTED` state on the provider data plane. To retain ownership of that flow, the data plane periodically re-stamps it — a *flow-lease* refresh — and on a DynamoDB-backed store every refresh is a billed write. The number of open flows times the refresh rate sets the connector's standing request rate. Three properties make this easy to miss:
 
-- **It looks like idle load.** A connector serving transfers that nobody is actively pulling still polls and leases them continuously, so its request rate stays high with no visible activity.
+- **It looks like idle load.** A connector serving transfers that nobody is actively pulling still refreshes each flow's lease to retain ownership, so its request rate stays elevated with no visible activity.
 - **It is asymmetric.** The cost lands on the **provider**. A consumer only pulls and runs no serving flow, so its request rate stays near baseline no matter how many transfers it has open. The party that starts and then abandons a transfer is not the party that pays for it.
 - **It is unbounded.** Nothing reaps open transfers automatically (see below), so the cost persists and accumulates until each transfer is explicitly terminated.
 
@@ -25,7 +25,11 @@ In the consumer-pull (EDR) pattern the transfer moves to `STARTED` and stays the
 
 ## Keeping cost down
 
-Terminate transfers when the agreed period ends or the consumer no longer needs the data. Because neither credential policies nor legal end dates do this for you, it is the provider's responsibility, best handled by the surrounding EDC integration layer.
+Two independent levers control this cost.
+
+**Reduce the number of open transfers.** Terminate transfers when the agreed period ends or the consumer no longer needs the data. Because neither credential policies nor legal end dates do this for you, it is the provider's responsibility, best handled by the surrounding EDC integration layer.
+
+**Reduce the standing cost of each open transfer.** The recurring cost of an open flow is its flow-lease refresh rate. This deployment exposes the refresh interval as the per-connector `dataPlaneFlowLeaseMillis` setting (mapping to EDC's `edc.dataplane.state-machine.flow.lease.time`), defaulting to `10000` (10s) in place of EDC's own 500ms default — a 20x longer refresh interval, sharply cutting the standing write rate per open flow. Raise it to cut cost further. The tradeoff is failover latency: an unrefreshed flow is treated as abandoned after `dataPlaneFlowLeaseMillis × 5`, after which a second data-plane runtime may take it over. A single-runtime-per-connector deployment has no peer to take over, so a longer interval costs nothing operationally; multi-runtime (HA) data planes should keep it short enough for acceptable failover. Note that the effective interval is `max(dataPlaneFlowLeaseMillis, dataPlaneStateMachineIterationMillis)` — lowering it below the data-plane iteration interval has no effect.
 
 ## See Also
 

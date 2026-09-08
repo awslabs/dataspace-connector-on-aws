@@ -180,13 +180,13 @@ export class PortalClient {
     return connectors;
   }
 
-  /** Register a connector in the portal. Returns the portal connector ID. */
+  /** Register a connector in the portal. Returns the created registration. */
   async registerConnector(
     name: string,
     connectorUrl: string,
-    technicalUserId: string,
+    serviceAccountId: string,
     location: string = "DE",
-  ): Promise<string> {
+  ): Promise<ConnectorRegistration> {
     // POST /connectors is an ASP.NET [FromForm] endpoint binding
     // ConnectorInputModel (Name, ConnectorUrl, Location [2-char country code],
     // TechnicalUserId). It expects form-encoded fields with these PascalCase
@@ -195,7 +195,7 @@ export class PortalClient {
       Name: name,
       ConnectorUrl: connectorUrl,
       Location: location,
-      TechnicalUserId: technicalUserId,
+      TechnicalUserId: serviceAccountId,
     });
 
     const response = await this.request("POST", "/connectors", form);
@@ -207,8 +207,12 @@ export class PortalClient {
       );
     }
 
-    const result = (await response.json()) as string | { id: string };
-    return typeof result === "string" ? result : result.id;
+    const result = (await response.json()) as string | ConnectorRegistration;
+    // The portal may return just the ID string or the full registration object
+    if (typeof result === "string") {
+      return { id: result, name, status: "ACTIVE", connectorUrl };
+    }
+    return result;
   }
 
   /** Deregister a connector from the portal. */
@@ -256,9 +260,8 @@ export class SecretsHelper {
     return { clientId: parsed.clientId, clientSecret: parsed.clientSecret };
   }
 
-  /** Write the OAuth client secret for an EDC connector. */
-  async putConnectorSecret(connectorId: string, secret: string): Promise<void> {
-    const secretId = `${connectorId}/edc.iam.sts.oauth.client.secret`;
+  /** Write a connector's OAuth client secret to the given fully-qualified secret id. */
+  async putConnectorSecret(secretId: string, secret: string): Promise<void> {
     await this.client.send(
       new PutSecretValueCommand({ SecretId: secretId, SecretString: secret }),
     );

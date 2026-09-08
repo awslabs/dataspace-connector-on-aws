@@ -20,10 +20,14 @@ observabilityApiPrincipals:
 # credentials from the portal, populates its EDC config, stores the OAuth secret
 # in Secrets Manager, and registers the connector for discovery.
 #
-# The organization-wide identity values below come from the portal's
-# "Configure Your Connector" dialog and are shared across all connectors.
-# The admin technical user credentials (Offer Management + Dataspace Discovery
-# roles) are prompted for by deploy.sh and stored in Secrets Manager.
+# The identity values below are the deployment-wide default, from the portal's
+# "Configure Your Connector" dialog. A connector can override them (see
+# connectors/connector-<id>.yaml) to host multiple organizations in one deployment.
+#
+# Admin technical user credentials (Offer Management + Dataspace Discovery roles)
+# live in AWS Secrets Manager: the first pipeline run creates an empty secret
+# named <deploymentName>/portal-admin/<BPNL> per organization; populate it with
+# {"clientId":"...","clientSecret":"..."} and re-run to deploy connectors.
 portal:
   environment: beta # "beta" or "production"
   identity:

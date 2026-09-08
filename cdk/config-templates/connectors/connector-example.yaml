@@ -16,4 +16,12 @@ dataPlaneMemoryLimitMiB: 512
 interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-flow
 backgroundStateMachineIterationMillis: "60000" # policy monitor + data-plane selector
 edcStateRemovalPolicy: DESTROY # DESTROY or RETAIN
-edcTechnicalUserId: "00000000-0000-0000-0000-000000000000"
+serviceAccountId: "00000000-0000-0000-0000-000000000000"
+
+# Optional per-connector identity override. Any omitted field inherits the
+# deployment.yaml portal.identity default. Set these to run this connector under
+# a different company (BPNL) than the deployment default.
+# portal:
+#   identity:
+#     participantId: "BPNL..."
+#     dcpId: "did:web:..."

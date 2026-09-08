@@ -2451,6 +2451,192 @@ paths:
         type: http_proxy
         uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/transfers/{id}/termination
         integrationTarget: ${albArn}
+  /{connectorId}/2024/1/negotiations/offers:
+    post:
+      description: ''
+      operationId: initialContractOffer_1
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+      responses:
+        default:
+          content:
+            application/json:
+              schema:
+                type: object
+          description: default response
+      tags: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/negotiations/offers
+        integrationTarget: ${albArn}
+  /{connectorId}/2024/1/negotiations/{id}/offers:
+    post:
+      description: ''
+      operationId: providerOffer_1
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        default:
+          content:
+            application/json:
+              schema:
+                type: object
+          description: default response
+      tags: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+          integration.request.path.id: method.request.path.id
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2024/1/negotiations/{id}/offers
+        integrationTarget: ${albArn}
+  /{connectorId}/2025-1/negotiations/offer:
+    post:
+      description: ''
+      operationId: deprecatedInitialContractOffer_2
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+      responses:
+        default:
+          content:
+            application/json:
+              schema:
+                type: object
+          description: default response
+      tags: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/negotiations/offer
+        integrationTarget: ${albArn}
+  /{connectorId}/2025-1/negotiations/{id}/offer:
+    post:
+      description: ''
+      operationId: deprecatedProviderOffer_2
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        default:
+          content:
+            application/json:
+              schema:
+                type: object
+          description: default response
+      tags: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+          integration.request.path.id: method.request.path.id
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/2025-1/negotiations/{id}/offer
+        integrationTarget: ${albArn}
+  /{connectorId}/negotiations/offers:
+    post:
+      description: ''
+      operationId: initialContractOffer
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+      responses:
+        default:
+          content:
+            application/json:
+              schema:
+                type: object
+          description: default response
+      tags: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/negotiations/offers
+        integrationTarget: ${albArn}
+  /{connectorId}/negotiations/{id}/offers:
+    post:
+      description: ''
+      operationId: providerOffer
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        default:
+          content:
+            application/json:
+              schema:
+                type: object
+          description: default response
+      tags: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+          integration.request.path.id: method.request.path.id
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/protocol/negotiations/{id}/offers
+        integrationTarget: ${albArn}
 components:
   parameters:
     ConnectorId:

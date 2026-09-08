@@ -4,6 +4,7 @@
 package software.amazon.edc.extensions.controlplane.ddb.types
 
 import org.eclipse.edc.connector.policy.monitor.spi.PolicyMonitorEntry
+import org.eclipse.edc.connector.policy.monitor.spi.PolicyMonitorEntryStates
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttribute
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey
@@ -11,7 +12,6 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecon
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondarySortKey
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
 import software.amazon.edc.extensions.common.ddb.EntityType
-import software.amazon.edc.extensions.common.ddb.types.Leasable
 
 @DynamoDbBean
 data class PolicyMonitor(
@@ -30,8 +30,6 @@ data class PolicyMonitor(
     @get:DynamoDbAttribute(GSI_STATE_PK)
     @get:DynamoDbSecondaryPartitionKey(indexNames = [GSI_STATE])
     var gsiStatePk: String? = null,
-    @get:DynamoDbAttribute(LEASE_ID)
-    override var leaseId: String? = null,
     @get:DynamoDbAttribute(STATE)
     var state: Int = 0,
     @get:DynamoDbAttribute(STATE_COUNT)
@@ -43,7 +41,7 @@ data class PolicyMonitor(
     var traceContext: Map<String, String>? = null,
     @get:DynamoDbAttribute(UPDATED_AT)
     var updatedAt: Long = 0L,
-) : Leasable {
+) {
     val id: String get() = sk
 
     fun toEdcPolicyMonitor(): PolicyMonitorEntry =
@@ -66,7 +64,6 @@ data class PolicyMonitor(
         const val CREATED_AT = "createdAt"
         const val ERROR_DETAIL = "errorDetail"
         const val GSI_STATE_PK = "gsiStatePk"
-        const val LEASE_ID = "leaseId"
         const val STATE = "state"
         const val STATE_COUNT = "stateCount"
         const val STATE_TIMESTAMP = "stateTimestamp"
@@ -84,9 +81,9 @@ fun PolicyMonitorEntry.toDdbPolicyMonitor(leaseId: String? = null): PolicyMonito
         contractId = contractId,
         createdAt = createdAt,
         errorDetail = errorDetail,
-        // EDC exposes no isFinal for this entity, so index all entries.
-        gsiStatePk = EntityType.POLICY_MONITOR,
-        leaseId = leaseId,
+        // Only STARTED monitors are processed by the PolicyMonitorManager; de-index terminal
+        // (COMPLETED/FAILED) entries so they are neither re-processed nor scanned by the state index.
+        gsiStatePk = if (state == PolicyMonitorEntryStates.STARTED.code()) EntityType.POLICY_MONITOR else null,
         state = state,
         stateCount = stateCount,
         stateTimestamp = stateTimestamp,

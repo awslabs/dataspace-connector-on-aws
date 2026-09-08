@@ -3,6 +3,8 @@
 
 package software.amazon.edc.extensions.controlplane.ddb.types
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import org.eclipse.edc.connector.controlplane.asset.spi.domain.DataplaneMetadata
 import org.eclipse.edc.spi.types.domain.DataAddress
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttribute
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean
@@ -11,6 +13,7 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbParti
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
+import software.amazon.edc.extensions.common.ddb.utility.convertValueToMapStringAny
 import org.eclipse.edc.connector.controlplane.asset.spi.domain.Asset as EdcAsset
 
 @DynamoDbBean
@@ -32,10 +35,15 @@ data class Asset(
     @get:DynamoDbAttribute(PROPERTIES)
     @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
     var properties: Map<String, Any> = emptyMap(),
+    @get:DynamoDbAttribute(PARTICIPANT_CONTEXT_ID)
+    var participantContextId: String? = null,
+    @get:DynamoDbAttribute(DATAPLANE_METADATA)
+    @get:DynamoDbConvertedBy(MapStringAnyConverter::class)
+    var dataplaneMetadata: Map<String, Any>? = null,
 ) {
     val assetId: String get() = sk
 
-    fun toEdcAsset(): EdcAsset =
+    fun toEdcAsset(objectMapper: ObjectMapper): EdcAsset =
         EdcAsset.Builder
             .newInstance()
             .apply {
@@ -49,17 +57,21 @@ data class Asset(
                 )
                 privateProperties(privateProperties)
                 properties(properties)
+                participantContextId(participantContextId)
+                dataplaneMetadata?.let { dataplaneMetadata(objectMapper.convertValue(it, DataplaneMetadata::class.java)) }
             }.build()
 
     companion object {
         const val CREATED_AT = "createdAt"
+        const val DATAPLANE_METADATA = "dataplaneMetadata"
         const val DATA_ADDRESS = "dataAddress"
+        const val PARTICIPANT_CONTEXT_ID = "participantContextId"
         const val PRIVATE_PROPERTIES = "privateProperties"
         const val PROPERTIES = "properties"
     }
 }
 
-fun EdcAsset.toDdbAsset(): Asset =
+fun EdcAsset.toDdbAsset(objectMapper: ObjectMapper): Asset =
     Asset(
         pk = EntityType.ASSET,
         sk = id,
@@ -67,4 +79,6 @@ fun EdcAsset.toDdbAsset(): Asset =
         dataAddress = dataAddress?.properties ?: emptyMap(),
         privateProperties = privateProperties ?: emptyMap(),
         properties = properties ?: emptyMap(),
+        participantContextId = participantContextId,
+        dataplaneMetadata = dataplaneMetadata?.let { objectMapper.convertValueToMapStringAny(it) },
     )

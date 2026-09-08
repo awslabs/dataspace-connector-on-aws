@@ -6,6 +6,8 @@ This workflow verifies the full data exchange flow end-to-end: creating data off
 
 The default validation uses Amazon S3 as the data source, which exercises the full AWS-native data path (IAM roles, S3 data plane extension, token signing). An HttpData alternative is also available for quick smoke tests against external URLs.
 
+The MCP server exposes 12 general-purpose primitives. Resource reads use one generic `get_resource(resource_type, resource_id)` and resource lists use one generic `query_resources(resource_type, ...)`; the `resource_type` values are `assets`, `policy_definitions`, `contract_definitions`, `contract_negotiations`, `contract_agreements`, and `transfer_processes` (plus `edr` for `get_resource`).
+
 ---
 
 ## Phase 1: Verify Connectivity
@@ -14,15 +16,15 @@ Before starting, confirm the MCP tools are working and identify the target conne
 
 ### Step 1.1: Identify the Target Connector
 
-All connectors are deployed by the pipeline, so their stacks are named `Deploy-DataspaceConnectorSharedInfraStack` (shared infrastructure) and `Deploy-DataspaceConnector-<connectorId>` (per connector).
+All connectors are deployed by the pipeline, so their stacks are named `DataspaceConnector-SharedInfra` (shared infrastructure) and `DataspaceConnector-Connector-<connectorId>` (per connector).
 
-Use `list_connectors()` to discover the deployed connector IDs (it scans CloudFormation for `Deploy-DataspaceConnector-` stacks) and ask the user which one to validate. All MCP tool calls include the `connector_id` parameter.
+Use `list_connectors()` to discover the deployed connector IDs (it scans CloudFormation for `DataspaceConnector-Connector-` stacks) and ask the user which one to validate. It also returns `management_base_url` and `dsp_base_url`; a connector's DSP address is `{dsp_base_url}/{connectorId}`. All MCP tool calls include the `connector_id` parameter.
 
 ### Step 1.2: Verify MCP Connectivity
 
 Run a quick check against the target connector:
 ```python
-query_assets(connector_id="<target-connector>", limit=1)
+query_resources(connector_id="<target-connector>", resource_type="assets", limit=1)
 ```
 
 If this fails, the MCP connection isn't configured. Direct the user to the **deploy-connector** steering file first.
@@ -32,7 +34,7 @@ If this fails, the MCP connection isn't configured. Direct the user to the **dep
 The AWS profile and region are needed, check the MCP config at `.kiro/settings/mcp.json` for `AWS_PROFILE` and `AWS_REGION` values:
 
 ```bash
-aws cloudformation list-stack-resources --stack-name Deploy-DataspaceConnector-<connectorId> --region <region> \
+aws cloudformation list-stack-resources --stack-name DataspaceConnector-Connector-<connectorId> --region <region> \
     --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].[LogicalResourceId,PhysicalResourceId]' --output json
 ```
 
@@ -79,7 +81,7 @@ For open access, create two policies, one for access (who can see the offer) and
 
 **Access policy** (controls catalog visibility):
 ```python
-create_policy_definition(
+create_policy(
     connector_id="<target-connector>",
     policy_id="<user-chosen-id-or-default>-access",
     policy={
@@ -98,7 +100,7 @@ create_policy_definition(
 
 **Usage/contract policy** (controls negotiation, requires FrameworkAgreement + UsagePurpose):
 ```python
-create_policy_definition(
+create_policy(
     connector_id="<target-connector>",
     policy_id="<user-chosen-id-or-default>-usage",
     policy={
@@ -124,7 +126,7 @@ create_policy_definition(
 )
 ```
 
-For BPN-restricted access, replace the access policy's `Membership` constraint with a `BusinessPartnerNumber` constraint targeting the allowed BPNL.
+The Catena-X policy context is added by the tool automatically. Each call returns an `IdResponse` with the policy `@id`. For BPN-restricted access, replace the access policy's `Membership` constraint with a `BusinessPartnerNumber` constraint targeting the allowed BPNL.
 
 ### Step 3.2: Create an Asset
 
@@ -221,24 +223,22 @@ request_catalog(
 Help the user interpret the catalog response:
 - Each `dcat:dataset` entry is an available asset
 - The `odrl:hasPolicy` contains the offer details needed for negotiation
-- Point out the offer ID (`@id` of the policy), asset ID, and the permission/prohibition/obligation arrays
-
-NOTE: For a simpler flow, `initiate_edr_negotiation` can replace the separate negotiation + transfer steps (Steps 4.2-4.5) with a single call. However, the step-by-step flow below gives more control and visibility.
+- Point out the offer ID (`@id` of the policy), asset ID, and the `odrl:permission`/`odrl:prohibition`/`odrl:obligation` values
 
 ### Step 4.2: Negotiate a Contract
 
 Using the catalog response, extract the offer details and negotiate:
 
 ```python
-initiate_contract_negotiation(
+initiate_negotiation(
     connector_id="<target-connector>",
     counter_party_address="<provider-dsp-endpoint>",
     offer_id="<@id from odrl:hasPolicy>",
     asset_id="<asset-id from catalog>",
     assigner="<provider-bpnl>",
-    permission=<permission array from offer>,
-    prohibition=<prohibition array from offer>,
-    obligation=<obligation array from offer>
+    permission=<odrl:permission from offer>,
+    prohibition=<odrl:prohibition from offer>,
+    obligation=<odrl:obligation from offer>
 )
 ```
 
@@ -246,23 +246,23 @@ IMPORTANT: The `permission`, `prohibition`, and `obligation` must be passed thro
 
 ### Step 4.3: Wait for Negotiation to Complete
 
-Poll the negotiation state:
+Poll the negotiation state with the generic read primitive:
 ```python
-get_contract_negotiation(connector_id="<target-connector>", negotiation_id="<negotiation-id>")
+get_resource(connector_id="<target-connector>", resource_type="contract_negotiations", resource_id="<negotiation-id>")
 ```
 
-Expected state progression: `REQUESTED` → `AGREED` → `VERIFIED` → `FINALIZED`
+Expected state progression: `INITIAL` → `REQUESTED` → `AGREED` → `VERIFIED` → `FINALIZED`
 
 If the state is `TERMINATED`, check the `errorDetail` field in the response. Common causes:
 - Policy mismatch (didn't pass full policy from catalog)
 - Provider-side policy evaluation failure (BPN not allowed)
 
-Once `FINALIZED`, extract the `contractAgreementId` directly from the `get_contract_negotiation` response, it returns the full negotiation object.
+Once `FINALIZED`, read the `contractAgreementId` directly from the same response, `get_resource` returns the full negotiation object (the agreement id is often present already at `VERIFIED`).
 
 ### Step 4.4: Retrieve the Agreement
 
 ```python
-get_contract_agreement(connector_id="<target-connector>", agreement_id="<contract-agreement-id>")
+get_resource(connector_id="<target-connector>", resource_type="contract_agreements", resource_id="<contract-agreement-id>")
 ```
 
 ### Step 4.5: Transfer Data
@@ -282,38 +282,25 @@ For `HttpData-PULL`, the MCP server automatically sets the data destination to `
 
 Poll until the transfer reaches `STARTED`:
 ```python
-get_transfer_process(connector_id="<target-connector>", transfer_process_id="<transfer-id>")
+get_resource(connector_id="<target-connector>", resource_type="transfer_processes", resource_id="<transfer-id>")
 ```
 
 If the transfer state is `TERMINATED` instead of progressing to `STARTED`, do NOT retry blindly. Follow the troubleshooting procedure in Phase 8 to diagnose the root cause.
 
-Then retrieve the endpoint data reference:
+Once `STARTED`, fetch the payload with `fetch_data`, which resolves the EDR and makes the HTTP request to the provider's data plane in one step:
+
 ```python
-get_edr_data_address(connector_id="<target-connector>", transfer_process_id="<transfer-id>")
+fetch_data(connector_id="<target-connector>", transfer_process_id="<transfer-id>")
 ```
 
-The EDR contains:
-- `endpoint`: URL to fetch the data from
-- `authorization`: Bearer token for authentication
+`fetch_data` returns `{status, headers, body}`. It appends the Tractus-X public API sub-path `public/` to the EDR endpoint by default (the endpoint looks like `.../data/<connectorId>/`, and the public API is at `.../data/<connectorId>/public/`); pass an explicit `path` only if the asset needs a different sub-path. It refreshes the EDR token transparently, so the agent can call it repeatedly over time without worrying about token expiry.
 
-Now fetch the actual data using the `fetch_data_with_edr` tool, which resolves the EDR and makes the HTTP request to the provider's data plane in one step:
+The data plane acts as a proxy, it forwards the request to the provider's actual data source (the `baseUrl` or S3 object configured in the asset's data address) and returns the response. If the response body contains the expected data from the asset's data source, the end-to-end flow is validated.
 
-```python
-fetch_data_with_edr(connector_id="<target-connector>", transfer_process_id="<transfer-id>")
-```
-
-NOTE: When no `path` parameter is provided, the MCP server defaults to appending `public/` to the EDR endpoint URL. This is the standard Tractus-X data plane public API path. If the data plane requires a different sub-path, pass it explicitly via the `path` parameter.
-
-This tool handles token refresh transparently, Tractus-X auto-refreshes expired EDR tokens when resolving the data address, so the agent can call this repeatedly over time without worrying about token expiry.
-
-The data plane acts as a proxy, it forwards the request to the provider's actual data source (the `baseUrl` or S3 object configured in the asset's data address) and returns the response.
-
-If the response contains the expected data from the asset's data source, the end-to-end flow is validated.
-
-For advanced use cases (sub-paths, query parameters, POST bodies), `fetch_data_with_edr` supports additional parameters:
+For advanced use cases (sub-paths, query parameters, POST bodies), `fetch_data` accepts `method`, `path`, `query_params`, and `body`:
 
 ```python
-fetch_data_with_edr(
+fetch_data(
     connector_id="<target-connector>",
     transfer_process_id="<transfer-id>",
     method="GET",
@@ -322,7 +309,11 @@ fetch_data_with_edr(
 )
 ```
 
-For debugging or inspecting the raw EDR (endpoint URL, token expiry, refresh endpoint), use `get_edr_data_address` directly.
+To inspect the raw EDR (endpoint URL, authorization token, refresh endpoint, token expiry) without fetching, read it as a resource:
+
+```python
+get_resource(connector_id="<target-connector>", resource_type="edr", resource_id="<transfer-id>")
+```
 
 ---
 
@@ -332,12 +323,12 @@ This is the recommended validation path. It exercises the full AWS-native data f
 
 ### Step 5.1: Discover Stack Resources
 
-Retrieve the S3 bucket name, DSP endpoint, and BPNL. The bucket comes from the per-connector stack, API endpoints from the shared infra stack.
+Retrieve the S3 bucket name, DSP endpoint, and BPNL. The DSP endpoint also comes from `list_connectors` (`{dsp_base_url}/{connectorId}`); the bucket comes from the per-connector stack.
 
 **Shared infrastructure outputs** (the DSP endpoint is shared across all connectors):
 
 ```bash
-aws cloudformation describe-stacks --stack-name Deploy-DataspaceConnectorSharedInfraStack --region <region> \
+aws cloudformation describe-stacks --stack-name DataspaceConnector-SharedInfra --region <region> \
     --query "Stacks[0].Outputs" --output json
 ```
 
@@ -348,14 +339,14 @@ Extract:
 **Per-connector output** (the S3 bucket for this connector's data plane):
 
 ```bash
-aws cloudformation describe-stacks --stack-name Deploy-DataspaceConnector-<connectorId> --region <region> \
+aws cloudformation describe-stacks --stack-name DataspaceConnector-Connector-<connectorId> --region <region> \
     --query "Stacks[0].Outputs[?OutputKey=='EdcDataPlaneBucketName'].OutputValue" --output text
 ```
 
-**Business Partner Number (BPN):** the organization BPN is the `participantId` under `portal.identity` in `deployment.yaml` in the configuration repository. It is organization-wide, the same for every connector. Fetch it from CodeCommit:
+**Business Partner Number (BPN):** the organization BPN is the `participantId` under `portal.identity` in `deployment.yaml` in the configuration repository. It is the deployment-wide default (a connector may override it under its own `portal.identity`). Fetch it from CodeCommit:
 
 ```bash
-aws codecommit get-file --repository-name dataspace-connector-config \
+aws codecommit get-file --repository-name DataspaceConnector-config \
     --file-path deployment.yaml --region <region> --query 'fileContent' --output text | base64 -d
 ```
 
@@ -384,7 +375,7 @@ Create an access policy, usage policy, asset, and contract definition for the te
 
 **Access policy** (Membership check):
 ```python
-create_policy_definition(
+create_policy(
     connector_id="<target-connector>",
     policy_id="test-s3-access-policy",
     policy={
@@ -403,7 +394,7 @@ create_policy_definition(
 
 **Usage policy** (FrameworkAgreement + UsagePurpose):
 ```python
-create_policy_definition(
+create_policy(
     connector_id="<target-connector>",
     policy_id="test-s3-usage-policy",
     policy={
@@ -481,7 +472,7 @@ Follow Phase 4 steps 4.2 through 4.6 using the user's own connector as both prov
 
 ### Step 5.6: Verify the Payload
 
-After `fetch_data_with_edr` returns the data, verify it matches the document uploaded in Step 5.2. The response body should be:
+After `fetch_data` returns the data, verify the `body` matches the document uploaded in Step 5.2. The response body should be:
 ```json
 {"id":"test-001","name":"Sample Record","description":"Test data for validating the dataspace connector S3 data exchange.","value":42,"timestamp":"2025-01-01T00:00:00Z"}
 ```
@@ -498,7 +489,7 @@ This is a lighter alternative to the S3 self-test. It uses an external HTTP endp
 ### Step 6.1: Create a Test Offering
 
 Use Phase 3 with these defaults (or let the user customize):
-- Policy ID: `test-policy`
+- Policy IDs: `test-access-policy`, `test-usage-policy`
 - Asset ID: `test-asset`
 - Asset name: "Test Dataset"
 - Data source: `https://jsonplaceholder.typicode.com/posts`
@@ -528,18 +519,48 @@ After successful completion:
 
 ## Phase 7: Inspect and Clean Up
 
-After testing, help the user review what was created:
+After testing, help the user review what was created. All collections are read with the generic list primitive:
 
 ```python
-query_assets(connector_id="<target-connector>", limit=50)
-query_policy_definitions(connector_id="<target-connector>", limit=50)
-query_contract_definitions(connector_id="<target-connector>", limit=50)
-query_contract_negotiations(connector_id="<target-connector>", limit=50)
-query_contract_agreements(connector_id="<target-connector>", limit=50)
-query_transfer_processes(connector_id="<target-connector>", limit=50)
+query_resources(connector_id="<target-connector>", resource_type="assets", limit=50)
+query_resources(connector_id="<target-connector>", resource_type="policy_definitions", limit=50)
+query_resources(connector_id="<target-connector>", resource_type="contract_definitions", limit=50)
+query_resources(connector_id="<target-connector>", resource_type="contract_negotiations", limit=50)
+query_resources(connector_id="<target-connector>", resource_type="contract_agreements", limit=50)
+query_resources(connector_id="<target-connector>", resource_type="transfer_processes", limit=50)
 ```
 
-Note: The EDC Management API does not provide delete operations for assets, policies, or contract definitions through the standard endpoints used by this MCP server. Resources created during testing will persist, including any S3 test objects uploaded during the S3 self-test, do not delete them independently, as that would leave broken asset records. For a clean slate, the user can redeploy the stack (DynamoDB tables are set to `DESTROY` removal policy by default).
+> [!NOTE]
+> When filtering `query_resources` by `state`, pass EDC's integer state code as a number (for example `600`=STARTED, `850`=TERMINATED), not the string label, which does not match. (`manage_transfer` with `all_started` uses `state=600` to select STARTED transfers.)
+
+### Deleting test resources
+
+Assets, policy definitions, and contract definitions can be removed with `delete_resource`:
+
+```python
+delete_resource(connector_id="<target-connector>", resource_type="contract_definitions", resource_id="test-s3-contract-def")
+delete_resource(connector_id="<target-connector>", resource_type="policy_definitions", resource_id="test-s3-usage-policy")
+delete_resource(connector_id="<target-connector>", resource_type="policy_definitions", resource_id="test-s3-access-policy")
+delete_resource(connector_id="<target-connector>", resource_type="assets", resource_id="test-s3-asset")
+```
+
+Delete the contract definition first (it removes the offer from the catalog), then the policies, then the asset. An asset that is referenced by a finalized contract agreement returns 409 and cannot be deleted until the agreement is gone, this is expected, and the agreement itself is immutable. Negotiations and agreements have no delete operation.
+
+### Ending transfers (and controlling cost)
+
+Transfers are not deleted; they are ended with `manage_transfer`. This matters on this project because open pull transfers keep a provider-side data-plane flow active and continue to consume DynamoDB (see the **open-transfers-and-dynamodb-cost** doc), so terminate transfers you no longer need:
+
+```python
+# End one transfer
+manage_transfer(connector_id="<target-connector>", transfer_process_id="<transfer-id>", action="terminate", reason="test complete")
+
+# End every STARTED transfer at once (cost cleanup)
+manage_transfer(connector_id="<target-connector>", transfer_process_id="all_started", action="terminate", reason="idle cleanup")
+```
+
+`suspend` and `resume` also exist, but for `HttpData-PULL` transfers `resume` may not restore `STARTED` (the transfer can move to `TERMINATED`); `terminate` is the reliable action.
+
+Any leftover S3 test objects uploaded during the S3 self-test can be removed with `aws s3 rm`. For a full reset, the user can redeploy the stack (DynamoDB tables use the `DESTROY` removal policy by default).
 
 ---
 
@@ -552,13 +573,13 @@ When any EDC operation reaches an unexpected state (e.g., transfer `TERMINATED` 
 For a failed transfer, first get the full transfer process object which includes `errorDetail` and `correlationId`:
 
 ```python
-get_transfer_process(connector_id="<target-connector>", transfer_process_id="<consumer-transfer-id>")
+get_resource(connector_id="<target-connector>", resource_type="transfer_processes", resource_id="<consumer-transfer-id>")
 ```
 
-Extract the `correlationId` from the response, then query the provider-side transfer process:
+Extract the `correlationId` from the response, then query the provider-side transfer process by id:
 
 ```python
-query_transfer_processes(connector_id="<target-connector>", filter_expression=[{
+query_resources(connector_id="<target-connector>", resource_type="transfer_processes", filter_expression=[{
     "operandLeft": "id",
     "operator": "=",
     "operandRight": "<correlationId>"
@@ -569,7 +590,7 @@ The provider-side response contains the `errorDetail` field with the actual erro
 
 For a failed negotiation, get the full negotiation object directly:
 ```python
-get_contract_negotiation(connector_id="<target-connector>", negotiation_id="<negotiation-id>")
+get_resource(connector_id="<target-connector>", resource_type="contract_negotiations", resource_id="<negotiation-id>")
 ```
 
 The response includes the `errorDetail` field when the negotiation is `TERMINATED`.
@@ -579,13 +600,13 @@ The response includes the `errorDetail` field when the negotiation is `TERMINATE
 The control plane and data plane each write to their own CloudWatch log group. The names include CDK-generated suffixes, so discover them from the stack resources (this avoids picking up stale log groups from prior deployments):
 
 ```bash
-aws cloudformation list-stack-resources --stack-name Deploy-DataspaceConnector-<connectorId> --region <region> \
+aws cloudformation list-stack-resources --stack-name DataspaceConnector-Connector-<connectorId> --region <region> \
     --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].[LogicalResourceId,PhysicalResourceId]' --output json
 ```
 
 This returns entries like:
-- Logical ID containing `ControlPlane` → `Deploy-DataspaceConnector-<connectorId>-ControlPlaneLogGroup<suffix>`
-- Logical ID containing `DataPlane` → `Deploy-DataspaceConnector-<connectorId>-DataPlaneLogGroup<suffix>`
+- Logical ID containing `ControlPlane` → `DataspaceConnector-Connector-<connectorId>-ControlPlaneLogGroup<suffix>`
+- Logical ID containing `DataPlane` → `DataspaceConnector-Connector-<connectorId>-DataPlaneLogGroup<suffix>`
 
 Store both, you'll need them for log queries.
 
@@ -625,10 +646,11 @@ With the error detail from Step 8.1 and the correlated logs from Step 8.3, inter
 | Error Detail | Likely Cause | Where to Look |
 |---|---|---|
 | `DataPlane not found` | Data plane registration expired or data plane not running | Control plane logs for `DataPlaneSelectorManagerImpl` state changes; data plane logs for `DataPlaneHealthCheck` registration |
-| `Policy not equal to offer` | Contract negotiation used a policy that doesn't match the catalog offer | Control plane logs for policy evaluation; verify `permission`/`prohibition`/`obligation` arrays match the catalog exactly |
-| `Contract agreement not found` | Invalid or expired contract agreement ID used for transfer | Control plane logs; verify the agreement ID exists via `get_contract_agreement` |
-| `Failed to decode token` | Token signing key mismatch between control plane and data plane | Verify the Secrets Manager secrets `<connectorId>/edc.transfer.proxy.token.signer.privatekey` and `<connectorId>/edc.transfer.proxy.token.verifier.publickey` exist and contain valid RSA keys (these are auto-generated on first deploy by the `EdcTokenKeyPair` construct, if missing, redeploy the connector stack) |
+| `Policy not equal to offer` | Contract negotiation used a policy that doesn't match the catalog offer | Control plane logs for policy evaluation; verify the `permission`/`prohibition`/`obligation` passed to `initiate_negotiation` match the catalog exactly |
+| `Contract agreement not found` | Invalid or expired contract agreement ID used for transfer | Control plane logs; verify the agreement ID exists via `get_resource(resource_type="contract_agreements", ...)` |
+| `Failed to decode token` | Token signing key mismatch between control plane and data plane | Verify the Secrets Manager secrets `<deploymentName>/<connectorId>/edc.transfer.proxy.token.signer.privatekey` and `<deploymentName>/<connectorId>/edc.transfer.proxy.token.verifier.publickey` exist and contain valid RSA keys (these are auto-generated on first deploy by the `EdcTokenKeyPair` construct, if missing, redeploy the connector stack) |
 | S3 `AccessDenied` | Data plane Fargate task role lacks `s3:GetObject` permission on the bucket | Check the task role policies; verify the bucket ARN matches |
+| `No EDR service with type <type> found` (transfer `TERMINATED` before `STARTED`) | For a consumer PULL, EDC 0.15.x generates the EDR keyed by the transfer's **source** data address type, and by default registers a service only for `HttpData` (via `DataPlaneIamExtension`). Other source types (e.g. `AmazonS3`) need an extension to register one. This deployment ships `edc/extensions/data-plane/s3-edr`, which registers the (source-agnostic) EDR service for `AmazonS3` | Provider-side transfer `errorDetail` (Step 8.1); data plane startup logs for the `AmazonS3 EDR Service` extension; confirm the asset's source `dataAddress.type` has a registered EDR service. To support an additional source type, register it the same way in a small data-plane extension |
 | No logs in data plane | Data plane task may have crashed or not started | Check ECS service status: `aws ecs describe-services --cluster <cluster> --services <service>` |
 
 IMPORTANT: Always collect logs from BOTH services before drawing conclusions. Do not restart services or retry operations without understanding the root cause first.

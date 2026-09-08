@@ -12,7 +12,6 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecon
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
-import software.amazon.edc.extensions.common.ddb.types.Leasable
 import java.time.Instant
 import org.eclipse.edc.connector.dataplane.selector.spi.instance.DataPlaneInstance as EdcDataPlaneInstance
 
@@ -24,8 +23,6 @@ data class DataPlaneInstance(
     @get:DynamoDbSortKey
     @get:DynamoDbAttribute("sk")
     var sk: String = "",
-    @get:DynamoDbAttribute(LEASE_ID)
-    override var leaseId: String? = null,
     @get:DynamoDbAttribute(ALLOWED_SOURCE_TYPES)
     var allowedSourceTypes: Set<String>? = null,
     @get:DynamoDbAttribute(ALLOWED_TRANSFER_TYPES)
@@ -55,7 +52,11 @@ data class DataPlaneInstance(
     var updatedAt: Long = 0,
     @get:DynamoDbAttribute(URL)
     var url: String? = null,
-) : Leasable {
+    @get:DynamoDbAttribute(PARTICIPANT_CONTEXT_ID)
+    var participantContextId: String? = null,
+    @get:DynamoDbAttribute(DESTINATION_PROVISION_TYPES)
+    var destinationProvisionTypes: Set<String>? = null,
+) {
     val id: String get() = sk
 
     fun toEdcDataPlaneInstance(): EdcDataPlaneInstance =
@@ -75,16 +76,19 @@ data class DataPlaneInstance(
                 stateTimestamp(stateTimestamp)
                 updatedAt(updatedAt)
                 url(url)
+                participantContextId(participantContextId)
+                destinationProvisionTypes?.let { destinationProvisionTypes(it) }
             }.build()
 
     companion object {
         const val ALLOWED_SOURCE_TYPES = "allowedSourceTypes"
         const val ALLOWED_TRANSFER_TYPES = "allowedTransferTypes"
         const val CREATED_AT = "createdAt"
+        const val DESTINATION_PROVISION_TYPES = "destinationProvisionTypes"
         const val ERROR_DETAIL = "errorDetail"
         const val GSI_STATE_PK = "gsiStatePk"
         const val LAST_ACTIVE = "lastActive"
-        const val LEASE_ID = "leaseId"
+        const val PARTICIPANT_CONTEXT_ID = "participantContextId"
         const val PENDING = "pending"
         const val PROPERTIES = "properties"
         const val STATE = "state"
@@ -101,7 +105,6 @@ fun EdcDataPlaneInstance.toDdbDataPlaneInstance(leaseId: String? = null): DataPl
     DataPlaneInstance(
         pk = EntityType.DATA_PLANE_INSTANCE,
         sk = id,
-        leaseId = leaseId,
         allowedSourceTypes = allowedSourceTypes?.let { if (it.isEmpty()) null else it },
         allowedTransferTypes = allowedTransferTypes?.let { if (it.isEmpty()) null else it },
         createdAt = createdAt,
@@ -116,4 +119,6 @@ fun EdcDataPlaneInstance.toDdbDataPlaneInstance(leaseId: String? = null): DataPl
         stateTimestamp = stateTimestamp,
         updatedAt = updatedAt,
         url = url.toString(),
+        participantContextId = participantContextId,
+        destinationProvisionTypes = destinationProvisionTypes.let { if (it.isEmpty()) null else it },
     )

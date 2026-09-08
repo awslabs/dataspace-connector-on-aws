@@ -18,7 +18,6 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortK
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.ListOfMapsConverter
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
-import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.utility.convertValueToMapStringAny
 import java.net.URI
 import org.eclipse.edc.connector.dataplane.spi.DataFlow as EdcDataFlow
@@ -49,8 +48,6 @@ data class DataFlow(
     var transferTypeFlow: String? = null,
     @get:DynamoDbAttribute(TRANSFER_TYPE_RESPONSE_CHANNEL)
     var transferTypeResponseChannel: String? = null,
-    @get:DynamoDbAttribute(LEASE_ID)
-    override var leaseId: String? = null,
     @get:DynamoDbAttribute(PROPERTIES)
     var properties: Map<String, String>? = null,
     @get:DynamoDbAttribute(RESOURCE_DEFINITIONS)
@@ -73,7 +70,7 @@ data class DataFlow(
     var traceContext: Map<String, String>? = null,
     @get:DynamoDbAttribute(UPDATED_AT)
     var updatedAt: Long = 0L,
-) : Leasable {
+) {
     val id: String get() = sk
 
     fun toEdcDataFlow(objectMapper: ObjectMapper): EdcDataFlow =
@@ -128,7 +125,6 @@ data class DataFlow(
         const val TRANSFER_TYPE_DESTINATION = "transferTypeDestination"
         const val TRANSFER_TYPE_FLOW = "transferTypeFlow"
         const val TRANSFER_TYPE_RESPONSE_CHANNEL = "transferTypeResponseChannel"
-        const val LEASE_ID = "leaseId"
         const val PROPERTIES = "properties"
         const val RESOURCE_DEFINITIONS = "resourceDefinitions"
         const val RUNTIME_ID = "runtimeId"
@@ -143,10 +139,7 @@ data class DataFlow(
     }
 }
 
-fun EdcDataFlow.toDdbDataFlow(
-    objectMapper: ObjectMapper,
-    leaseId: String? = null,
-): DataFlow =
+fun EdcDataFlow.toDdbDataFlow(objectMapper: ObjectMapper): DataFlow =
     DataFlow(
         pk = EntityType.DATA_FLOW,
         sk = id,
@@ -159,7 +152,6 @@ fun EdcDataFlow.toDdbDataFlow(
         transferTypeDestination = transferType?.destinationType(),
         transferTypeFlow = transferType?.flowType()?.toString(),
         transferTypeResponseChannel = transferType?.responseChannelType(),
-        leaseId = leaseId,
         properties = properties,
         resourceDefinitions = resourceDefinitions?.map { objectMapper.convertValueToMapStringAny(it) },
         runtimeId = runtimeId,

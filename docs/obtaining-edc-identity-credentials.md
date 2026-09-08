@@ -4,8 +4,8 @@ This guide walks through retrieving the identity values *Dataspace Connector on 
 
 You gather two things here:
 
-1. **Your organization's identity values**, entered once in the `portal.identity` section of [`deployment.yaml`](../README.md#deploymentyaml). They are the same for every connector.
-2. **A technical user per connector**, created in the portal and referenced from [`connectors/connector-<id>.yaml`](../README.md#connectorsconnector-idyaml) by its **service account ID** (`edcTechnicalUserId`).
+1. **Your organization's identity values**, entered once in the `portal.identity` section of [`deployment.yaml`](../README.md#deploymentyaml). They are the deployment-wide default for every connector; a connector may override any of them under its own `portal.identity` for multi-organization deployments.
+2. **A technical user per connector**, created in the portal and referenced from [`connectors/connector-<id>.yaml`](../README.md#connectorsconnector-idyaml) by its **service account ID** (`serviceAccountId`).
 
 At deploy time the pipeline reads each technical user's OAuth client ID and secret from the portal, assembles the connector's EDC identity, stores the secret in AWS Secrets Manager, and registers the connector for discovery.
 
@@ -42,10 +42,10 @@ Once the technical user is active, open its details page. Under **Technical User
 
 ![Technical User Details, the ID field](../img/obtaining-edc-identity-credentials-3.png)
 
-Set it as the `edcTechnicalUserId` in your `connectors/connector-<id>.yaml`:
+Set it as the `serviceAccountId` in your `connectors/connector-<id>.yaml`:
 
 ```yaml
-edcTechnicalUserId: "00000000-0000-0000-0000-000000000000"
+serviceAccountId: "00000000-0000-0000-0000-000000000000"
 ```
 
 You do not copy the Client ID or Secret. At deploy time the pipeline reads them from the portal, assembles the connector's EDC identity, and writes the OAuth client secret to AWS Secrets Manager.
@@ -64,7 +64,7 @@ On the Connector Registration page, click the **small arrow icon (→)** on the 
 
 ## Step 6: Map Portal Values to `deployment.yaml`
 
-The "Configure Your Connector" dialog displays your organization's identity values. These are the same for every connector, so you enter them **once** in the `portal.identity` section of [`deployment.yaml`](../README.md#deploymentyaml).
+The "Configure Your Connector" dialog displays your organization's identity values. These are the deployment-wide default, so you enter them **once** in the `portal.identity` section of [`deployment.yaml`](../README.md#deploymentyaml); a connector may override any field under its own `portal.identity` for a second organization.
 
 ![Configure Your Connector dialog with EDC identity values](../img/obtaining-edc-identity-credentials-6.png)
 

@@ -4,14 +4,24 @@
 /**
  * Post-deploy finalization script for Cofinity-X Portal integration.
  *
- * Runs as a CodeBuild step after the Deploy stage. Stateless — the portal's
- * connector registry and CloudFormation are the sources of truth:
+ * Runs as a CodeBuild step after the Deploy stage. Reads the connector state
+ * table and processes two phases:
  *
- *   1. Finalize new connectors — a connector present in the config but not yet
- *      in the portal registry gets its OAuth client secret written to Secrets
- *      Manager and is registered in the portal (making it discoverable).
- *   2. Clean up orphans — a deployed connector stack whose YAML was removed is
- *      deregistered from the portal and its stack destroyed.
+ *   Phase A — Register deployed connectors
+ *     For each IDENTITY_READY connector: write its OAuth secret to Secrets
+ *     Manager, register it in the portal (making it discoverable), and advance
+ *     its phase to REGISTERED.
+ *
+ *   Phase B — Orphan cleanup
+ *     For each DDB row whose connectorId is not in the current config:
+ *     deregister from the portal (by stored portalConnectorId, so manually-
+ *     registered connectors are never touched), delete the CloudFormation
+ *     stack, and remove the DDB row.
+ *
+ * Admin secrets are grouped by BPNL (orgKey). One PortalClient per tenant;
+ * cleanup uses the stored orgKey to authenticate even after the YAML is gone.
+ * Admin-secret deletion is CDK-owned (SharedInfra reconciles from the active
+ * BPNL set), so finalize never deletes secrets.
  *
  * Usage: node dist/portal/finalize.js --config-path=<path> --stack-prefix=<prefix>
  */
@@ -24,42 +34,129 @@ import {
   CloudFormationClient,
   DeleteStackCommand,
   DescribeStacksCommand,
-  ListStacksCommand,
   waitUntilStackDeleteComplete,
 } from "@aws-sdk/client-cloudformation";
 
 import {
-  ConnectorRegistration,
-  PortalClient,
-  PortalEnvironment,
-  SecretsHelper,
-} from "./client";
+  ConnectorYaml,
+  DEFAULT_DEPLOYMENT_NAME,
+  DeploymentYaml,
+  EDC_SECRETS_MANAGER_ALIASES,
+  deriveAdminSecretName,
+  deriveSecretPrefix,
+} from "../config/config";
+import { ConnectorRegistration, PortalClient, SecretsHelper } from "./client";
+import { ConnectorState, nextState, StateStore } from "./state";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface DeploymentYamlWithPortal {
-  portal?: { environment: PortalEnvironment };
-  domainName?: string;
-  [key: string]: unknown;
-}
-
-interface ConnectorYaml {
-  connectorId: string;
-  edcTechnicalUserId?: string;
-}
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const ADMIN_SECRET_NAME =
-  process.env.PORTAL_ADMIN_SECRET ?? "dataspace-connector/portal-admin";
-const STACK_DELETE_TIMEOUT_SECONDS = 600;
 const DSP_URL_OUTPUT_KEY = "DspApiUrl";
+const STACK_DELETE_TIMEOUT_SECONDS = 600;
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+interface RegisterDeps {
+  getClient: (orgKey: string) => Promise<PortalClient | null>;
+  registryByTenant: Map<string, Map<string, ConnectorRegistration>>;
+  store: Pick<StateStore, "save">;
+  secrets: Pick<SecretsHelper, "putConnectorSecret">;
+}
+
+/**
+ * Phase A: register every deployed connector, isolating per-connector failures.
+ * A connector already at the portal is self-healed (its id recorded, never
+ * re-registered); a failure is logged, left at IDENTITY_READY, and does not
+ * block the others. Returns the ids that failed so the caller can fail the step
+ * after Phase B cleanup has run.
+ */
+export async function registerReadyConnectors(
+  rows: ConnectorState[],
+  currentConnectors: ConnectorYaml[],
+  deploymentName: string,
+  dspBaseUrl: string | undefined,
+  deps: RegisterDeps,
+): Promise<string[]> {
+  const { getClient, registryByTenant, store, secrets } = deps;
+  const currentIds = new Set(currentConnectors.map((c) => c.connectorId));
+  const registrationFailures: string[] = [];
+
+  for (const row of rows) {
+    if (!currentIds.has(row.connectorId)) continue; // orphan — handled in Phase B
+    if (row.phase === "IDENTITY_PENDING") continue; // not deployed yet
+
+    const connector = currentConnectors.find(
+      (c) => c.connectorId === row.connectorId,
+    )!;
+    const client = await getClient(row.orgKey);
+    if (!client) continue;
+
+    const registry = registryByTenant.get(row.orgKey);
+    if (!registry) continue;
+
+    try {
+      const existing = registry.get(row.connectorId);
+      if (existing && row.phase === "REGISTERED") continue; // nothing to do
+      if (existing) {
+        // Registered on the portal but the row was not updated (previous crash).
+        const { state } = nextState(row, {
+          phase: "REGISTERED",
+          portalConnectorId: existing.id,
+        });
+        await store.save(state);
+        console.log(
+          `[portal/finalize] ${row.connectorId}: self-healed, recorded existing registration.`,
+        );
+        continue;
+      }
+
+      console.log(`[portal/finalize] ${row.connectorId}: finalizing...`);
+
+      // Write the OAuth secret before registering so the connector can
+      // authenticate the moment it becomes discoverable.
+      const techUser = await client.getTechUserDetails(
+        connector.serviceAccountId,
+      );
+      const oauthSecretId = `${deriveSecretPrefix(deploymentName, row.connectorId)}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`;
+      await secrets.putConnectorSecret(oauthSecretId, techUser.secret);
+      console.log(
+        `[portal/finalize] ${row.connectorId}: OAuth secret written.`,
+      );
+
+      if (!dspBaseUrl) {
+        console.warn(
+          `[portal/finalize] ${row.connectorId}: DSP URL unavailable, skipping registration (retries next run).`,
+        );
+        continue;
+      }
+
+      const reg = await client.registerConnector(
+        row.connectorId,
+        `${dspBaseUrl}${row.connectorId}`,
+        connector.serviceAccountId,
+      );
+      const { state } = nextState(row, {
+        phase: "REGISTERED",
+        portalConnectorId: reg.id,
+      });
+      await store.save(state);
+      console.log(`[portal/finalize] ${row.connectorId}: registered.`);
+    } catch (err) {
+      console.error(
+        `[portal/finalize] ${row.connectorId}: registration failed, left at IDENTITY_READY — ${(err as Error).message}`,
+      );
+      registrationFailures.push(row.connectorId);
+    }
+  }
+
+  return registrationFailures;
+}
 
 async function main(): Promise<void> {
   const configPath = requireArg("--config-path=");
   const stackPrefix = requireArg("--stack-prefix=");
+
+  const tableName = process.env.STATE_TABLE_NAME;
+  if (!tableName) {
+    throw new Error(
+      "[portal/finalize] STATE_TABLE_NAME environment variable is required.",
+    );
+  }
 
   const deploymentPath = join(configPath, "deployment.yaml");
   if (!existsSync(deploymentPath)) {
@@ -69,121 +166,138 @@ async function main(): Promise<void> {
 
   const deployment = yaml.load(
     readFileSync(deploymentPath, "utf-8"),
-  ) as DeploymentYamlWithPortal;
+  ) as DeploymentYaml;
 
-  if (!deployment.portal) {
+  if (!deployment.portal?.environment) {
     console.log(
       "[portal/finalize] No portal section in deployment.yaml, skipping.",
     );
     return;
   }
+  const { environment } = deployment.portal;
+  const deploymentName = process.env.DEPLOYMENT_NAME ?? DEFAULT_DEPLOYMENT_NAME;
 
   const currentConnectors = readCurrentConnectors(configPath);
+  const currentIds = new Set(currentConnectors.map((c) => c.connectorId));
 
+  const store = new StateStore(tableName);
   const cfn = new CloudFormationClient();
-  const adminCreds = await new SecretsHelper().getAdminCredentials(
-    ADMIN_SECRET_NAME,
-  );
   const secrets = new SecretsHelper();
-  const portal = new PortalClient(deployment.portal.environment, adminCreds);
-  await portal.authenticate();
+  const rows = await store.list();
 
-  // Portal registry is the source of truth for "is this connector registered".
-  const registered = new Map(
-    (await portal.listConnectors()).map((c) => [c.name, c]),
-  );
+  // One authenticated PortalClient per tenant (BPNL). null means the admin
+  // secret is unavailable, so that tenant's connectors are skipped this run.
+  const clients = new Map<string, PortalClient | null>();
+  const getClient = async (orgKey: string): Promise<PortalClient | null> => {
+    if (clients.has(orgKey)) return clients.get(orgKey) ?? null;
+    let client: PortalClient | null = null;
+    try {
+      const creds = await secrets.getAdminCredentials(
+        deriveAdminSecretName(deploymentName, orgKey),
+      );
+      client = new PortalClient(environment, creds);
+      await client.authenticate();
+    } catch {
+      console.warn(
+        `[portal/finalize] Cannot load admin secret for BPNL ${orgKey}, skipping its connectors.`,
+      );
+    }
+    clients.set(orgKey, client);
+    return client;
+  };
+
   const dspBaseUrl = await resolveDspBaseUrl(cfn, stackPrefix, deployment);
 
-  await finalizeNewConnectors(
+  // ── Phase A: register IDENTITY_READY connectors ───────────────────────────
+
+  // One portal list call per tenant yields a name -> registration map, used to
+  // self-heal (registered on the portal but the row never recorded it) and to
+  // avoid duplicate registration.
+  const registryByTenant = new Map<
+    string,
+    Map<string, ConnectorRegistration>
+  >();
+  const uniqueOrgs = [...new Set(rows.map((r) => r.orgKey).filter(Boolean))];
+  for (const orgKey of uniqueOrgs) {
+    const client = await getClient(orgKey);
+    if (!client) continue;
+    try {
+      const list = await client.listConnectors();
+      registryByTenant.set(orgKey, new Map(list.map((c) => [c.name, c])));
+    } catch (err) {
+      console.error(
+        `[portal/finalize] Failed to list connectors for BPNL ${orgKey}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  const registrationFailures = await registerReadyConnectors(
+    rows,
     currentConnectors,
-    registered,
+    deploymentName,
     dspBaseUrl,
-    portal,
-    secrets,
+    { getClient, registryByTenant, store, secrets },
   );
 
-  await cleanupOrphans(cfn, stackPrefix, currentConnectors, registered, portal);
+  // ── Phase B: orphan cleanup ───────────────────────────────────────────────
 
-  console.log("[portal/finalize] Done.");
-}
+  for (const row of rows) {
+    if (currentIds.has(row.connectorId)) continue; // still declared
 
-// ─── Phase 1: Finalize new connectors ───────────────────────────────────────
+    console.log(`[portal/finalize] ${row.connectorId}: orphan, cleaning up...`);
 
-async function finalizeNewConnectors(
-  current: ConnectorYaml[],
-  registered: Map<string, ConnectorRegistration>,
-  dspBaseUrl: string | undefined,
-  portal: PortalClient,
-  secrets: SecretsHelper,
-): Promise<void> {
-  for (const { connectorId, edcTechnicalUserId } of current) {
-    if (registered.has(connectorId)) continue; // already finalized
-    if (!edcTechnicalUserId) continue; // defensive: provision guarantees this is set
-
-    console.log(`[portal/finalize] ${connectorId}: finalizing...`);
-
-    // Write the OAuth secret before registering so the connector can
-    // authenticate the moment it becomes discoverable.
-    const techUser = await portal.getTechUserDetails(edcTechnicalUserId);
-    await secrets.putConnectorSecret(connectorId, techUser.secret);
-    console.log(`[portal/finalize] ${connectorId}: secret written.`);
-
-    if (!dspBaseUrl) {
-      console.warn(
-        `[portal/finalize] ${connectorId}: DSP URL unavailable, skipping registration (retries next run).`,
-      );
-      continue;
+    // Deregister by stored id (exact; never touches externally-registered
+    // connectors). A row without a portalConnectorId was never registered.
+    if (row.portalConnectorId) {
+      const client = await getClient(row.orgKey);
+      if (client) {
+        try {
+          await client.deregisterConnector(row.portalConnectorId);
+          console.log(`[portal/finalize] ${row.connectorId}: deregistered.`);
+        } catch (err) {
+          console.error(
+            `[portal/finalize] ${row.connectorId}: deregistration failed, skipping — ${(err as Error).message}`,
+          );
+          continue;
+        }
+      }
     }
 
-    await portal.registerConnector(
-      connectorId,
-      `${dspBaseUrl}${connectorId}`,
-      edcTechnicalUserId,
-    );
-    console.log(`[portal/finalize] ${connectorId}: registered in portal.`);
-  }
-}
-
-// ─── Phase 2: Orphan cleanup ─────────────────────────────────────────────────
-
-async function cleanupOrphans(
-  cfn: CloudFormationClient,
-  stackPrefix: string,
-  current: ConnectorYaml[],
-  registered: Map<string, ConnectorRegistration>,
-  portal: PortalClient,
-): Promise<void> {
-  const currentIds = new Set(current.map((c) => c.connectorId));
-  const stackPattern = `${stackPrefix}-DataspaceConnector-`;
-
-  for (const stackName of await listConnectorStacks(cfn, stackPattern)) {
-    const connectorId = stackName.slice(stackPattern.length);
-    if (currentIds.has(connectorId)) continue; // still declared — not an orphan
-
-    console.log(`[portal/finalize] ${connectorId}: orphan, cleaning up...`);
-
-    // Deregister from the portal first; skip stack deletion if it fails so we
-    // never leave a registration pointing at deleted infrastructure.
-    const portalConnector = registered.get(connectorId);
-    if (portalConnector) {
-      try {
-        await portal.deregisterConnector(portalConnector.id);
-        console.log(`[portal/finalize] ${connectorId}: deregistered.`);
-      } catch (err) {
+    // Delete the stack by deterministic name. A connector that stayed PENDING
+    // never deployed a stack; treat "not found" as already clean.
+    const stackName = `${stackPrefix}-Connector-${row.connectorId}`;
+    try {
+      await cfn.send(new DeleteStackCommand({ StackName: stackName }));
+      await waitUntilStackDeleteComplete(
+        { client: cfn, maxWaitTime: STACK_DELETE_TIMEOUT_SECONDS },
+        { StackName: stackName },
+      );
+      console.log(`[portal/finalize] ${row.connectorId}: stack deleted.`);
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (
+        !msg.includes("does not exist") &&
+        !msg.includes("ResourceNotFound")
+      ) {
         console.error(
-          `[portal/finalize] ${connectorId}: deregistration failed, skipping stack deletion — ${(err as Error).message}`,
+          `[portal/finalize] ${row.connectorId}: stack deletion failed — ${msg}`,
         );
         continue;
       }
     }
 
-    await cfn.send(new DeleteStackCommand({ StackName: stackName }));
-    await waitUntilStackDeleteComplete(
-      { client: cfn, maxWaitTime: STACK_DELETE_TIMEOUT_SECONDS },
-      { StackName: stackName },
-    );
-    console.log(`[portal/finalize] ${connectorId}: stack deleted.`);
+    await store.remove(row.connectorId);
+    console.log(`[portal/finalize] ${row.connectorId}: DDB row removed.`);
   }
+
+  if (registrationFailures.length > 0) {
+    throw new Error(
+      `${registrationFailures.length} connector(s) failed to register (${registrationFailures.join(", ")}); ` +
+        `their state remains IDENTITY_READY and will be retried on the next run.`,
+    );
+  }
+
+  console.log("[portal/finalize] Done.");
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -214,50 +328,18 @@ function readCurrentConnectors(configPath: string): ConnectorYaml[] {
     );
 }
 
-/** Lists deployed connector stack names (excludes the shared-infra stack). */
-async function listConnectorStacks(
-  cfn: CloudFormationClient,
-  stackPattern: string,
-): Promise<string[]> {
-  const names: string[] = [];
-  let nextToken: string | undefined;
-  do {
-    const result = await cfn.send(
-      new ListStacksCommand({
-        NextToken: nextToken,
-        StackStatusFilter: [
-          "CREATE_COMPLETE",
-          "UPDATE_COMPLETE",
-          "UPDATE_ROLLBACK_COMPLETE",
-        ],
-      }),
-    );
-    for (const s of result.StackSummaries ?? []) {
-      if (s.StackName?.startsWith(stackPattern)) names.push(s.StackName);
-    }
-    nextToken = result.NextToken;
-  } while (nextToken);
-  return names;
-}
-
-/**
- * Resolves the base DSP URL (connectorId is appended by the caller).
- * Prefers the custom domain from deployment.yaml, falls back to the
- * SharedInfra stack's DSP API endpoint output.
- */
 async function resolveDspBaseUrl(
   cfn: CloudFormationClient,
   stackPrefix: string,
-  deployment: DeploymentYamlWithPortal,
+  deployment: DeploymentYaml,
 ): Promise<string | undefined> {
   if (deployment.domainName) {
     return `https://${deployment.domainName}/protocol/`;
   }
-
   try {
     const result = await cfn.send(
       new DescribeStacksCommand({
-        StackName: `${stackPrefix}-DataspaceConnectorSharedInfraStack`,
+        StackName: `${stackPrefix}-SharedInfra`,
       }),
     );
     const output = (result.Stacks?.[0]?.Outputs ?? []).find(
@@ -276,7 +358,11 @@ async function resolveDspBaseUrl(
   return undefined;
 }
 
-main().catch((err) => {
-  console.error(`[portal/finalize] FATAL: ${err.message}`);
-  process.exit(1);
-});
+// Entrypoint guard: run only when invoked directly (node dist/portal/finalize.js),
+// not when imported by tests.
+if (process.argv[1]?.endsWith("finalize.js")) {
+  main().catch((err) => {
+    console.error(`[portal/finalize] FATAL: ${err.message}`);
+    process.exit(1);
+  });
+}

@@ -10,7 +10,7 @@ author: "AWS"
 
 ## Overview
 
-This power helps you deploy and operate a production-ready Dataspace Connector for Catena-X on AWS. It combines an AWS CDK deployment blueprint with 19 MCP tools for interacting with the Eclipse Dataspace Components (EDC) Management API.
+This power helps you deploy and operate a production-ready Dataspace Connector for Catena-X on AWS. It combines an AWS CDK deployment blueprint with 12 MCP tools for interacting with the Eclipse Dataspace Components (EDC) Management API.
 
 The connector uses Tractus-X EDC with AWS-native integrations: Amazon DynamoDB for control plane persistence, AWS Secrets Manager for credentials, Amazon S3 for data transfer, and Amazon API Gateway with IAM authorization for secure API access.
 
@@ -33,34 +33,27 @@ With this power, you can go from zero to a fully deployed connector with validat
 
 ## Available MCP Tools
 
-This power provides 19 tools covering the full EDC Management API workflow:
+This power provides 12 general-purpose EDC primitives. Workflow orchestration (the consumer and provider sequences) lives in the steering files and the agent, keeping the server workflow-agnostic.
 
-### Discovery tools (multi-connector deployments)
-- `list_connectors`: Discover all deployed connector IDs from CloudFormation (requires `EDC_MULTI_CONNECTOR=true`)
+### Discovery (multi-connector deployments)
+- `list_connectors`: Discover all deployed connector IDs and the Management/DSP base URLs from CloudFormation (requires `EDC_MULTI_CONNECTOR=true`)
+
+### Generic resource operations
+- `query_resources`: List/query a resource collection by `resource_type` (`assets`, `policy_definitions`, `contract_definitions`, `contract_negotiations`, `contract_agreements`, `transfer_processes`), with optional filter/sort/pagination
+- `get_resource`: Read one resource by id for the same types, plus `edr` (the raw endpoint data reference for a transfer, for inspection). Carries the negotiation and transfer state-machine progressions for polling
+- `delete_resource`: Delete a deletable resource (`assets`, `policy_definitions`, `contract_definitions`)
 
 ### Provider-side tools (create data offerings)
 - `create_asset`: Create a new asset with data address
-- `create_policy_definition`: Create a new policy definition with ODRL rules
+- `create_policy`: Create a new policy definition with ODRL rules
 - `create_contract_definition`: Create a contract definition linking assets to policies
 
 ### Consumer-side tools (discover and consume data)
 - `request_catalog`: Request the catalog from another connector to discover available datasets
-- `initiate_contract_negotiation`: Start a contract negotiation (passes full policy from catalog)
-- `get_contract_negotiation`: Get the full contract negotiation object including state, contractAgreementId, and errorDetail
-- `get_contract_agreement`: Retrieve a finalized contract agreement
+- `initiate_negotiation`: Start a contract negotiation (pass the catalog offer's policy through exactly)
 - `initiate_transfer`: Start a data transfer using a contract agreement
-- `get_transfer_process`: Get the full transfer process object including state, correlationId, and errorDetail
-- `get_edr_data_address`: Get the endpoint data reference (EDR) for an active transfer
-- `fetch_data_with_edr`: Fetch actual data from the provider's data plane using an EDR (handles token refresh transparently)
-- `initiate_edr_negotiation`: Combined negotiation + transfer in one call (shortcut for the full consumer flow)
-
-### Query tools
-- `query_assets`: List/search assets with filtering and pagination
-- `query_policy_definitions`: List/search policy definitions
-- `query_contract_definitions`: List/search contract definitions
-- `query_contract_negotiations`: List/search contract negotiations
-- `query_transfer_processes`: List/search transfer processes
-- `query_contract_agreements`: List/search contract agreements
+- `manage_transfer`: Suspend / resume / complete / terminate a transfer; pass `transfer_process_id="all_started"` to terminate every STARTED transfer (idle provider-side pull transfers accrue DynamoDB cost)
+- `fetch_data`: Fetch data from the provider's data plane for an active transfer, resolving the EDR and appending the `public/` sub-path automatically (handles token refresh transparently)
 
 ## Onboarding
 
@@ -111,103 +104,100 @@ Add a hook to `.kiro/hooks/catena-x-compliance-check.kiro.hook` to automatically
     "type": "postToolUse",
     "toolTypes": [
       ".*create_asset.*",
-      ".*create_policy_definition.*",
+      ".*create_policy.*",
       ".*create_contract_definition.*"
     ]
   },
   "then": {
     "type": "askAgent",
-    "prompt": "A Catena-X EDC resource was just created. If a compliance brief has been loaded in this session (from the prototype-use-case steering file), verify the created resource against the compliance matrix:\n\nFor create_asset: Check that the asset properties include the correct dct:type (cx-taxo:*) and dct:subject values as specified in the applicable standard's DATA ASSET STRUCTURE section. Verify cx-common:version matches. Flag any missing required properties.\n\nFor create_policy_definition: Check that the policy includes the correct UsagePurpose rightOperand value as specified in the standard's USAGE POLICY section. Verify the FrameworkAgreement constraint is present with the correct value. For access policies, verify the appropriate access constraint (e.g., Membership check).\n\nFor create_contract_definition: Verify the access_policy_id and contract_policy_id reference policies that were validated as compliant. Verify the assets_selector targets an asset that was validated as compliant.\n\nIf no compliance brief has been loaded in this session, skip the check silently.\n\nIf a violation is found, state: COMPLIANCE ISSUE: [description]. The standard CX-XXXX requires [requirement]. The created resource [does not meet this / is missing X]. Then suggest the correction."
+    "prompt": "A Catena-X EDC resource was just created. If a compliance brief has been loaded in this session (from the prototype-use-case steering file), verify the created resource against the compliance matrix:\n\nFor create_asset: Check that the asset properties include the correct dct:type (cx-taxo:*) and dct:subject values as specified in the applicable standard's DATA ASSET STRUCTURE section. Verify cx-common:version matches. Flag any missing required properties.\n\nFor create_policy: Check that the policy includes the correct UsagePurpose rightOperand value as specified in the standard's USAGE POLICY section. Verify the FrameworkAgreement constraint is present with the correct value. For access policies, verify the appropriate access constraint (e.g., Membership check).\n\nFor create_contract_definition: Verify the access_policy_id and contract_policy_id reference policies that were validated as compliant. Verify the assets_selector targets an asset that was validated as compliant.\n\nIf no compliance brief has been loaded in this session, skip the check silently.\n\nIf a violation is found, state: COMPLIANCE ISSUE: [description]. The standard CX-XXXX requires [requirement]. The created resource [does not meet this / is missing X]. Then suggest the correction."
   }
 }
 ```
 
-This hook fires after `create_asset`, `create_policy_definition`, and `create_contract_definition` MCP tool calls. When a compliance brief has been loaded via the **prototype-use-case** steering file, it checks that the created resource matches the normative requirements. When no brief is loaded, it silently skips.
+This hook fires after `create_asset`, `create_policy`, and `create_contract_definition` MCP tool calls. When a compliance brief has been loaded via the **prototype-use-case** steering file, it checks that the created resource matches the normative requirements. When no brief is loaded, it silently skips.
 
 ## Tool Usage Examples
 
-### Discover datasets from another connector
+### Discover connectors and datasets
 ```python
+# Discover deployed connectors + Management/DSP base URLs (multi-connector mode)
+list_connectors()
+
+# Browse another connector's catalog
 request_catalog(
-    counter_party_address="https://provider.example.com/protocol",
+    connector_id="<your-connector>",
+    counter_party_address="https://provider.example.com/protocol/<provider-connector>",
     counter_party_id="BPNL000000000001"
 )
 ```
 
 ### Full consumer flow: negotiate, transfer, get data
 ```python
-# 1. Negotiate a contract (pass full policy from catalog offer)
-initiate_contract_negotiation(
-    counter_party_address="https://provider.example.com/protocol",
+# 1. Negotiate a contract (pass the catalog offer's policy through exactly)
+initiate_negotiation(
+    connector_id="<your-connector>",
+    counter_party_address="https://provider.example.com/protocol/<provider-connector>",
     offer_id="<offer-id-from-catalog>",
     asset_id="<asset-id>",
     assigner="BPNL000000000001",
-    permission=[{"odrl:action": {"@id": "odrl:use"}}],
-    prohibition=[],
-    obligation=[]
+    permission=<odrl:permission from catalog offer>,
+    prohibition=<odrl:prohibition from catalog offer>,
+    obligation=<odrl:obligation from catalog offer>
 )
 
-# 2. Poll until FINALIZED: returns full object with contractAgreementId
-get_contract_negotiation(negotiation_id="<negotiation-id>")
+# 2. Poll until FINALIZED: the response carries contractAgreementId
+get_resource(connector_id="<your-connector>", resource_type="contract_negotiations", resource_id="<negotiation-id>")
 
-# 3. Extract contractAgreementId from the response above, then retrieve agreement
-get_contract_agreement(agreement_id="<agreement-id>")
+# 3. (optional) retrieve the agreement itself
+get_resource(connector_id="<your-connector>", resource_type="contract_agreements", resource_id="<agreement-id>")
 
 # 4. Start transfer
 initiate_transfer(
-    counter_party_address="https://provider.example.com/protocol",
+    connector_id="<your-connector>",
+    counter_party_address="https://provider.example.com/protocol/<provider-connector>",
     contract_id="<agreement-id>",
     transfer_type="HttpData-PULL"
 )
 
-# 5. Poll until STARTED, then get EDR
-get_edr_data_address(transfer_process_id="<transfer-id>")
+# 5. Poll until STARTED
+get_resource(connector_id="<your-connector>", resource_type="transfer_processes", resource_id="<transfer-id>")
 
-# 6. Fetch the actual data from the provider's data plane
-fetch_data_with_edr(transfer_process_id="<transfer-id>")
+# 6. Fetch the data (appends the /public/ sub-path automatically)
+fetch_data(connector_id="<your-connector>", transfer_process_id="<transfer-id>")
 
-# Fetch with sub-path and query params
-fetch_data_with_edr(
+# Fetch with a sub-path and query params
+fetch_data(
+    connector_id="<your-connector>",
     transfer_process_id="<transfer-id>",
-    path="/items",
+    path="/public/items",
     query_params={"limit": "10"}
 )
+
+# Inspect the raw EDR (endpoint, token, refresh info) without fetching
+get_resource(connector_id="<your-connector>", resource_type="edr", resource_id="<transfer-id>")
 ```
 
-### Alternative: Combined negotiation + transfer (shortcut)
+### List, terminate, and clean up
 ```python
-# Single call that handles negotiation and transfer automatically
-initiate_edr_negotiation(
-    counter_party_address="https://provider.example.com/protocol",
-    offer_id="<offer-id-from-catalog>",
-    asset_id="<asset-id>",
-    assigner="BPNL000000000001",
-    permission=[{"odrl:action": {"@id": "odrl:use"}}],
-    prohibition=[],
-    obligation=[]
-)
+# List a resource collection. NOTE: filter the `state` field by EDC's integer
+# state code as a number (600=STARTED, 850=TERMINATED), not the string label.
+query_resources(connector_id="<your-connector>", resource_type="transfer_processes", limit=50)
 
-# Poll negotiation until FINALIZED to get the contractAgreementId
-negotiation = get_contract_negotiation(negotiation_id="<negotiation-id>")
+# End one transfer, or every STARTED transfer at once. Idle provider-side pull
+# transfers keep a data-plane flow active and accrue DynamoDB cost.
+manage_transfer(connector_id="<your-connector>", transfer_process_id="<transfer-id>", action="terminate", reason="done")
+manage_transfer(connector_id="<your-connector>", transfer_process_id="all_started", action="terminate", reason="idle cleanup")
 
-# Find the transfer process created by the EDR negotiation
-transfers = query_transfer_processes(filter_expression=[{
-    "operandLeft": "contractId",
-    "operator": "=",
-    "operandRight": "<contractAgreementId-from-negotiation>"
-}])
-
-# Once the transfer reaches STARTED, get the EDR
-get_edr_data_address(transfer_process_id="<transfer-id-from-query>")
-
-# Fetch the actual data
-fetch_data_with_edr(transfer_process_id="<transfer-id-from-query>")
+# Delete a test asset / policy / contract definition. Delete the contract definition
+# first; an asset referenced by a finalized agreement returns 409 until it is gone.
+delete_resource(connector_id="<your-connector>", resource_type="contract_definitions", resource_id="my-contract-def")
 ```
 
 ### Create a data offering (provider side)
 ```python
 # 1. Access policy (controls catalog visibility)
-create_policy_definition(
+create_policy(
     policy_id="my-access-policy",
     policy={
         "@type": "Set",
@@ -223,7 +213,7 @@ create_policy_definition(
 )
 
 # 2. Usage policy (controls contract negotiation: requires FrameworkAgreement + UsagePurpose)
-create_policy_definition(
+create_policy(
     policy_id="my-usage-policy",
     policy={
         "@type": "Set",
@@ -265,7 +255,7 @@ create_contract_definition(
 Your AWS credentials don't have `execute-api:Invoke` permission for the Management API Gateway, or your IAM principal ARN isn't listed in `managementApiPrincipals` in `deployment.yaml`.
 
 ### Contract negotiation returns "Policy not equal to offer"
-You must pass the full policy from the catalog offer (including `permission`, `prohibition`, `obligation` arrays) when calling `initiate_contract_negotiation`. Don't construct a minimal policy stub.
+You must pass the full policy from the catalog offer (including `permission`, `prohibition`, `obligation`) when calling `initiate_negotiation`. Don't construct a minimal policy stub.
 
 ### Transfer stuck in INITIAL state
 Ensure `dataDestination` is provided. For `HttpData-PULL` transfers, the MCP server automatically sets `{"type": "HttpProxy"}` as the destination.
@@ -277,7 +267,7 @@ The MCP server refreshes AWS credentials on every request, so temporary credenti
 
 ### EDC Identity Settings (from Cofinity-X Portal)
 
-These organization-wide values are configured once in the `portal.identity` section of `deployment.yaml` and are the same for every connector. The pipeline reads each connector's technical-user credentials from the portal (referenced by `edcTechnicalUserId` in the connector YAML) and assembles the rest of the EDC identity automatically.
+These values are the deployment-wide default, configured once in the `portal.identity` section of `deployment.yaml`; a connector may override any of them under its own `portal.identity` to host multiple organizations (BPNLs) in one deployment. The pipeline reads each connector's technical-user credentials from the portal (referenced by `serviceAccountId` in the connector YAML) and assembles the rest of the EDC identity automatically.
 
 | YAML Field (`portal.identity`) | EDC Property | Description |
 |------|------|-------------|
@@ -315,7 +305,7 @@ Before using this power, replace the following placeholders in `mcp.json` with y
   - **How to get it:** After cloning the repository, use the full path to the `mcp/` folder, e.g., `/Users/yourname/Code/dataspace-connector-on-aws/mcp`
 
 - **`PLACEHOLDER_MANAGEMENT_API_URL`**: The EDC Management API endpoint URL from your deployment.
-  - **How to get it:** After the pipeline's Deploy stage completes, read the `ManagementApiUrl` output of the `Deploy-DataspaceConnectorSharedInfraStack`. It looks like `https://<api-id>.execute-api.<region>.amazonaws.com/management/`. Use it as-is (the base URL without a connector suffix); the `connector_id` parameter on each tool call handles routing.
+  - **How to get it:** After the pipeline's Deploy stage completes, read the `ManagementApiUrl` output of the `DataspaceConnector-SharedInfra`. It looks like `https://<api-id>.execute-api.<region>.amazonaws.com/management/`. Use it as-is (the base URL without a connector suffix); the `connector_id` parameter on each tool call handles routing.
 
 - **`PLACEHOLDER_AWS_REGION`**: The AWS region where the connector is deployed.
   - **How to set it:** Use the region you chose during deployment (e.g., `eu-central-1`)

@@ -14,7 +14,6 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.STATE_INDEX_CACHE_TTL_MILLIS
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
-import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.IterationCache
 import software.amazon.edc.extensions.common.ddb.utility.ddbReadLimit
@@ -66,8 +65,9 @@ class DdbTransferProcessStore(
             } else {
                 indexed.asSequence()
             }
+        val leased = activeLeaseIds()
         return items
-            .filterNot { hasActiveLease(it) }
+            .filterNot { it.sk in leased }
             .map { it.toEdcTransferProcess(objectMapper) }
             .filter { predicate.test(it) }
             .sortedBy { it.stateTimestamp }
@@ -81,28 +81,21 @@ class DdbTransferProcessStore(
             getTransferProcess(id)
                 ?: return StoreResult.notFound("TransferProcess with ID $id not found!")
         return try {
-            acquireLease(transferProcess)
+            acquireLease(transferProcess.sk)
             StoreResult.success(transferProcess.toEdcTransferProcess(objectMapper))
         } catch (e: IllegalStateException) {
             StoreResult.alreadyLeased("TransferProcess $id is already leased!")
         }
     }
 
-    override fun save(transferProcess: EdcTransferProcess) {
-        val leaseId =
-            if (getTransferProcess(transferProcess.id) == null) {
-                null
-            } else {
-                acquireLease(transferProcess.id)
-            }
-        try {
-            table.putItem(transferProcess.toDdbTransferProcess(objectMapper, leaseId))
-        } finally {
-            if (leaseId != null) {
-                breakLease(transferProcess.id)
-            }
+    override fun save(transferProcess: EdcTransferProcess): StoreResult<Void> {
+        if (isLeasedByAnother(transferProcess.id)) {
+            return StoreResult.alreadyLeased("TransferProcess ${transferProcess.id} is already leased!")
         }
+        table.putItem(transferProcess.toDdbTransferProcess(objectMapper))
+        breakLease(transferProcess.id)
         stateCache.invalidate()
+        return StoreResult.success()
     }
 
     override fun findForCorrelationId(correlationId: String): EdcTransferProcess? =
@@ -113,12 +106,13 @@ class DdbTransferProcessStore(
             .firstOrNull()
             ?.toEdcTransferProcess(objectMapper)
 
-    override fun delete(id: String) {
+    override fun delete(id: String): StoreResult<Void> {
         if (hasLease(id)) {
-            throw IllegalStateException("TransferProcess $id cannot be deleted because it is currently leased!")
+            return StoreResult.alreadyLeased("TransferProcess $id cannot be deleted because it is currently leased!")
         }
         table.deleteItem(keyFromPkSk(EntityType.TRANSFER_PROCESS, id))
         stateCache.invalidate()
+        return StoreResult.success()
     }
 
     override fun findAll(querySpec: QuerySpec): Stream<EdcTransferProcess> =
@@ -133,13 +127,6 @@ class DdbTransferProcessStore(
                 .asStream(),
             querySpec,
         )
-
-    override fun getLeasableById(id: String): Leasable? = getTransferProcess(id)
-
-    override fun updateLeaseId(leasable: Leasable) {
-        table.updateItem(leasable as TransferProcess)
-        stateCache.invalidate()
-    }
 
     private fun getTransferProcess(id: String): TransferProcess? = table.getItem(keyFromPkSk(EntityType.TRANSFER_PROCESS, id))
 }

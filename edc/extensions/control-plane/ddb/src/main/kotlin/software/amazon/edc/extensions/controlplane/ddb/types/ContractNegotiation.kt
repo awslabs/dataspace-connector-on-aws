@@ -18,7 +18,6 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortK
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.ListOfMapsConverter
 import software.amazon.edc.extensions.common.ddb.MapStringAnyConverter
-import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.utility.convertValueToMapStringAny
 import org.eclipse.edc.connector.controlplane.contract.spi.types.negotiation.ContractNegotiation as EdcContractNegotiation
 
@@ -53,8 +52,6 @@ data class ContractNegotiation(
     @get:DynamoDbAttribute(GSI_STATE_PK)
     @get:DynamoDbSecondaryPartitionKey(indexNames = [GSI_STATE])
     var gsiStatePk: String? = null,
-    @get:DynamoDbAttribute(LEASE_ID)
-    override var leaseId: String? = null,
     @get:DynamoDbAttribute(PENDING)
     var pending: Boolean = false,
     @get:DynamoDbAttribute(PROTOCOL)
@@ -76,7 +73,9 @@ data class ContractNegotiation(
     var type: String = "",
     @get:DynamoDbAttribute(UPDATED_AT)
     var updatedAt: Long = 0L,
-) : Leasable {
+    @get:DynamoDbAttribute(PARTICIPANT_CONTEXT_ID)
+    var participantContextId: String? = null,
+) {
     val id: String get() = sk
 
     fun toEdcContractNegotiation(
@@ -104,6 +103,7 @@ data class ContractNegotiation(
                 traceContext?.let { traceContext(it) }
                 type(EdcContractNegotiation.Type.valueOf(type))
                 updatedAt(updatedAt)
+                participantContextId(participantContextId)
             }.build()
 
     companion object {
@@ -116,7 +116,7 @@ data class ContractNegotiation(
         const val CREATED_AT = "createdAt"
         const val ERROR_DETAIL = "errorDetail"
         const val GSI_STATE_PK = "gsiStatePk"
-        const val LEASE_ID = "leaseId"
+        const val PARTICIPANT_CONTEXT_ID = "participantContextId"
         const val PENDING = "pending"
         const val PROTOCOL = "protocol"
         const val PROTOCOL_MESSAGES = "protocolMessages"
@@ -132,10 +132,7 @@ data class ContractNegotiation(
     }
 }
 
-fun EdcContractNegotiation.toDdbContractNegotiation(
-    objectMapper: ObjectMapper,
-    leaseId: String? = null,
-): ContractNegotiation =
+fun EdcContractNegotiation.toDdbContractNegotiation(objectMapper: ObjectMapper): ContractNegotiation =
     ContractNegotiation(
         pk = EntityType.CONTRACT_NEGOTIATION,
         sk = id,
@@ -148,7 +145,6 @@ fun EdcContractNegotiation.toDdbContractNegotiation(
         createdAt = createdAt,
         errorDetail = errorDetail,
         gsiStatePk = if (ContractNegotiationStates.isFinal(state)) null else EntityType.CONTRACT_NEGOTIATION,
-        leaseId = leaseId,
         pending = isPending,
         protocol = protocol,
         protocolMessages = objectMapper.convertValueToMapStringAny(protocolMessages),
@@ -158,4 +154,5 @@ fun EdcContractNegotiation.toDdbContractNegotiation(
         traceContext = traceContext,
         type = type.toString(),
         updatedAt = updatedAt,
+        participantContextId = participantContextId,
     )

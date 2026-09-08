@@ -2,54 +2,122 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Pre-synth provisioning script for Cofinity-X Portal integration.
+ * Pre-synth reconcile loop for Cofinity-X Portal integration.
  *
- * Runs inside the CDK Pipeline Synth step, between TypeScript compilation and
- * `cdk synth`. For every connector it assembles the `edcIam` block from:
- *   - organization-wide identity values in deployment.yaml (portal.identity)
- *   - the connector's OAuth client ID, read fresh from the portal API
- * and writes it into the connector YAML (workspace-local only).
+ * Runs inside the CDK Pipeline Synth step, before `cdk synth`. For each
+ * connector it reconciles the desired config (YAML) against observed state
+ * (DynamoDB) and does the minimum outstanding work:
  *
- * Stateless by design: the portal is the source of truth, so every run is an
- * idempotent read. `edcTechnicalUserId` is retained in the file (the CDK config
- * loader requires it); `edcIam` is added alongside it.
+ *   1. Merge the effective identity (deployment default + connector override).
+ *   2. Gate on portal-side prerequisites (identity complete, admin secret
+ *      populated, technical user ACTIVE). A failure leaves the connector at
+ *      IDENTITY_PENDING and retries next run, never failing the whole run.
+ *   3. On success, resolve edcIam (identity + the technical user's clientId),
+ *      emit it to the ephemeral file, and advance the phase to IDENTITY_READY.
+ *
+ * Outputs (consumed within the same Synth step by `cdk synth`): the resolved
+ * edcIam file (READY connectors only) and the active-BPNL set (union of config
+ * BPNLs and live DDB orgKeys, so SharedInfra keeps a tenant's admin secret alive
+ * through the run that offboards its last connector).
  *
  * Usage: node dist/portal/provision.js --config-path=<path>
  */
 
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "fs";
-import { join, resolve } from "path";
-import * as yaml from "js-yaml";
+import { resolve } from "path";
 
+import {
+  ConnectorYaml,
+  DEFAULT_DEPLOYMENT_NAME,
+  DeploymentYaml,
+  EdcIam,
+  deriveAdminSecretName,
+  isIdentityComplete,
+  loadDeploymentConfig,
+  resolveConnectorIdentity,
+} from "../config/config";
 import { PortalClient, PortalEnvironment, SecretsHelper } from "./client";
+import { nextState, StateStore } from "./state";
+import { ResolvedEdcIam, writeProvisionOutput } from "./provision-output";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+/**
+ * Reconciles desired config against observed state for each connector and
+ * returns the resolved edcIam map (READY connectors only) plus the active-BPNL
+ * set. Dependencies (state store, per-tenant portal client factory) are injected
+ * so the gating logic is testable without AWS or the portal. A per-connector
+ * prerequisite failure leaves that connector PENDING and never throws.
+ */
+export async function reconcile(
+  deployment: DeploymentYaml,
+  connectors: ConnectorYaml[],
+  store: StateStore,
+  getClient: (bpnl: string) => Promise<PortalClient | null>,
+): Promise<{ resolved: ResolvedEdcIam; activeBpnls: string[] }> {
+  // Union of config BPNLs and live DDB orgKeys. Seeding from existing rows keeps
+  // a tenant's admin secret alive through the run that offboards its last connector.
+  const activeBpnls = new Set<string>();
+  for (const row of await store.list()) {
+    if (row.orgKey) activeBpnls.add(row.orgKey);
+  }
 
-interface PortalIdentity {
-  trustedIssuer: string;
-  stsOauthTokenUrl: string;
-  stsDimUrl: string;
-  participantId: string;
-  dcpId: string;
-  didResolver: string;
+  const resolved: ResolvedEdcIam = {};
+
+  for (const connector of connectors) {
+    const { connectorId, serviceAccountId } = connector;
+    const identity = resolveConnectorIdentity(deployment, connector);
+    const bpnl = identity.participantId;
+    if (bpnl) activeBpnls.add(bpnl);
+
+    const current = await store.ensureRow(connectorId, bpnl ?? "");
+
+    const pend = async (reason: string): Promise<void> => {
+      console.warn(`[portal/provision] ${connectorId}: PENDING (${reason}).`);
+      const { state, changed } = nextState(current, {
+        orgKey: bpnl ?? current.orgKey,
+      });
+      if (changed) await store.save(state);
+    };
+
+    if (!isIdentityComplete(identity)) {
+      await pend("effective identity incomplete");
+      continue;
+    }
+
+    const client = await getClient(identity.participantId);
+    if (!client) {
+      await pend("admin secret not populated");
+      continue;
+    }
+
+    let clientId: string;
+    try {
+      const techUser = await client.getTechUserDetails(serviceAccountId);
+      if (techUser.status !== "ACTIVE") {
+        await pend(
+          `technical user ${serviceAccountId} not ACTIVE (${techUser.status})`,
+        );
+        continue;
+      }
+      clientId = techUser.clientId;
+    } catch (err) {
+      await pend(
+        `technical user ${serviceAccountId} unresolved: ${(err as Error).message}`,
+      );
+      continue;
+    }
+
+    const edcIam: EdcIam = { ...identity, stsOauthClientId: clientId };
+    resolved[connectorId] = edcIam;
+
+    const { state, changed } = nextState(current, {
+      phase: "IDENTITY_READY",
+      orgKey: identity.participantId,
+    });
+    if (changed) await store.save(state);
+    console.log(`[portal/provision] ${connectorId}: IDENTITY_READY.`);
+  }
+
+  return { resolved, activeBpnls: [...activeBpnls] };
 }
-
-interface DeploymentYaml {
-  portal?: { environment: PortalEnvironment; identity: PortalIdentity };
-}
-
-interface ConnectorYaml {
-  connectorId: string;
-  edcTechnicalUserId?: string;
-  [key: string]: unknown;
-}
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const ADMIN_SECRET_NAME =
-  process.env.PORTAL_ADMIN_SECRET ?? "dataspace-connector/portal-admin";
-
-// ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   const configPathArg = process.argv.find((a) =>
@@ -61,80 +129,56 @@ async function main(): Promise<void> {
   }
   const configPath = resolve(configPathArg.split("=")[1]);
 
-  const deployment = yaml.load(
-    readFileSync(join(configPath, "deployment.yaml"), "utf-8"),
-  ) as DeploymentYaml;
-
-  if (!deployment.portal?.environment || !deployment.portal?.identity) {
-    throw new Error(
-      "[portal/provision] deployment.yaml requires a portal section with 'environment' and 'identity'.",
-    );
-  }
-  const { environment, identity } = deployment.portal;
-
-  const connectorsDir = join(configPath, "connectors");
-  const files = existsSync(connectorsDir)
-    ? readdirSync(connectorsDir).filter(
-        (f) => f.startsWith("connector-") && f.endsWith(".yaml"),
-      )
-    : [];
-
-  if (files.length === 0) {
-    console.log("[portal/provision] No connectors to provision. Done.");
-    return;
+  const tableName = process.env.STATE_TABLE_NAME;
+  if (!tableName) {
+    throw new Error("[portal/provision] STATE_TABLE_NAME env var is required.");
   }
 
-  const adminCreds = await new SecretsHelper().getAdminCredentials(
-    ADMIN_SECRET_NAME,
+  const { deployment, connectors } = loadDeploymentConfig(configPath);
+  const environment = deployment.portal.environment as PortalEnvironment;
+  const deploymentName = process.env.DEPLOYMENT_NAME ?? DEFAULT_DEPLOYMENT_NAME;
+
+  const store = new StateStore(tableName);
+  const secrets = new SecretsHelper();
+
+  // One authenticated PortalClient per tenant (BPNL). null means the admin
+  // secret is missing or unpopulated, so that tenant's connectors stay PENDING.
+  const clients = new Map<string, PortalClient | null>();
+  const getClient = async (bpnl: string): Promise<PortalClient | null> => {
+    if (clients.has(bpnl)) return clients.get(bpnl) ?? null;
+    const secretName = deriveAdminSecretName(deploymentName, bpnl);
+    let client: PortalClient | null = null;
+    try {
+      const creds = await secrets.getAdminCredentials(secretName);
+      client = new PortalClient(environment, creds);
+      await client.authenticate();
+    } catch (err) {
+      console.warn(
+        `[portal/provision] admin secret ${secretName} unavailable: ${(err as Error).message}`,
+      );
+    }
+    clients.set(bpnl, client);
+    return client;
+  };
+
+  const { resolved, activeBpnls } = await reconcile(
+    deployment,
+    connectors,
+    store,
+    getClient,
   );
-  const portal = new PortalClient(environment, adminCreds);
-  await portal.authenticate();
 
-  for (const file of files) {
-    const path = join(connectorsDir, file);
-    const connector = yaml.load(readFileSync(path, "utf-8")) as ConnectorYaml;
-
-    if (!connector.edcTechnicalUserId) {
-      throw new Error(
-        `[portal/provision] ${file}: 'edcTechnicalUserId' is required. ` +
-          `Create a technical user in the Cofinity-X Portal and reference its ID.`,
-      );
-    }
-
-    const techUser = await portal.getTechUserDetails(
-      connector.edcTechnicalUserId,
-    );
-    if (techUser.status !== "ACTIVE") {
-      throw new Error(
-        `[portal/provision] ${connector.connectorId}: tech user ${connector.edcTechnicalUserId} ` +
-          `is not ACTIVE (status: ${techUser.status}). Wait for DIM provisioning to complete.`,
-      );
-    }
-
-    const edcIam = {
-      trustedIssuer: identity.trustedIssuer,
-      stsOauthTokenUrl: identity.stsOauthTokenUrl,
-      stsOauthClientId: techUser.clientId,
-      stsDimUrl: identity.stsDimUrl,
-      participantId: identity.participantId,
-      dcpId: identity.dcpId,
-      didResolver: identity.didResolver,
-    };
-
-    writeFileSync(
-      path,
-      yaml.dump({ ...connector, edcIam }, { lineWidth: -1 }),
-      "utf-8",
-    );
-    console.log(
-      `[portal/provision] ${connector.connectorId}: edcIam written to ${file}.`,
-    );
-  }
-
-  console.log("[portal/provision] Done.");
+  writeProvisionOutput(configPath, resolved, activeBpnls);
+  console.log(
+    `[portal/provision] Done. ${Object.keys(resolved).length} connector(s) ready, ${activeBpnls.length} tenant(s).`,
+  );
 }
 
-main().catch((err) => {
-  console.error(`[portal/provision] FATAL: ${err.message}`);
-  process.exit(1);
-});
+// Entrypoint guard: run only when invoked directly (node dist/portal/provision.js),
+// not when imported by tests.
+if (process.argv[1]?.endsWith("provision.js")) {
+  main().catch((err) => {
+    console.error(`[portal/provision] FATAL: ${err.message}`);
+    process.exit(1);
+  });
+}

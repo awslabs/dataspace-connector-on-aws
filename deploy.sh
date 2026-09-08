@@ -39,27 +39,15 @@ npx tsc
 
 cdk bootstrap
 
+DEPLOYMENT_NAME=$(python3 -c "import yaml; print(yaml.safe_load(open('../${CONFIG_PATH}/pipeline.yaml')).get('deploymentName','DataspaceConnector'))")
+echo "Deployment name: ${DEPLOYMENT_NAME}"
+
 CDK_DEFAULT_ACCOUNT="${ACCOUNT_ID}" CDK_DEFAULT_REGION="${AWS_REGION}" \
-  npx cdk deploy DataspaceConnectorPipelineStack \
+  npx cdk deploy "${DEPLOYMENT_NAME}PipelineStack" \
   --context "config-path=../${CONFIG_PATH}" \
   --require-approval never
 
 cd ..
-
-# Populate the Cofinity-X Portal admin credentials secret. The pipeline stack
-# created the (empty) secret; the value is injected here so it never passes
-# through CloudFormation.
-echo ""
-echo "Enter the Cofinity-X Portal admin technical user credentials"
-echo "(roles: Offer Management + Dataspace Discovery)."
-read -r -p "  Client ID: " PORTAL_CLIENT_ID
-read -r -s -p "  Client Secret: " PORTAL_CLIENT_SECRET
-echo ""
-aws secretsmanager put-secret-value \
-  --secret-id "dataspace-connector/portal-admin" \
-  --secret-string "{\"clientId\":\"${PORTAL_CLIENT_ID}\",\"clientSecret\":\"${PORTAL_CLIENT_SECRET}\"}" \
-  --region "${AWS_REGION}" >/dev/null
-echo "✅ Portal admin credentials stored in Secrets Manager."
 
 echo ""
 echo "✅ Pipeline deployed. Push changes to your config repository to trigger deployments."

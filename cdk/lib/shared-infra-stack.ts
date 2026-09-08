@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { resolve } from "path";
-import { CfnOutput, IgnoreMode, Stack, StackProps } from "aws-cdk-lib";
+import {
+  CfnOutput,
+  IgnoreMode,
+  RemovalPolicy,
+  Stack,
+  StackProps,
+} from "aws-cdk-lib";
 import { Construct } from "constructs";
 import { Certificate } from "aws-cdk-lib/aws-certificatemanager";
 import { HostedZone } from "aws-cdk-lib/aws-route53";
@@ -28,7 +34,13 @@ import { Cluster, ContainerInsights, ICluster } from "aws-cdk-lib/aws-ecs";
 import { DockerImageAsset, Platform } from "aws-cdk-lib/aws-ecr-assets";
 import { VpcLink } from "aws-cdk-lib/aws-apigatewayv2";
 
-import { DeploymentYaml, toPrincipals } from "./config/config";
+import { Secret } from "aws-cdk-lib/aws-secretsmanager";
+
+import {
+  deriveAdminSecretName,
+  DeploymentYaml,
+  toPrincipals,
+} from "./config/config";
 import {
   CONTROL_PLANE_PORT_MAPPING_DEFAULT,
   DATA_PLANE_PORT_MAPPING_DEFAULT,
@@ -38,6 +50,8 @@ import { EdcSecretCleanup } from "./constructs/edc-secret-cleanup";
 
 export interface SharedInfraStackProps extends StackProps {
   readonly config: DeploymentYaml;
+  readonly adminBpnls: string[];
+  readonly deploymentName: string;
 }
 
 export class SharedInfraStack extends Stack {
@@ -61,7 +75,6 @@ export class SharedInfraStack extends Stack {
     const cpPorts = CONTROL_PLANE_PORT_MAPPING_DEFAULT;
     const dpPorts = DATA_PLANE_PORT_MAPPING_DEFAULT;
 
-    // VPC — ALB requires minimum 2 AZs; use single NAT in dev to save cost
     this.vpc = new Vpc(this, "Vpc", {
       ipAddresses: IpAddresses.cidr(config.vpcIpAddresses),
       maxAzs: 2,
@@ -74,7 +87,6 @@ export class SharedInfraStack extends Stack {
       service: GatewayVpcEndpointAwsService.DYNAMODB,
     });
 
-    // ECS Cluster
     this.ecsCluster = new Cluster(this, "EcsCluster", {
       containerInsightsV2: config.containerInsights
         ? ContainerInsights.ENABLED
@@ -95,7 +107,6 @@ export class SharedInfraStack extends Stack {
       ignoreMode: IgnoreMode.DOCKER,
     });
 
-    // ALB
     const albSg = new SecurityGroup(this, "AlbSecurityGroup", {
       description: "Security group for ALB communication with EDC services",
       allowAllOutbound: false,
@@ -113,7 +124,6 @@ export class SharedInfraStack extends Stack {
       vpc: this.vpc,
     });
 
-    // One listener per EDC port (7 total: 4 CP + 3 DP)
     this.listenerArns = {};
     for (const port of new Set(allPorts)) {
       const listener = alb.addListener(`Listener${port}`, {
@@ -130,7 +140,6 @@ export class SharedInfraStack extends Stack {
     this.albDnsName = alb.loadBalancerDnsName;
     this.albSecurityGroupId = albSg.securityGroupId;
 
-    // VPC Link V2
     const vpcLink = new VpcLink(this, "VpcLink", {
       vpc: this.vpc,
       subnets: { subnetType: SubnetType.PRIVATE_WITH_EGRESS },
@@ -138,7 +147,6 @@ export class SharedInfraStack extends Stack {
     });
     this.vpcLinkId = vpcLink.vpcLinkId;
 
-    // Custom domain (optional)
     let certificate;
     let hostedZone;
     if (config.domainName && config.hostedZoneId && config.certificateArn) {
@@ -153,7 +161,6 @@ export class SharedInfraStack extends Stack {
       });
     }
 
-    // REST APIs (shared across all connectors — spec uses {connectorId} path param)
     const api = new EdcApi(this, "EdcApi", {
       albArn: this.albArn,
       certificate,
@@ -173,10 +180,20 @@ export class SharedInfraStack extends Stack {
     this.dataPlaneUrl = api.outputs.dataPlaneUrl;
     this.managementUrl = api.outputs.managementUrl;
 
-    // Scheduled cleanup of expired EDR secrets
     new EdcSecretCleanup(this, "EdcSecretCleanup");
 
-    // Outputs for cross-stack references
+    // Per-tenant portal admin secret placeholders (one per BPNL). Created empty
+    // for the operator to populate out-of-band; CDK owns their lifecycle and
+    // deletes one when its BPNL leaves the active set. The set is the union of
+    // config BPNLs and live DDB orgKeys, emitted by provision.
+    for (const bpnl of props.adminBpnls) {
+      new Secret(this, `PortalAdmin${bpnl}`, {
+        secretName: deriveAdminSecretName(props.deploymentName, bpnl),
+        description: `Cofinity-X portal admin credentials for BPNL ${bpnl} (JSON: clientId, clientSecret). Populate out-of-band.`,
+        removalPolicy: RemovalPolicy.DESTROY,
+      });
+    }
+
     new CfnOutput(this, "VpcId", { value: this.vpc.vpcId });
     new CfnOutput(this, "ClusterArn", { value: this.ecsCluster.clusterArn });
     new CfnOutput(this, "AlbDnsName", { value: this.albDnsName });

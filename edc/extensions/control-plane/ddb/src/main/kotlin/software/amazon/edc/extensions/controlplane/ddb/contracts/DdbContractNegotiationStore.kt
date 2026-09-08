@@ -15,7 +15,6 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.STATE_INDEX_CACHE_TTL_MILLIS
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
-import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.IterationCache
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
@@ -90,12 +89,13 @@ class DdbContractNegotiationStore(
             } else {
                 indexed.asSequence()
             }
+        val leased = activeLeaseIds()
         return items
-            .filterNot { hasActiveLease(it) }
+            .filterNot { it.sk in leased }
             .sortedBy { it.id }
             .sortedWith(querySpec.getGenericPropertyComparator())
             .map {
-                acquireLease(it)
+                acquireLease(it.sk)
                 val agreement = it.agreementId?.let { agreementId -> getContractAgreement(agreementId) }
                 it.toEdcContractNegotiation(objectMapper, agreement)
             }.applyOffsetAndLimit(querySpec)
@@ -107,7 +107,7 @@ class DdbContractNegotiationStore(
             getContractNegotiation(id)
                 ?: return StoreResult.notFound("ContractNegotiation with ID $id not found!")
         return try {
-            acquireLease(contractNegotiation)
+            acquireLease(contractNegotiation.sk)
             val agreement = contractNegotiation.agreementId?.let { getContractAgreement(it) }
             StoreResult.success(contractNegotiation.toEdcContractNegotiation(objectMapper, agreement))
         } catch (e: IllegalStateException) {
@@ -115,19 +115,17 @@ class DdbContractNegotiationStore(
         }
     }
 
-    override fun save(contractNegotiation: EdcContractNegotiation) {
-        val leaseId = getContractNegotiation(contractNegotiation.id)?.let { acquireLease(it) }
-        try {
-            contractNegotiationTable.putItem(contractNegotiation.toDdbContractNegotiation(objectMapper, leaseId))
-            if (contractNegotiation.contractAgreement != null) {
-                contractAgreementTable.putItem(contractNegotiation.contractAgreement.toDdbContractAgreement(objectMapper))
-            }
-        } finally {
-            if (leaseId != null) {
-                breakLease(contractNegotiation.id)
-            }
+    override fun save(contractNegotiation: EdcContractNegotiation): StoreResult<Void> {
+        if (isLeasedByAnother(contractNegotiation.id)) {
+            return StoreResult.alreadyLeased("ContractNegotiation ${contractNegotiation.id} is already leased!")
         }
+        contractNegotiationTable.putItem(contractNegotiation.toDdbContractNegotiation(objectMapper))
+        if (contractNegotiation.contractAgreement != null) {
+            contractAgreementTable.putItem(contractNegotiation.contractAgreement.toDdbContractAgreement(objectMapper))
+        }
+        breakLease(contractNegotiation.id)
         stateCache.invalidate()
+        return StoreResult.success()
     }
 
     override fun findContractAgreement(contractId: String): EdcContractAgreement? =
@@ -144,7 +142,7 @@ class DdbContractNegotiationStore(
             )
         }
         if (hasLease(negotiationId)) {
-            throw IllegalStateException(
+            return StoreResult.alreadyLeased(
                 "ContractNegotiation with ID $negotiationId cannot be deleted because it is currently leased!",
             )
         }
@@ -182,13 +180,6 @@ class DdbContractNegotiationStore(
             .sortedWith(querySpec.getGenericPropertyComparator())
             .applyOffsetAndLimit(querySpec)
             .asStream()
-    }
-
-    override fun getLeasableById(id: String): Leasable? = getContractNegotiation(id)
-
-    override fun updateLeaseId(leasable: Leasable) {
-        contractNegotiationTable.updateItem(leasable as ContractNegotiation)
-        stateCache.invalidate()
     }
 
     private fun getContractAgreement(id: String): ContractAgreement? =

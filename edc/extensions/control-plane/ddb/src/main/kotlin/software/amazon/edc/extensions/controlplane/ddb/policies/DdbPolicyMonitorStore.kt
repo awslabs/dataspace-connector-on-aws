@@ -13,7 +13,6 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable
 import software.amazon.edc.extensions.common.ddb.EntityType
 import software.amazon.edc.extensions.common.ddb.STATE_INDEX_CACHE_TTL_MILLIS
 import software.amazon.edc.extensions.common.ddb.leases.AbstractLeasableEntityDao
-import software.amazon.edc.extensions.common.ddb.types.Leasable
 import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.IterationCache
 import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
@@ -64,11 +63,12 @@ class DdbPolicyMonitorStore(
             } else {
                 indexed.asSequence()
             }
+        val leased = activeLeaseIds()
         return items
-            .filterNot { hasActiveLease(it) }
+            .filterNot { it.sk in leased }
             .sortedWith(querySpec.getGenericPropertyComparator())
             .map {
-                acquireLease(it)
+                acquireLease(it.sk)
                 it.toEdcPolicyMonitor()
             }.applyOffsetAndLimit(querySpec)
             .toMutableList()
@@ -77,35 +77,18 @@ class DdbPolicyMonitorStore(
     override fun findByIdAndLease(id: String): StoreResult<PolicyMonitorEntry> {
         val policyMonitor = getPolicyMonitor(id) ?: return StoreResult.notFound("PolicyMonitor $id was not found!")
         return try {
-            acquireLease(policyMonitor)
+            acquireLease(policyMonitor.sk)
             StoreResult.success(policyMonitor.toEdcPolicyMonitor())
         } catch (e: IllegalStateException) {
             StoreResult.alreadyLeased("PolicyMonitor $id is already leased!")
         }
     }
 
-    override fun save(entry: PolicyMonitorEntry) {
-        val leaseId =
-            if (getPolicyMonitor(entry.id) == null) {
-                null
-            } else {
-                acquireLease(entry.id)
-            }
-        try {
-            table.putItem(entry.toDdbPolicyMonitor(leaseId))
-        } finally {
-            if (leaseId != null) {
-                breakLease(entry.id)
-            }
-        }
+    override fun save(entry: PolicyMonitorEntry): StoreResult<Void> {
+        table.putItem(entry.toDdbPolicyMonitor())
+        breakLease(entry.id)
         stateCache.invalidate()
-    }
-
-    override fun getLeasableById(id: String): Leasable? = getPolicyMonitor(id)
-
-    override fun updateLeaseId(leasable: Leasable) {
-        table.updateItem(leasable as PolicyMonitor)
-        stateCache.invalidate()
+        return StoreResult.success()
     }
 
     private fun getPolicyMonitor(id: String): PolicyMonitor? = table.getItem(keyFromPkSk(EntityType.POLICY_MONITOR, id))

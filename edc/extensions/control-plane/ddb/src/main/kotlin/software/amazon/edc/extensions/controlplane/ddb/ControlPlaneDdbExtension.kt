@@ -90,7 +90,7 @@ class ControlPlaneDdbExtension : ServiceExtension {
         val policyMonitorTable = ddbClient.table(tableName, TableSchema.fromBean(PolicyMonitor::class.java))
         val transferProcessTable = ddbClient.table(tableName, TableSchema.fromBean(TransferProcess::class.java))
 
-        val assetIndex = DdbAssetIndex(criterionOperatorRegistry, assetTable)
+        val assetIndex = DdbAssetIndex(criterionOperatorRegistry, typeManager.mapper, assetTable)
         context.registerService(AssetIndex::class.java, assetIndex)
         context.registerService(DataAddressResolver::class.java, assetIndex)
 

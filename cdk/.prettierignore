@@ -1,0 +1,5 @@
+dist/
+build/
+cdk.out/
+node_modules/
+coverage/

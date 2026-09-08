@@ -8,7 +8,13 @@ import { App, Tags } from "aws-cdk-lib";
 import * as yaml from "js-yaml";
 
 import { PipelineStack } from "./pipeline-stack";
-import { loadDeploymentConfig, PipelineYaml } from "./config/config";
+import {
+  loadDeploymentConfig,
+  PipelineYaml,
+  resolveDeploymentName,
+  validateDeploymentName,
+} from "./config/config";
+import { readActiveBpnls, readResolvedEdcIam } from "./portal/provision-output";
 
 const app = new App();
 
@@ -31,10 +37,17 @@ const pipelineConfig = yaml.load(
 ) as PipelineYaml;
 
 const deploymentConfig = loadDeploymentConfig(configPath);
+const resolvedEdcIam = readResolvedEdcIam(configPath);
+const activeBpnls = readActiveBpnls(configPath);
 
-new PipelineStack(app, "DataspaceConnectorPipelineStack", {
+const deploymentName = resolveDeploymentName(pipelineConfig);
+validateDeploymentName(deploymentName);
+
+new PipelineStack(app, `${deploymentName}PipelineStack`, {
   pipelineConfig,
   deploymentConfig,
+  resolvedEdcIam,
+  activeBpnls,
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION,

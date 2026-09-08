@@ -8,9 +8,13 @@ import { SharedInfraStack } from "./shared-infra-stack";
 import { ConnectorStack } from "./connector-stack";
 
 import { connectorPriority, DeploymentConfig } from "./config/config";
+import { ResolvedEdcIam } from "./portal/provision-output";
 
 export interface DeploymentStageProps extends StageProps {
   readonly config: DeploymentConfig;
+  readonly resolvedEdcIam: ResolvedEdcIam;
+  readonly activeBpnls: string[];
+  readonly deploymentName: string;
 }
 
 export class DeploymentStage extends Stage {
@@ -19,15 +23,20 @@ export class DeploymentStage extends Stage {
 
     const { deployment, connectors } = props.config;
 
-    const sharedInfra = new SharedInfraStack(
-      this,
-      "DataspaceConnectorSharedInfraStack",
-      { config: deployment },
-    );
+    const sharedInfra = new SharedInfraStack(this, "SharedInfra", {
+      config: deployment,
+      adminBpnls: props.activeBpnls,
+      deploymentName: props.deploymentName,
+    });
 
     const priorities = new Map<number, string>();
 
     connectors.forEach((connector) => {
+      // Deploy-gate: only connectors provision resolved to IDENTITY_READY have
+      // an entry in the ephemeral edcIam map. Others are skipped this run.
+      const edcIam = props.resolvedEdcIam[connector.connectorId];
+      if (!edcIam) return;
+
       const priority = connectorPriority(connector.connectorId);
       const existing = priorities.get(priority);
       if (existing) {
@@ -39,8 +48,15 @@ export class DeploymentStage extends Stage {
 
       const stack = new ConnectorStack(
         this,
-        `DataspaceConnector-${connector.connectorId}`,
-        { connector, deployment, sharedInfra, priority },
+        `Connector-${connector.connectorId}`,
+        {
+          connector,
+          deployment,
+          sharedInfra,
+          priority,
+          edcIam,
+          deploymentName: props.deploymentName,
+        },
       );
       stack.addDependency(sharedInfra);
     });

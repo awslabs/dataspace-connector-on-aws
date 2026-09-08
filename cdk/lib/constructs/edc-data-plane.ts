@@ -20,19 +20,14 @@ import {
 import {
   CONTROL_PLANE_PORT_MAPPING_DEFAULT,
   DATA_PLANE_PORT_MAPPING_DEFAULT,
+  AlbOutputs,
 } from "../config/port-mappings";
 
-import { IApplicationTargetGroup } from "aws-cdk-lib/aws-elasticloadbalancingv2";
-
-export interface AlbOutputs {
-  readonly dnsName: string;
-  readonly securityGroupId: string;
-  readonly targetGroups: { [port: number]: IApplicationTargetGroup };
-}
-
-import { EDC_SECRETS_MANAGER_ALIASES } from "../config/config";
+import {
+  EDC_SECRETS_MANAGER_ALIASES,
+  DeploymentProfile,
+} from "../config/config";
 import { EdcFargateService } from "./edc-fargate-service";
-import { DeploymentProfile } from "../config/config";
 
 export interface EdcDataPlaneProps {
   readonly albOutputs: AlbOutputs;
@@ -47,6 +42,7 @@ export interface EdcDataPlaneProps {
   readonly profile: DeploymentProfile;
   readonly secretPrefix: string;
   readonly dataPlaneStateMachineIterationMillis: string;
+  readonly dataPlaneFlowLeaseMillis: string;
   readonly taskRolePolicyStatements: PolicyStatement[];
   readonly vpc: IVpc;
 }
@@ -98,6 +94,8 @@ export class EdcDataPlane extends Construct {
         "edc.dataplane.api.public.baseurl": props.apiPublicUrl,
         "edc.dataplane.state-machine.iteration-wait-millis":
           props.dataPlaneStateMachineIterationMillis,
+        "edc.dataplane.state-machine.flow.lease.time":
+          props.dataPlaneFlowLeaseMillis,
         "edc.ddb.table.name": props.ddbTableName,
         "edc.dpf.selector.url": `http://${props.albOutputs.dnsName}:${controlPlanePortMapping.control}/${props.connectorId}/api/control/v1/dataplanes`,
         "edc.hostname": props.albOutputs.dnsName,
@@ -155,7 +153,6 @@ export class EdcDataPlane extends Construct {
       taskDefinition: taskDefinition,
     });
 
-    // Register on all other DP target groups
     for (const port of Object.values(dataPlanePortMapping)) {
       if (port === dataPlanePortMapping.default) continue;
       const tg = props.albOutputs.targetGroups[port];
