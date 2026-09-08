@@ -93,16 +93,16 @@ class DdbDataPlaneStoreWriteCostTest {
     }
 
     @Test
-    fun `no-op save writes no entity item and releases the lease`() {
+    fun `re-saving an unchanged entity still writes it (flow-lease heartbeat must persist)`() {
         val flow = dataFlow("df-2")
         store.save(flow)
         store.acquireLease("df-2")
         counting.reset()
 
-        val result = store.save(flow) // identical -> no-op
+        val result = store.save(flow) // heartbeat-style re-save: must NOT be skipped (advances updatedAt)
 
         assertTrue(result.succeeded())
-        assertEquals(0, counting.writes(EntityType.DATA_FLOW))
+        assertEquals(1, counting.writes(EntityType.DATA_FLOW))
         assertFalse(store.isLeasedBy("df-2", "connector"))
     }
 

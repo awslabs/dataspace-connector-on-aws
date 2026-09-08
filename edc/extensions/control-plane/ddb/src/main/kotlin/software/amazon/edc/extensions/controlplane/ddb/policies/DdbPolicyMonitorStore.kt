@@ -87,11 +87,6 @@ class DdbPolicyMonitorStore(
     override fun save(entry: PolicyMonitorEntry): StoreResult<Void> {
         val incoming = entry.toDdbPolicyMonitor()
         val current = getPolicyMonitor(entry.id)
-        // Unchanged — skip the entity+GSI write; still release the lease (EDC save-releases-lease contract).
-        if (current != null && current == incoming.copy(updatedAt = current.updatedAt)) {
-            breakLease(entry.id)
-            return StoreResult.success()
-        }
         if (current != null) {
             try {
                 acquireLease(entry.id)

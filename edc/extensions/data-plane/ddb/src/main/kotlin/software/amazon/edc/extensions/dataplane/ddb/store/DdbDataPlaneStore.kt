@@ -81,11 +81,6 @@ class DdbDataPlaneStore(
     override fun save(dataFlow: EdcDataFlow): StoreResult<Void> {
         val incoming = dataFlow.toDdbDataFlow(objectMapper)
         val current = getDataFlow(dataFlow.id)
-        // Unchanged — skip the entity+GSI write; still release the lease (EDC save-releases-lease contract).
-        if (current != null && current == incoming.copy(updatedAt = current.updatedAt)) {
-            breakLease(dataFlow.id)
-            return StoreResult.success()
-        }
         if (current != null) {
             try {
                 acquireLease(dataFlow.id)

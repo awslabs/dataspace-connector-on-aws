@@ -118,14 +118,6 @@ class DdbContractNegotiationStore(
     override fun save(contractNegotiation: EdcContractNegotiation): StoreResult<Void> {
         val incoming = contractNegotiation.toDdbContractNegotiation(objectMapper)
         val current = getContractNegotiation(contractNegotiation.id)
-        // No-op guard only when there is no agreement to (re)persist alongside the negotiation.
-        if (current != null &&
-            contractNegotiation.contractAgreement == null &&
-            current == incoming.copy(updatedAt = current.updatedAt)
-        ) {
-            breakLease(contractNegotiation.id)
-            return StoreResult.success()
-        }
         if (current != null) {
             try {
                 acquireLease(contractNegotiation.id)

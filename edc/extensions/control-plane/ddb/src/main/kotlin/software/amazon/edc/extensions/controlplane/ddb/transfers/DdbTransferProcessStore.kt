@@ -91,11 +91,6 @@ class DdbTransferProcessStore(
     override fun save(transferProcess: EdcTransferProcess): StoreResult<Void> {
         val incoming = transferProcess.toDdbTransferProcess(objectMapper)
         val current = getTransferProcess(transferProcess.id)
-        // Unchanged — skip the entity+GSI write; still release the lease (EDC save-releases-lease contract).
-        if (current != null && current == incoming.copy(updatedAt = current.updatedAt)) {
-            breakLease(transferProcess.id)
-            return StoreResult.success()
-        }
         if (current != null) {
             try {
                 acquireLease(transferProcess.id)
