@@ -234,6 +234,7 @@ export class ConnectorStack extends Stack {
       secretPrefix,
       dataPlaneStateMachineIterationMillis:
         connector.interactiveStateMachineIterationMillis ?? "10000",
+      dataPlaneFlowLeaseMillis: connector.dataPlaneFlowLeaseMillis ?? "10000",
       taskRolePolicyStatements: policyStatements,
       vpc: infra.vpc,
     });

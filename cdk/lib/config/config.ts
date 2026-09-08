@@ -90,6 +90,14 @@ export interface ConnectorYaml {
   readonly interactiveStateMachineIterationMillis?: string;
   /** Iteration interval (ms) for the policy monitor and data-plane selector state machines. Default "60000". */
   readonly backgroundStateMachineIterationMillis?: string;
+  /**
+   * Data-plane flow-lease heartbeat interval (ms) for in-flight (STARTED) PULL flows. Each open flow
+   * re-stamps its ownership this often (a DynamoDB write), and after value × 5 an unrefreshed flow is
+   * considered abandoned so another data-plane runtime may take it over. Lower = faster multi-runtime
+   * failover but higher DynamoDB write cost; raise it to cut cost on single-runtime deployments. Set
+   * independently of the poll intervals. Default "10000" (abandon window 50s); EDC's own default is 500ms.
+   */
+  readonly dataPlaneFlowLeaseMillis?: string;
   readonly edcStateRemovalPolicy: "DESTROY" | "RETAIN";
   /** Cofinity-X portal technical user (service account) ID, authored by the operator. */
   readonly serviceAccountId: string;
