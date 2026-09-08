@@ -116,22 +116,14 @@ class DdbContractNegotiationStore(
     }
 
     override fun save(contractNegotiation: EdcContractNegotiation): StoreResult<Void> {
-        val incoming = contractNegotiation.toDdbContractNegotiation(objectMapper)
-        val current = getContractNegotiation(contractNegotiation.id)
-        if (current != null) {
-            try {
-                acquireLease(contractNegotiation.id)
-            } catch (e: IllegalStateException) {
-                return StoreResult.alreadyLeased("ContractNegotiation ${contractNegotiation.id} is already leased!")
-            }
+        if (isLeasedByAnother(contractNegotiation.id)) {
+            return StoreResult.alreadyLeased("ContractNegotiation ${contractNegotiation.id} is already leased!")
         }
-        contractNegotiationTable.putItem(incoming)
+        contractNegotiationTable.putItem(contractNegotiation.toDdbContractNegotiation(objectMapper))
         if (contractNegotiation.contractAgreement != null) {
             contractAgreementTable.putItem(contractNegotiation.contractAgreement.toDdbContractAgreement(objectMapper))
         }
-        if (current != null) {
-            breakLease(contractNegotiation.id)
-        }
+        breakLease(contractNegotiation.id)
         stateCache.invalidate()
         return StoreResult.success()
     }

@@ -89,19 +89,11 @@ class DdbTransferProcessStore(
     }
 
     override fun save(transferProcess: EdcTransferProcess): StoreResult<Void> {
-        val incoming = transferProcess.toDdbTransferProcess(objectMapper)
-        val current = getTransferProcess(transferProcess.id)
-        if (current != null) {
-            try {
-                acquireLease(transferProcess.id)
-            } catch (e: IllegalStateException) {
-                return StoreResult.alreadyLeased("TransferProcess ${transferProcess.id} is already leased!")
-            }
+        if (isLeasedByAnother(transferProcess.id)) {
+            return StoreResult.alreadyLeased("TransferProcess ${transferProcess.id} is already leased!")
         }
-        table.putItem(incoming)
-        if (current != null) {
-            breakLease(transferProcess.id)
-        }
+        table.putItem(transferProcess.toDdbTransferProcess(objectMapper))
+        breakLease(transferProcess.id)
         stateCache.invalidate()
         return StoreResult.success()
     }

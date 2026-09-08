@@ -85,19 +85,8 @@ class DdbPolicyMonitorStore(
     }
 
     override fun save(entry: PolicyMonitorEntry): StoreResult<Void> {
-        val incoming = entry.toDdbPolicyMonitor()
-        val current = getPolicyMonitor(entry.id)
-        if (current != null) {
-            try {
-                acquireLease(entry.id)
-            } catch (e: IllegalStateException) {
-                return StoreResult.alreadyLeased("PolicyMonitor ${entry.id} is already leased!")
-            }
-        }
-        table.putItem(incoming)
-        if (current != null) {
-            breakLease(entry.id)
-        }
+        table.putItem(entry.toDdbPolicyMonitor())
+        breakLease(entry.id)
         stateCache.invalidate()
         return StoreResult.success()
     }

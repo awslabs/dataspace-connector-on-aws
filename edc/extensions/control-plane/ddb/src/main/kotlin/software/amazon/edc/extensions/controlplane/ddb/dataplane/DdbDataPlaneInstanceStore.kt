@@ -89,19 +89,8 @@ class DdbDataPlaneInstanceStore(
     }
 
     override fun save(dataPlaneInstance: EdcDataPlaneInstance): StoreResult<Void> {
-        val incoming = dataPlaneInstance.toDdbDataPlaneInstance()
-        val current = getDataPlaneInstance(dataPlaneInstance.id)
-        if (current != null) {
-            try {
-                acquireLease(dataPlaneInstance.id)
-            } catch (e: IllegalStateException) {
-                return StoreResult.alreadyLeased("DataPlaneInstance ${dataPlaneInstance.id} is already leased!")
-            }
-        }
-        table.putItem(incoming)
-        if (current != null) {
-            breakLease(dataPlaneInstance.id)
-        }
+        table.putItem(dataPlaneInstance.toDdbDataPlaneInstance())
+        breakLease(dataPlaneInstance.id)
         stateCache.invalidate()
         return StoreResult.success()
     }

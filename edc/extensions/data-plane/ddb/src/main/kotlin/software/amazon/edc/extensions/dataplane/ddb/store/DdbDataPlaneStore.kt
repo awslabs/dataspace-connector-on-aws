@@ -79,19 +79,8 @@ class DdbDataPlaneStore(
     }
 
     override fun save(dataFlow: EdcDataFlow): StoreResult<Void> {
-        val incoming = dataFlow.toDdbDataFlow(objectMapper)
-        val current = getDataFlow(dataFlow.id)
-        if (current != null) {
-            try {
-                acquireLease(dataFlow.id)
-            } catch (e: IllegalStateException) {
-                return StoreResult.alreadyLeased("DataFlow ${dataFlow.id} is already leased!")
-            }
-        }
-        table.putItem(incoming)
-        if (current != null) {
-            breakLease(dataFlow.id)
-        }
+        table.putItem(dataFlow.toDdbDataFlow(objectMapper))
+        breakLease(dataFlow.id)
         stateCache.invalidate()
         return StoreResult.success()
     }

@@ -78,6 +78,12 @@ abstract class AbstractLeasableEntityDao(
         return !lease.isExpired(clock)
     }
 
+    /** True if a non-expired lease on [entityId] is held by a holder other than [leaseHolder]. */
+    protected fun isLeasedByAnother(entityId: String): Boolean {
+        val lease = getLease(entityId) ?: return false
+        return !lease.isExpired(clock) && lease.leasedBy != leaseHolder
+    }
+
     fun isLeasedBy(
         entityId: String,
         leaseHolder: String = this.leaseHolder,

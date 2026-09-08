@@ -107,15 +107,17 @@ class DdbDataPlaneStoreWriteCostTest {
     }
 
     @Test
-    fun `changed save writes exactly one entity item and releases the lease`() {
+    fun `save writes one entity item, one lease release, and no read (no redundant re-acquire)`() {
         store.save(dataFlow("df-3"))
         store.acquireLease("df-3")
         counting.reset()
 
         store.save(dataFlow("df-3", baseUrl = "http://changed"))
 
-        assertEquals(1, counting.writes(EntityType.DATA_FLOW))
-        assertFalse(store.isLeasedBy("df-3", "connector"))
+        assertEquals(1, counting.writes(EntityType.DATA_FLOW)) // one entity putItem
+        assertEquals(0, counting.writes(EntityType.LEASE)) // no lease put == no redundant re-acquire
+        assertEquals(0, counting.getItemCount) // no exists-check read
+        assertFalse(store.isLeasedBy("df-3", "connector")) // lease released (via delete)
     }
 
     @Test
