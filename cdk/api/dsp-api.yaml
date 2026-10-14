@@ -2453,10 +2453,10 @@ paths:
         integrationTarget: ${albArn}
   /{connectorId}/2024/1/negotiations/offers:
     post:
-      description: ''
+      description: ""
       operationId: initialContractOffer_1
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
       responses:
         default:
           content:
@@ -2481,10 +2481,10 @@ paths:
         integrationTarget: ${albArn}
   /{connectorId}/2024/1/negotiations/{id}/offers:
     post:
-      description: ''
+      description: ""
       operationId: providerOffer_1
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2515,10 +2515,10 @@ paths:
         integrationTarget: ${albArn}
   /{connectorId}/2025-1/negotiations/offer:
     post:
-      description: ''
+      description: ""
       operationId: deprecatedInitialContractOffer_2
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
       responses:
         default:
           content:
@@ -2543,10 +2543,10 @@ paths:
         integrationTarget: ${albArn}
   /{connectorId}/2025-1/negotiations/{id}/offer:
     post:
-      description: ''
+      description: ""
       operationId: deprecatedProviderOffer_2
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
@@ -2577,10 +2577,10 @@ paths:
         integrationTarget: ${albArn}
   /{connectorId}/negotiations/offers:
     post:
-      description: ''
+      description: ""
       operationId: initialContractOffer
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
       responses:
         default:
           content:
@@ -2605,10 +2605,10 @@ paths:
         integrationTarget: ${albArn}
   /{connectorId}/negotiations/{id}/offers:
     post:
-      description: ''
+      description: ""
       operationId: providerOffer
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: id
           required: true
