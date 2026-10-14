@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared by the control and data plane. Unset EDC_LOG_LEVEL keeps the Tractus-X
+  default (EDC monitor INFO, all other loggers OFF); a set value applies to all.
+-->
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{ISO8601} %-5level [%t] %logger{36} - %msg%n"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Logger name="org.eclipse.edc.monitor.logger" level="${env:EDC_LOG_LEVEL:-INFO}" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+        <!-- Capped at INFO: at DEBUG these log credentials (SigV4 session tokens, Authorization headers, secret values). -->
+        <Logger name="software.amazon.awssdk">
+            <ThresholdFilter level="INFO" onMatch="NEUTRAL" onMismatch="DENY"/>
+        </Logger>
+        <Logger name="org.apache.hc">
+            <ThresholdFilter level="INFO" onMatch="NEUTRAL" onMismatch="DENY"/>
+        </Logger>
+        <Logger name="org.eclipse.jetty">
+            <ThresholdFilter level="INFO" onMatch="NEUTRAL" onMismatch="DENY"/>
+        </Logger>
+        <Root level="${env:EDC_LOG_LEVEL:-OFF}">
+            <AppenderRef ref="Console"/>
+        </Root>
+    </Loggers>
+</Configuration>

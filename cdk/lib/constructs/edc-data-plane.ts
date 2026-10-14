@@ -26,6 +26,7 @@ import {
 import {
   EDC_SECRETS_MANAGER_ALIASES,
   DeploymentProfile,
+  LogLevel,
 } from "../config/config";
 import { EdcFargateService } from "./edc-fargate-service";
 
@@ -38,6 +39,8 @@ export interface EdcDataPlaneProps {
   readonly ddbTableName: string;
   readonly edcIamEnvVars: { [key: string]: string };
   readonly image: ContainerImage;
+  /** Unset keeps the Tractus-X default (EDC monitor INFO, other loggers OFF). */
+  readonly logLevel?: LogLevel;
   readonly memoryLimitMiB: number;
   readonly profile: DeploymentProfile;
   readonly secretPrefix: string;
@@ -119,6 +122,7 @@ export class EdcDataPlane extends Construct {
         "web.http.control.port": `${dataPlanePortMapping.control}`,
         "web.http.control.path": "/api/control",
 
+        ...(props.logLevel && { EDC_LOG_LEVEL: props.logLevel }),
         JDK_JAVA_OPTIONS: [
           "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
         ].join(" "),

@@ -17,6 +17,7 @@ interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-fl
 backgroundStateMachineIterationMillis: "60000" # policy monitor + data-plane selector
 edcStateRemovalPolicy: DESTROY # DESTROY or RETAIN
 serviceAccountId: "00000000-0000-0000-0000-000000000000"
+# logLevel: DEBUG # Optional override of the deployment.yaml logLevel
 
 # Optional per-connector identity override. Any omitted field inherits the
 # deployment.yaml portal.identity default. Set these to run this connector under

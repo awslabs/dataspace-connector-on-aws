@@ -292,6 +292,7 @@ Split between `deployment.yaml` (shared infrastructure) and `connector-<id>.yaml
 | `observabilityApiPrincipals` | `[]` | IAM ARNs allowed to call Observability API |
 | `vpcIpAddresses` | `10.0.0.0/20` | VPC CIDR block |
 | `edcStateRemovalPolicy` | `DESTROY` | DynamoDB table removal policy |
+| `logLevel` | unset (Tractus-X: EDC INFO, others OFF) | EDC log level (deployment default, per-connector override). AWS SDK, Apache HttpClient and Jetty stay capped at INFO because their DEBUG output contains credentials |
 
 ---
 

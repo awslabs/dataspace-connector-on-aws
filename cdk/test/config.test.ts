@@ -17,6 +17,7 @@ import {
   toRemovalPolicy,
   validateConnectorId,
   validateDeploymentName,
+  validateLogLevel,
   PortalIdentity,
 } from "../lib/config/config";
 import { RemovalPolicy } from "aws-cdk-lib";
@@ -29,6 +30,16 @@ const completeIdentity: PortalIdentity = {
   dcpId: "did:web:dcp",
   didResolver: "https://bdrs",
 };
+
+describe("validateLogLevel", () => {
+  test.each([undefined, "DEBUG", "INFO", "OFF"])("accepts %s", (level) => {
+    expect(() => validateLogLevel(level, "test")).not.toThrow();
+  });
+
+  test.each(["debug", "VERBOSE", ""])("rejects %s", (level) => {
+    expect(() => validateLogLevel(level, "test")).toThrow(/logLevel/);
+  });
+});
 
 describe("validateConnectorId", () => {
   test.each(["ab", "a1", "a-b-c", "a".repeat(60)])("accepts %s", (id) => {

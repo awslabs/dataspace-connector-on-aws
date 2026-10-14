@@ -60,6 +60,7 @@ export class ConnectorStack extends Stack {
     const { connector, deployment, sharedInfra: infra, deploymentName } = props;
     const connectorId = connector.connectorId;
     const profile = connector.profile ?? deployment.profile;
+    const logLevel = connector.logLevel ?? deployment.logLevel;
     const removalPolicy = toRemovalPolicy(connector.edcStateRemovalPolicy);
 
     const edcIamEnvVars = toEdcIamEnvVars(props.edcIam);
@@ -209,6 +210,7 @@ export class ConnectorStack extends Stack {
       dspCallbackAddress: `${infra.dspUrl}${connectorId}`,
       edcIamEnvVars,
       image: ContainerImage.fromDockerImageAsset(infra.controlPlaneImage),
+      logLevel,
       memoryLimitMiB: connector.controlPlaneMemoryLimitMiB,
       secretPrefix,
       interactiveStateMachineIterationMillis:
@@ -229,6 +231,7 @@ export class ConnectorStack extends Stack {
       ddbTableName: ddb.table.tableName,
       edcIamEnvVars,
       image: ContainerImage.fromDockerImageAsset(infra.dataPlaneImage),
+      logLevel,
       memoryLimitMiB: connector.dataPlaneMemoryLimitMiB,
       profile,
       secretPrefix,

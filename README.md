@@ -117,6 +117,7 @@ managementApiPrincipals:
   - "arn:aws:iam::<account-id>:role/<role-name>"
 observabilityApiPrincipals:
   - "arn:aws:iam::<account-id>:role/<role-name>"
+# logLevel: DEBUG                   # Optional: TRACE, DEBUG, INFO, WARN, ERROR, OFF (unset = Tractus-X default)
 
 # Optional custom domain (all three fields required together)
 # certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<id>"
@@ -149,6 +150,7 @@ interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-fl
 backgroundStateMachineIterationMillis: "60000"  # policy monitor + data-plane selector
 edcStateRemovalPolicy: DESTROY       # DESTROY or RETAIN
 serviceAccountId: "<external-technical-user-id>"
+# logLevel: DEBUG                    # Optional; overrides deployment.yaml logLevel for this connector
 
 # Optional per-connector identity override (multi-organization deployments):
 # portal:
