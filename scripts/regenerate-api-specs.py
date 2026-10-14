@@ -9,7 +9,8 @@
 # Usage (from repo root):
 #   (cd edc && ./gradlew :control-plane:resolveApi)
 #   uv run --with ruamel.yaml python scripts/regenerate-api-specs.py
-import json, os, re
+# Formats the specs with the repo's prettier config afterwards (needs `npm ci` in cdk/).
+import json, os, re, subprocess
 from ruamel.yaml import YAML
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -82,7 +83,8 @@ def sync(spec_name, context, auth, add_pred):
         if ops:
             paths["/{connectorId}" + edc] = ops
             added.append(edc)
-    yaml.dump(doc, open(path, "w"))
+    with open(path, "w") as f:
+        yaml.dump(doc, f)
     print(f"{spec_name}: +{len(added)} -{len(removed)} => {len(paths)} paths")
 
 
@@ -93,4 +95,6 @@ def is_dsp(p):
 
 sync("management-api", "management", True, lambda p: p.startswith("/v3/") or p.startswith("/transferprocess/"))
 sync("dsp-api", "protocol", False, is_dsp)
+subprocess.run(["npx", "prettier", "--write", "api/management-api.yaml", "api/dsp-api.yaml"],
+               cwd=os.path.join(ROOT, "cdk"), check=True)
 print("DONE")

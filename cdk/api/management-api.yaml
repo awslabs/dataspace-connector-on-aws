@@ -2043,14 +2043,14 @@ paths:
       description: Requests completion of the transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received
       operationId: complete
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: processId
           required: true
           schema:
             type: string
       responses:
-        '400':
+        "400":
           content:
             application/json:
               schema:
@@ -2077,14 +2077,14 @@ paths:
       description: Requests completion of the transfer process. Due to the asynchronous nature of transfers, a successful response only indicates that the request was successfully received
       operationId: fail
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: processId
           required: true
           schema:
             type: string
       responses:
-        '400':
+        "400":
           content:
             application/json:
               schema:
@@ -2116,14 +2116,14 @@ paths:
       description: Notify provisioning completion.
       operationId: provisioned
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: processId
           required: true
           schema:
             type: string
       responses:
-        '400':
+        "400":
           content:
             application/json:
               schema:
@@ -2155,15 +2155,15 @@ paths:
       description: Creates an entry for a particular BPN
       operationId: createEntryV3
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
       responses:
-        '204':
+        "204":
           content:
             application/json:
               schema:
                 type: object
           description: The object was successfully created
-        '400':
+        "400":
           content:
             application/json:
               schema:
@@ -2171,7 +2171,7 @@ paths:
                 items:
                   type: object
           description: Request body was malformed
-        '409':
+        "409":
           content:
             application/json:
               schema:
@@ -2199,15 +2199,15 @@ paths:
       description: Updates the entry for a particular BPN
       operationId: updateEntryV3
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
       responses:
-        '204':
+        "204":
           content:
             application/json:
               schema:
                 type: object
           description: The object was successfully updated
-        '400':
+        "400":
           content:
             application/json:
               schema:
@@ -2215,7 +2215,7 @@ paths:
                 items:
                   type: object
           description: Request body was malformed
-        '404':
+        "404":
           content:
             application/json:
               schema:
@@ -2244,20 +2244,20 @@ paths:
       description: Resolves all BPNs for a particular BPN group
       operationId: resolveGroupV3
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: group
           required: true
           schema:
             type: string
       responses:
-        '200':
+        "200":
           content:
             application/json:
               schema:
                 type: object
           description: An object containing an array with the bpns assigned to the group
-        '400':
+        "400":
           content:
             application/json:
               schema:
@@ -2265,7 +2265,7 @@ paths:
                 items:
                   type: object
           description: Request body was malformed
-        '404':
+        "404":
           content:
             application/json:
               schema:
@@ -2290,15 +2290,15 @@ paths:
       description: Resolves all BPN Groups
       operationId: resolveGroupsV3
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
       responses:
-        '200':
+        "200":
           content:
             application/json:
               schema:
                 type: object
           description: An object containing an array with the all BPN groups
-        '400':
+        "400":
           content:
             application/json:
               schema:
@@ -2324,20 +2324,20 @@ paths:
       description: Deletes the entry for a particular BPN
       operationId: deleteEntryV3
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: bpn
           required: true
           schema:
             type: string
       responses:
-        '204':
+        "204":
           content:
             application/json:
               schema:
                 type: object
           description: The object was successfully deleted
-        '400':
+        "400":
           content:
             application/json:
               schema:
@@ -2345,7 +2345,7 @@ paths:
                 items:
                   type: object
           description: Request body was malformed
-        '404':
+        "404":
           content:
             application/json:
               schema:
@@ -2369,20 +2369,20 @@ paths:
       description: Resolves all groups for a particular BPN
       operationId: resolveV3
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: bpn
           required: true
           schema:
             type: string
       responses:
-        '200':
+        "200":
           content:
             application/json:
               schema:
                 type: object
           description: An object containing an array with the assigned groups
-        '400':
+        "400":
           content:
             application/json:
               schema:
@@ -2390,7 +2390,7 @@ paths:
                 items:
                   type: object
           description: Request body was malformed
-        '404':
+        "404":
           content:
             application/json:
               schema:
@@ -2415,15 +2415,15 @@ paths:
       description: Retires an active contract agreement.
       operationId: retireAgreementV3
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
       responses:
-        '204':
+        "204":
           content:
             application/json:
               schema:
                 type: object
           description: The contract agreement was successfully retired
-        '400':
+        "400":
           content:
             application/json:
               schema:
@@ -2431,7 +2431,7 @@ paths:
                 items:
                   type: object
           description: Request body was malformed
-        '409':
+        "409":
           content:
             application/json:
               schema:
@@ -2460,15 +2460,15 @@ paths:
       description: Get all retired contract agreements.
       operationId: getAllRetiredV3
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
       responses:
-        '200':
+        "200":
           content:
             application/json:
               schema:
                 type: object
           description: A list of retired contract agreements
-        '400':
+        "400":
           content:
             application/json:
               schema:
@@ -2494,20 +2494,20 @@ paths:
       description: Removes a contract agreement from the retired list, reactivating it.
       operationId: reactivateRetiredV3
       parameters:
-        - $ref: '#/components/parameters/ConnectorId'
+        - $ref: "#/components/parameters/ConnectorId"
         - in: path
           name: agreementId
           required: true
           schema:
             type: string
       responses:
-        '204':
+        "204":
           content:
             application/json:
               schema:
                 type: object
           description: The contract agreement is reactivated
-        '400':
+        "400":
           content:
             application/json:
               schema:
@@ -2515,7 +2515,7 @@ paths:
                 items:
                   type: object
           description: Request body was malformed
-        '404':
+        "404":
           content:
             application/json:
               schema:
