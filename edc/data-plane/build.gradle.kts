@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import com.github.jengelman.gradle.plugins.shadow.transformers.Log4j2PluginsCacheFileTransformer
 import org.gradle.api.file.DuplicatesStrategy
 
 plugins {
@@ -23,6 +24,13 @@ dependencies {
     runtimeOnly(libs.log4j.core)
 }
 
+// Shared Log4j 2 config for both runtimes (edc/logging/log4j2.xml).
+sourceSets {
+    main {
+        resources.srcDir(rootProject.file("logging"))
+    }
+}
+
 application {
     mainClass.set("org.eclipse.edc.boot.system.runtime.BaseRuntime")
 }
@@ -30,7 +38,16 @@ application {
 tasks {
     shadowJar {
         mergeServiceFiles()
-        filesMatching("META-INF/services/**") {
+        // Merge the Log4j 2 plugin caches; an overwritten cache stops any config from loading.
+        transform<Log4j2PluginsCacheFileTransformer>()
+        // Drop the log4j2.json (Root OFF) from tractusx log4j2-monitor; JSON outranks XML.
+        exclude("log4j2.json")
+        filesMatching(
+            listOf(
+                "META-INF/services/**",
+                "META-INF/org/apache/logging/log4j/core/config/plugins/Log4j2Plugins.dat",
+            ),
+        ) {
             duplicatesStrategy = DuplicatesStrategy.INCLUDE
         }
         archiveFileName.set("data-plane.jar")

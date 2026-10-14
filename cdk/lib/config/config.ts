@@ -19,6 +19,16 @@ import * as yaml from "js-yaml";
 
 export type DeploymentProfile = "development" | "production";
 
+export const LOG_LEVELS = [
+  "TRACE",
+  "DEBUG",
+  "INFO",
+  "WARN",
+  "ERROR",
+  "OFF",
+] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
 // ─── pipeline.yaml ────────────────────────────────────────────────────────────
 
 export interface PipelineYaml {
@@ -59,6 +69,8 @@ export interface DeploymentYaml {
   readonly certificateArn?: string;
   readonly domainName?: string;
   readonly hostedZoneId?: string;
+  /** EDC log level for all connectors; a connector may override it. Unset keeps the Tractus-X default. */
+  readonly logLevel?: LogLevel;
   readonly portal: PortalConfig;
 }
 
@@ -101,6 +113,8 @@ export interface ConnectorYaml {
   readonly edcStateRemovalPolicy: "DESTROY" | "RETAIN";
   /** Cofinity-X portal technical user (service account) ID, authored by the operator. */
   readonly serviceAccountId: string;
+  /** EDC log level for this connector, overriding the deployment.yaml logLevel. */
+  readonly logLevel?: LogLevel;
   /** Per-connector identity override, merged over the deployment default. */
   readonly portal?: ConnectorPortalOverride;
 }
@@ -313,6 +327,7 @@ function validateDeployment(data: DeploymentYaml, filePath: string): void {
   if (!data.portal.environment) {
     throw new Error(`${filePath}: portal section requires 'environment'`);
   }
+  validateLogLevel(data.logLevel, filePath);
 }
 
 function validateConnector(data: ConnectorYaml, fileName: string): void {
@@ -334,4 +349,14 @@ function validateConnector(data: ConnectorYaml, fileName: string): void {
     );
   }
   validateConnectorId(data.connectorId);
+  validateLogLevel(data.logLevel, fileName);
+}
+
+/** Throws unless logLevel is omitted or one of LOG_LEVELS. */
+export function validateLogLevel(logLevel: unknown, source: string): void {
+  if (logLevel !== undefined && !LOG_LEVELS.includes(logLevel as LogLevel)) {
+    throw new Error(
+      `${source}: logLevel must be one of ${LOG_LEVELS.join(", ")}, got "${String(logLevel)}"`,
+    );
+  }
 }

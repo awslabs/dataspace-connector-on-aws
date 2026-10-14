@@ -11,6 +11,11 @@ managementApiPrincipals:
 observabilityApiPrincipals:
   # - "arn:aws:iam::<account-id>:role/<role-name>"
 
+# Optional: EDC control/data plane log level for all connectors (a connector can
+# override it): TRACE, DEBUG, INFO, WARN, ERROR or OFF, applied to all loggers.
+# Unset keeps the Tractus-X default: EDC monitor at INFO, other loggers OFF.
+# logLevel: DEBUG
+
 # Optional: custom domain for EDC API endpoints
 # certificateArn: "arn:aws:acm:<region>:<account-id>:certificate/<certificate-id>"
 # domainName: "edc.example.com"
