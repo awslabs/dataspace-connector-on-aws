@@ -15,7 +15,7 @@ dataPlaneMemoryLimitMiB: 512
 # State machine iteration intervals in milliseconds (both optional; defaults shown).
 interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-flow
 backgroundStateMachineIterationMillis: "60000" # policy monitor + data-plane selector
-edcStateRemovalPolicy: DESTROY # DESTROY or RETAIN
+# stateRemovalPolicy: DESTROY # Optional override of the deployment.yaml stateRemovalPolicy
 serviceAccountId: "00000000-0000-0000-0000-000000000000"
 # logLevel: DEBUG # Optional override of the deployment.yaml logLevel
 

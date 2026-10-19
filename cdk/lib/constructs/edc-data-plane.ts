@@ -6,7 +6,13 @@ import { Stack } from "aws-cdk-lib";
 import { IRole, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 
-import { IVpc, Peer, Port, SecurityGroup } from "aws-cdk-lib/aws-ec2";
+import {
+  ISecurityGroup,
+  IVpc,
+  Peer,
+  Port,
+  SecurityGroup,
+} from "aws-cdk-lib/aws-ec2";
 
 import {
   AwsLogDriverMode,
@@ -52,6 +58,8 @@ export interface EdcDataPlaneProps {
 
 export class EdcDataPlane extends Construct {
   readonly taskRole: IRole;
+  /** Referenced by the BaSyx stack of a dtrConnector; unused otherwise. */
+  readonly securityGroup: ISecurityGroup;
 
   constructor(scope: Construct, id: string, props: EdcDataPlaneProps) {
     super(scope, id);
@@ -168,5 +176,6 @@ export class EdcDataPlane extends Construct {
     }
 
     this.taskRole = taskDefinition.taskRole;
+    this.securityGroup = securityGroup;
   }
 }

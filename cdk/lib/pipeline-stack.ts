@@ -21,6 +21,7 @@ import {
 import { DeploymentStage } from "./deployment-stage";
 import { ConnectorStateTable } from "./constructs/connector-state-table";
 import {
+  basyxStackName,
   DeploymentConfig,
   PipelineYaml,
   resolveDeploymentName,
@@ -171,6 +172,7 @@ export class PipelineStack extends Stack {
     const adminSecretArn = `${secretArn}:${deploymentName}/portal-admin/*`;
     const connectorSecretArn = `${secretArn}:${deploymentName}/*/edc.iam.sts.oauth.client.secret-*`;
     const connectorStackArn = `arn:aws:cloudformation:${this.region}:${this.account}:stack/${deploymentName}-Connector*/*`;
+    const basyxStackArn = `arn:aws:cloudformation:${this.region}:${this.account}:stack/${basyxStackName(deploymentName, "*")}/*`;
     const sharedInfraStackArn = `arn:aws:cloudformation:${this.region}:${this.account}:stack/${deploymentName}-SharedInfra/*`;
 
     return new CodeBuildStep("PortalFinalization", {
@@ -197,18 +199,32 @@ export class PipelineStack extends Stack {
         }),
         new PolicyStatement({
           effect: Effect.ALLOW,
-          // Read-only on SharedInfra (DSP base URL) and connector stacks.
+          // Read-only on SharedInfra (DSP base URL), connector and BaSyx stacks.
           actions: ["cloudformation:DescribeStacks"],
-          resources: [sharedInfraStackArn, connectorStackArn],
+          resources: [sharedInfraStackArn, connectorStackArn, basyxStackArn],
         }),
         new PolicyStatement({
           effect: Effect.ALLOW,
-          // Orphan cleanup deletes connector stacks only, never SharedInfra.
+          // Finds orphan BaSyx stacks; the action has no resource-level permissions.
+          actions: ["cloudformation:ListStacks"],
+          resources: ["*"],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          // Orphan cleanup deletes connector and BaSyx stacks only, never SharedInfra.
           actions: [
             "cloudformation:DeleteStack",
             "cloudformation:DescribeStackEvents",
           ],
-          resources: [connectorStackArn],
+          resources: [connectorStackArn, basyxStackArn],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          // DTR asset reconcile on the connectors' management API.
+          actions: ["execute-api:Invoke"],
+          resources: [
+            `arn:aws:execute-api:${this.region}:${this.account}:*/management/*`,
+          ],
         }),
         stateTablePolicy(stateTable),
       ],

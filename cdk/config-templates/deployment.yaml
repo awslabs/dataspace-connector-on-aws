@@ -16,6 +16,21 @@ observabilityApiPrincipals:
 # Unset keeps the Tractus-X default: EDC monitor at INFO, other loggers OFF.
 # logLevel: DEBUG
 
+# Optional: what happens to stored state (connector DynamoDB tables and S3
+# buckets, BaSyx databases) when its stack is deleted: RETAIN (default) or
+# DESTROY. Connectors and BaSyx entries can override it.
+# stateRemovalPolicy: RETAIN
+
+# Optional: Eclipse BaSyx Digital Twin Registry (DTR) and Submodel Repository,
+# one deployment per BPNL. The DTR is offered as a catalog asset on
+# dtrConnector (default: the BPNL's first connector by file name).
+# basyx:
+#   BPNL00000000XXXX:
+#     enabled: true
+#     services: [dtr, submodelRepository] # dtr is required
+#     dtrConnector: example
+#     stateRemovalPolicy: RETAIN # Optional override
+
 # Optional: custom domain for EDC API endpoints
 # certificateArn: "arn:aws:acm:<region>:<account-id>:certificate/<certificate-id>"
 # domainName: "edc.example.com"

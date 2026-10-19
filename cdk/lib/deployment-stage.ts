@@ -6,8 +6,14 @@ import { Construct } from "constructs";
 
 import { SharedInfraStack } from "./shared-infra-stack";
 import { ConnectorStack } from "./connector-stack";
+import { BasyxStack } from "./basyx/basyx-stack";
 
-import { connectorPriority, DeploymentConfig } from "./config/config";
+import {
+  connectorPriority,
+  DeploymentConfig,
+  enabledBasyx,
+  resolveStateRemovalPolicy,
+} from "./config/config";
 import { ResolvedEdcIam } from "./portal/provision-output";
 
 export interface DeploymentStageProps extends StageProps {
@@ -30,6 +36,7 @@ export class DeploymentStage extends Stage {
     });
 
     const priorities = new Map<number, string>();
+    const connectorStacks = new Map<string, ConnectorStack>();
 
     connectors.forEach((connector) => {
       // Deploy-gate: only connectors provision resolved to IDENTITY_READY have
@@ -59,6 +66,35 @@ export class DeploymentStage extends Stage {
         },
       );
       stack.addDependency(sharedInfra);
+      connectorStacks.set(connector.connectorId, stack);
+    });
+
+    // A BaSyx stack needs its dtrConnector's data-plane security group, so it is
+    // synthesized whenever that connector is. A running connector is synthesized
+    // on every run, so enabling basyx later takes effect on the next run. Stack
+    // dependencies come from the cross-stack references (VPC, cluster, SG).
+    enabledBasyx(props.config).forEach(({ bpnl, entry, dtrConnectorId }) => {
+      const connectorStack = connectorStacks.get(dtrConnectorId);
+      if (!connectorStack) {
+        console.log(
+          `basyx ${bpnl}: dtrConnector ${dtrConnectorId} not deployed yet, skipping`,
+        );
+        return;
+      }
+      new BasyxStack(this, `BaSyx-${bpnl}`, {
+        bpnl,
+        entry,
+        dtrConnectorId,
+        deploymentName: props.deploymentName,
+        profile: deployment.profile,
+        stateRemovalPolicy: resolveStateRemovalPolicy(
+          deployment,
+          entry.stateRemovalPolicy,
+        ),
+        vpc: sharedInfra.vpc,
+        cluster: sharedInfra.ecsCluster,
+        dataPlaneSecurityGroup: connectorStack.dataPlane.securityGroup,
+      });
     });
 
     Tags.of(this).add("Project", "dataspace-connector-on-aws");

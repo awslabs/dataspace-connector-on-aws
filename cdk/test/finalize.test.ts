@@ -1,10 +1,14 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { registerReadyConnectors } from "../lib/portal/finalize";
+import {
+  reconcileBasyx,
+  registerReadyConnectors,
+} from "../lib/portal/finalize";
+import { ManagementRequest } from "../lib/portal/management-api";
 import { ConnectorState } from "../lib/portal/state";
 import { ConnectorRegistration, PortalClient } from "../lib/portal/client";
-import { ConnectorYaml } from "../lib/config/config";
+import { ConnectorYaml, DeploymentConfig } from "../lib/config/config";
 
 function row(overrides: Partial<ConnectorState> = {}): ConnectorState {
   return {
@@ -24,7 +28,7 @@ function conn(id: string): ConnectorYaml {
     controlPlaneMemoryLimitMiB: 1024,
     dataPlaneCpu: 256,
     dataPlaneMemoryLimitMiB: 512,
-    edcStateRemovalPolicy: "DESTROY",
+    stateRemovalPolicy: "DESTROY",
     serviceAccountId: `sa-${id}`,
   } as ConnectorYaml;
 }
@@ -176,5 +180,96 @@ describe("registerReadyConnectors", () => {
     );
     expect(failures).toEqual([]);
     expect(saved).toHaveLength(0);
+  });
+});
+
+describe("reconcileBasyx", () => {
+  const outputs = {
+    dtrUrl: "http://dtr/api/v3",
+    tokenUrl: "https://t/oauth2/token",
+    clientId: "c",
+    scope: "s",
+    clientSecretAlias: "a",
+  };
+
+  function setup(opts: {
+    basyx?: Record<string, unknown>;
+    live?: string[];
+    rows?: ConnectorState[];
+  }) {
+    const config = {
+      deployment: {
+        portal: { identity: { participantId: "BPNL1" } },
+        basyx: opts.basyx,
+      },
+      connectors: [conn("alpha"), conn("beta")],
+    } as unknown as DeploymentConfig;
+    const order: string[] = [];
+    const api =
+      (id: string): ManagementRequest =>
+      async (method, path) => {
+        order.push(`${id} ${method} ${path}`);
+        return { status: method === "GET" ? 404 : 200, body: undefined };
+      };
+    const deleteBasyxStack = jest.fn(async (bpnl: string) => {
+      order.push(`delete ${bpnl}`);
+    });
+    const run = () =>
+      reconcileBasyx(
+        config,
+        opts.rows ?? [row(), row({ connectorId: "beta" })],
+        {
+          liveBasyxStacks: async () => new Set(opts.live ?? []),
+          readOutputs: async () => outputs,
+          api,
+          deleteBasyxStack,
+        },
+      );
+    return { run, order, deleteBasyxStack };
+  }
+
+  test("no BaSyx anywhere makes no calls", async () => {
+    const { run, order } = setup({});
+    expect(await run()).toEqual([]);
+    expect(order).toEqual([]);
+  });
+
+  test("creates the offer on the dtrConnector and probes the others", async () => {
+    const { run, order } = setup({
+      basyx: {
+        BPNL1: { enabled: true, services: ["dtr"], dtrConnector: "beta" },
+      },
+      live: ["BPNL1"],
+    });
+    expect(await run()).toEqual([]);
+    expect(order[0]).toBe("beta GET /assets/dataspace-connector-dtr");
+    expect(order.filter((c) => c.startsWith("beta POST"))).toHaveLength(4);
+    expect(order.filter((c) => c.startsWith("alpha"))).toEqual([
+      "alpha GET /policydefinitions/dataspace-connector-dtr-access",
+    ]);
+  });
+
+  test("removed entry: offer cleanup before the stack is deleted", async () => {
+    const { run, order, deleteBasyxStack } = setup({ live: ["BPNL1"] });
+    expect(await run()).toEqual([]);
+    expect(deleteBasyxStack).toHaveBeenCalledWith("BPNL1");
+    expect(order[order.length - 1]).toBe("delete BPNL1");
+    expect(order.filter((c) => c.includes(" GET "))).toHaveLength(2);
+  });
+
+  test("dtrConnector not yet deployed: no offer, stack kept", async () => {
+    const { run, order, deleteBasyxStack } = setup({
+      basyx: { BPNL1: { enabled: true, services: ["dtr"] } },
+      rows: [row({ phase: "IDENTITY_PENDING" }), row({ connectorId: "beta" })],
+    });
+    expect(await run()).toEqual([]);
+    expect(order.some((c) => c.startsWith("alpha"))).toBe(false);
+    expect(deleteBasyxStack).not.toHaveBeenCalled();
+  });
+
+  test("a failure is reported per BPNL", async () => {
+    const { run, deleteBasyxStack } = setup({ live: ["BPNL1"] });
+    deleteBasyxStack.mockRejectedValueOnce(new Error("DELETE_FAILED"));
+    expect(await run()).toEqual(["BPNL1"]);
   });
 });

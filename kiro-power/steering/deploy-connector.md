@@ -76,7 +76,7 @@ dataPlaneCpu: 256
 dataPlaneMemoryLimitMiB: 512
 interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-flow
 backgroundStateMachineIterationMillis: "60000"  # policy monitor + data-plane selector
-edcStateRemovalPolicy: DESTROY
+# stateRemovalPolicy: DESTROY  # Optional; default RETAIN keeps the connector's DynamoDB table and S3 bucket on deletion
 serviceAccountId: "<service-account-id-from-phase-3>"
 ```
 

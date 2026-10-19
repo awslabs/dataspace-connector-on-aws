@@ -1,19 +1,17 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { App, Tags } from "aws-cdk-lib";
-
-import * as yaml from "js-yaml";
 
 import { PipelineStack } from "./pipeline-stack";
 import {
   loadDeploymentConfig,
-  PipelineYaml,
+  loadPipelineConfig,
   resolveDeploymentName,
   validateDeploymentName,
 } from "./config/config";
+import { validateCognitoDomainPrefix } from "./basyx/names";
 import { readActiveBpnls, readResolvedEdcIam } from "./portal/provision-output";
 
 const app = new App();
@@ -24,24 +22,18 @@ const configPath = app.node.tryGetContext("config-path")
   ? resolve(app.node.tryGetContext("config-path"))
   : resolve(__dirname, "../config-templates");
 
-const pipelineYamlPath = resolve(configPath, "pipeline.yaml");
-if (!existsSync(pipelineYamlPath)) {
-  throw new Error(
-    `pipeline.yaml not found at ${pipelineYamlPath}. ` +
-      `Provide --context config-path=<path>.`,
-  );
-}
-
-const pipelineConfig = yaml.load(
-  readFileSync(pipelineYamlPath, "utf-8"),
-) as PipelineYaml;
-
+const pipelineConfig = loadPipelineConfig(configPath);
 const deploymentConfig = loadDeploymentConfig(configPath);
 const resolvedEdcIam = readResolvedEdcIam(configPath);
 const activeBpnls = readActiveBpnls(configPath);
 
 const deploymentName = resolveDeploymentName(pipelineConfig);
 validateDeploymentName(deploymentName);
+for (const [bpnl, entry] of Object.entries(
+  deploymentConfig.deployment.basyx ?? {},
+)) {
+  if (entry.enabled) validateCognitoDomainPrefix(deploymentName, bpnl);
+}
 
 new PipelineStack(app, `${deploymentName}PipelineStack`, {
   pipelineConfig,

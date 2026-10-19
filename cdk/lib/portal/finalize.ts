@@ -12,6 +12,11 @@
  *     Manager, register it in the portal (making it discoverable), and advance
  *     its phase to REGISTERED.
  *
+ *   Phase A2 — BaSyx
+ *     Per BPNL with an enabled basyx entry or a BaSyx stack: create or update
+ *     the DTR offer on its dtrConnector, remove it from the BPNL's other
+ *     connectors, and delete the BaSyx stack once its entry is gone.
+ *
  *   Phase B — Orphan cleanup
  *     For each DDB row whose connectorId is not in the current config:
  *     deregister from the portal (by stored portalConnectorId, so manually-
@@ -26,29 +31,37 @@
  * Usage: node dist/portal/finalize.js --config-path=<path> --stack-prefix=<prefix>
  */
 
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { existsSync } from "fs";
 import { join, resolve } from "path";
-import * as yaml from "js-yaml";
 
 import {
   CloudFormationClient,
   DeleteStackCommand,
   DescribeStacksCommand,
+  paginateListStacks,
   waitUntilStackDeleteComplete,
 } from "@aws-sdk/client-cloudformation";
 
 import {
   ConnectorYaml,
   DEFAULT_DEPLOYMENT_NAME,
+  DeploymentConfig,
   DeploymentYaml,
   EDC_SECRETS_MANAGER_ALIASES,
+  basyxStackName,
   deriveAdminSecretName,
   deriveSecretPrefix,
+  enabledBasyx,
+  loadDeploymentConfig,
+  resolveConnectorIdentity,
 } from "../config/config";
 import { ConnectorRegistration, PortalClient, SecretsHelper } from "./client";
+import { BasyxOutputs, buildDtrDefinition, ensureDtr, removeDtr } from "./dtr";
+import { ManagementRequest, managementApi } from "./management-api";
 import { ConnectorState, nextState, StateStore } from "./state";
 
 const DSP_URL_OUTPUT_KEY = "DspApiUrl";
+const MANAGEMENT_URL_OUTPUT_KEY = "ManagementApiUrl";
 const STACK_DELETE_TIMEOUT_SECONDS = 600;
 
 interface RegisterDeps {
@@ -147,6 +160,89 @@ export async function registerReadyConnectors(
   return registrationFailures;
 }
 
+interface BasyxDeps {
+  /** BPNLs that have a BaSyx stack that is not deleted. */
+  liveBasyxStacks: () => Promise<Set<string>>;
+  /** The BaSyx stack outputs of a BPNL, or undefined if not (yet) there. */
+  readOutputs: (bpnl: string) => Promise<BasyxOutputs | undefined>;
+  api: (connectorId: string) => ManagementRequest;
+  deleteBasyxStack: (bpnl: string) => Promise<void>;
+}
+
+/**
+ * Phase A2: the DTR offer and orphan BaSyx stacks, per BPNL that has an
+ * enabled basyx entry or a BaSyx stack. On the dtrConnector the offer is
+ * created or updated; on the BPNL's other deployed connectors it is removed;
+ * a BaSyx stack whose entry is gone is deleted after its offer. Deployments
+ * without BaSyx make no calls. Returns the BPNLs that failed.
+ */
+export async function reconcileBasyx(
+  config: DeploymentConfig,
+  rows: ConnectorState[],
+  deps: BasyxDeps,
+): Promise<string[]> {
+  const targets = new Map(
+    enabledBasyx(config).map((b) => [b.bpnl, b.dtrConnectorId]),
+  );
+  const live = await deps.liveBasyxStacks();
+  const bpnls = [...new Set([...targets.keys(), ...live])].sort();
+  const deployed = new Set(
+    rows
+      .filter((r) => r.phase !== "IDENTITY_PENDING")
+      .map((r) => r.connectorId),
+  );
+  const failures: string[] = [];
+
+  for (const bpnl of bpnls) {
+    const log = (msg: string) =>
+      console.log(`[portal/finalize] BaSyx ${bpnl}: ${msg}`);
+    try {
+      const target = targets.get(bpnl);
+      if (target && deployed.has(target)) {
+        const outputs = await deps.readOutputs(bpnl);
+        if (!outputs) {
+          log(`stack outputs not found, DTR offer skipped this run.`);
+        } else if (
+          await ensureDtr(deps.api(target), buildDtrDefinition(outputs))
+        ) {
+          log(`DTR offer written on ${target}.`);
+        }
+      }
+
+      const others = config.connectors
+        .filter(
+          (c) =>
+            c.connectorId !== target &&
+            deployed.has(c.connectorId) &&
+            resolveConnectorIdentity(config.deployment, c).participantId ===
+              bpnl,
+        )
+        .map((c) => c.connectorId);
+      for (const connectorId of others) {
+        if (
+          await removeDtr(deps.api(connectorId), (msg) =>
+            console.warn(`[portal/finalize] ${connectorId}: ${msg}`),
+          )
+        ) {
+          log(`DTR offer removed from ${connectorId}.`);
+        }
+      }
+
+      if (!target && live.has(bpnl)) {
+        await deps.deleteBasyxStack(bpnl);
+        log(`orphan stack deleted.`);
+      }
+    } catch (err) {
+      console.error(
+        `[portal/finalize] BaSyx ${bpnl}: failed — ${(err as Error).message}`,
+      );
+      failures.push(bpnl);
+    }
+  }
+
+  return failures;
+}
+
 async function main(): Promise<void> {
   const configPath = requireArg("--config-path=");
   const stackPrefix = requireArg("--stack-prefix=");
@@ -164,20 +260,14 @@ async function main(): Promise<void> {
     return;
   }
 
-  const deployment = yaml.load(
-    readFileSync(deploymentPath, "utf-8"),
-  ) as DeploymentYaml;
-
-  if (!deployment.portal?.environment) {
-    console.log(
-      "[portal/finalize] No portal section in deployment.yaml, skipping.",
-    );
-    return;
-  }
+  // Already validated by synth in this pipeline run.
+  const config = loadDeploymentConfig(configPath);
+  const { deployment } = config;
   const { environment } = deployment.portal;
   const deploymentName = process.env.DEPLOYMENT_NAME ?? DEFAULT_DEPLOYMENT_NAME;
+  const region = process.env.AWS_REGION ?? "";
 
-  const currentConnectors = readCurrentConnectors(configPath);
+  const currentConnectors = config.connectors;
   const currentIds = new Set(currentConnectors.map((c) => c.connectorId));
 
   const store = new StateStore(tableName);
@@ -206,7 +296,13 @@ async function main(): Promise<void> {
     return client;
   };
 
-  const dspBaseUrl = await resolveDspBaseUrl(cfn, stackPrefix, deployment);
+  const dspBaseUrl = await resolveApiBaseUrl(
+    cfn,
+    stackPrefix,
+    deployment,
+    "protocol",
+    DSP_URL_OUTPUT_KEY,
+  );
 
   // ── Phase A: register IDENTITY_READY connectors ───────────────────────────
 
@@ -239,6 +335,33 @@ async function main(): Promise<void> {
     { getClient, registryByTenant, store, secrets },
   );
 
+  // ── Phase A2: DTR offer and orphan BaSyx stacks ───────────────────────────
+  // Before Phase B: a dtrConnector stack can only be deleted once the BaSyx
+  // stack that imports its security group is gone.
+
+  const managementBaseUrl = await resolveApiBaseUrl(
+    cfn,
+    stackPrefix,
+    deployment,
+    "management",
+    MANAGEMENT_URL_OUTPUT_KEY,
+  );
+  const basyxFailures = await reconcileBasyx(config, rows, {
+    liveBasyxStacks: () => liveBasyxStacks(cfn, stackPrefix),
+    readOutputs: (bpnl) => readBasyxOutputs(cfn, stackPrefix, bpnl),
+    api: (connectorId) => {
+      if (!managementBaseUrl) {
+        throw new Error("management API URL unavailable");
+      }
+      return managementApi(managementBaseUrl, connectorId, region);
+    },
+    deleteBasyxStack: (bpnl) =>
+      deleteStack(cfn, basyxStackName(stackPrefix, bpnl)),
+  }).catch((err: Error) => {
+    console.error(`[portal/finalize] BaSyx: failed — ${err.message}`);
+    return ["*"];
+  });
+
   // ── Phase B: orphan cleanup ───────────────────────────────────────────────
 
   for (const row of rows) {
@@ -267,34 +390,33 @@ async function main(): Promise<void> {
     // never deployed a stack; treat "not found" as already clean.
     const stackName = `${stackPrefix}-Connector-${row.connectorId}`;
     try {
-      await cfn.send(new DeleteStackCommand({ StackName: stackName }));
-      await waitUntilStackDeleteComplete(
-        { client: cfn, maxWaitTime: STACK_DELETE_TIMEOUT_SECONDS },
-        { StackName: stackName },
-      );
+      await deleteStack(cfn, stackName);
       console.log(`[portal/finalize] ${row.connectorId}: stack deleted.`);
     } catch (err) {
-      const msg = (err as Error).message;
-      if (
-        !msg.includes("does not exist") &&
-        !msg.includes("ResourceNotFound")
-      ) {
-        console.error(
-          `[portal/finalize] ${row.connectorId}: stack deletion failed — ${msg}`,
-        );
-        continue;
-      }
+      console.error(
+        `[portal/finalize] ${row.connectorId}: stack deletion failed — ${(err as Error).message}`,
+      );
+      continue;
     }
 
     await store.remove(row.connectorId);
     console.log(`[portal/finalize] ${row.connectorId}: DDB row removed.`);
   }
 
+  const problems: string[] = [];
   if (registrationFailures.length > 0) {
-    throw new Error(
+    problems.push(
       `${registrationFailures.length} connector(s) failed to register (${registrationFailures.join(", ")}); ` +
-        `their state remains IDENTITY_READY and will be retried on the next run.`,
+        `their state remains IDENTITY_READY and will be retried on the next run`,
     );
+  }
+  if (basyxFailures.length > 0) {
+    problems.push(
+      `BaSyx reconcile failed for ${basyxFailures.join(", ")}; retried on the next run`,
+    );
+  }
+  if (problems.length > 0) {
+    throw new Error(`${problems.join(". ")}.`);
   }
 
   console.log("[portal/finalize] Done.");
@@ -315,47 +437,107 @@ function requireArg(prefix: string): string {
     : arg.split("=")[1];
 }
 
-function readCurrentConnectors(configPath: string): ConnectorYaml[] {
-  const connectorsDir = join(configPath, "connectors");
-  if (!existsSync(connectorsDir)) return [];
-  return readdirSync(connectorsDir)
-    .filter((f) => f.startsWith("connector-") && f.endsWith(".yaml"))
-    .map(
-      (f) =>
-        yaml.load(
-          readFileSync(join(connectorsDir, f), "utf-8"),
-        ) as ConnectorYaml,
-    );
-}
-
-async function resolveDspBaseUrl(
+/** Base URL (with trailing slash) of a SharedInfra API, for the custom domain or the output. */
+async function resolveApiBaseUrl(
   cfn: CloudFormationClient,
   stackPrefix: string,
   deployment: DeploymentYaml,
+  domainPath: string,
+  outputKey: string,
 ): Promise<string | undefined> {
   if (deployment.domainName) {
-    return `https://${deployment.domainName}/protocol/`;
+    return `https://${deployment.domainName}/${domainPath}/`;
   }
   try {
-    const result = await cfn.send(
-      new DescribeStacksCommand({
-        StackName: `${stackPrefix}-SharedInfra`,
-      }),
+    const value = (await stackOutputs(cfn, `${stackPrefix}-SharedInfra`))?.get(
+      outputKey,
     );
-    const output = (result.Stacks?.[0]?.Outputs ?? []).find(
-      (o) => o.OutputKey === DSP_URL_OUTPUT_KEY,
-    );
-    if (output?.OutputValue) {
-      return output.OutputValue.endsWith("/")
-        ? output.OutputValue
-        : `${output.OutputValue}/`;
-    }
+    if (value) return value.endsWith("/") ? value : `${value}/`;
   } catch (err) {
     console.error(
       `[portal/finalize] Failed to read SharedInfra outputs: ${(err as Error).message}`,
     );
   }
   return undefined;
+}
+
+/** A stack's outputs by key, or undefined if the stack does not exist. */
+async function stackOutputs(
+  cfn: CloudFormationClient,
+  stackName: string,
+): Promise<Map<string, string> | undefined> {
+  try {
+    const result = await cfn.send(
+      new DescribeStacksCommand({ StackName: stackName }),
+    );
+    return new Map(
+      (result.Stacks?.[0]?.Outputs ?? []).map((o) => [
+        o.OutputKey ?? "",
+        o.OutputValue ?? "",
+      ]),
+    );
+  } catch (err) {
+    if (isNotFound(err)) return undefined;
+    throw err;
+  }
+}
+
+async function readBasyxOutputs(
+  cfn: CloudFormationClient,
+  stackPrefix: string,
+  bpnl: string,
+): Promise<BasyxOutputs | undefined> {
+  const o = await stackOutputs(cfn, basyxStackName(stackPrefix, bpnl));
+  const get = (key: string) => o?.get(key);
+  const outputs = {
+    dtrUrl: get("DtrUrl"),
+    tokenUrl: get("TokenUrl"),
+    clientId: get("ClientId"),
+    scope: get("Scope"),
+    clientSecretAlias: get("ClientSecretAlias"),
+  };
+  return Object.values(outputs).every(Boolean)
+    ? (outputs as BasyxOutputs)
+    : undefined;
+}
+
+/** BPNLs with a BaSyx stack of this deployment that is not deleted. */
+async function liveBasyxStacks(
+  cfn: CloudFormationClient,
+  stackPrefix: string,
+): Promise<Set<string>> {
+  const prefix = basyxStackName(stackPrefix, "");
+  const bpnls = new Set<string>();
+  for await (const page of paginateListStacks({ client: cfn }, {})) {
+    for (const s of page.StackSummaries ?? []) {
+      if (s.StackStatus === "DELETE_COMPLETE") continue;
+      if (s.StackName?.startsWith(prefix)) {
+        bpnls.add(s.StackName.slice(prefix.length));
+      }
+    }
+  }
+  return bpnls;
+}
+
+/** Deletes a stack and waits; a stack that does not exist counts as deleted. */
+async function deleteStack(
+  cfn: CloudFormationClient,
+  stackName: string,
+): Promise<void> {
+  try {
+    await cfn.send(new DeleteStackCommand({ StackName: stackName }));
+    await waitUntilStackDeleteComplete(
+      { client: cfn, maxWaitTime: STACK_DELETE_TIMEOUT_SECONDS },
+      { StackName: stackName },
+    );
+  } catch (err) {
+    if (!isNotFound(err)) throw err;
+  }
+}
+
+function isNotFound(err: unknown): boolean {
+  const msg = (err as Error).message ?? "";
+  return msg.includes("does not exist") || msg.includes("ResourceNotFound");
 }
 
 // Entrypoint guard: run only when invoked directly (node dist/portal/finalize.js),

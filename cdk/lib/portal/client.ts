@@ -6,7 +6,7 @@
  * Used by both provision.ts (pre-synth) and finalize.ts (post-deploy).
  *
  * The portal's connector registry is the source of truth for connector state —
- * DSCA persists no state of its own. Every operation is an idempotent read or
+ * the deployment persists no state of its own. Every operation is an idempotent read or
  * write against the portal or Secrets Manager.
  */
 

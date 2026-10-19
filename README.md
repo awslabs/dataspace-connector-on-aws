@@ -118,6 +118,7 @@ managementApiPrincipals:
 observabilityApiPrincipals:
   - "arn:aws:iam::<account-id>:role/<role-name>"
 # logLevel: DEBUG                   # Optional: TRACE, DEBUG, INFO, WARN, ERROR, OFF (unset = Tractus-X default)
+# stateRemovalPolicy: RETAIN        # Optional: RETAIN (default) or DESTROY; connectors can override
 
 # Optional custom domain (all three fields required together)
 # certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<id>"
@@ -135,6 +136,8 @@ portal:
     didResolver: "https://..."
 ```
 
+`stateRemovalPolicy` decides whether stored state (each connector's DynamoDB table and S3 bucket) is kept or deleted when its stack is deleted. It defaults to `RETAIN`, and a connector file can override it. The connector field was previously named `edcStateRemovalPolicy`; rename it to `stateRemovalPolicy` when upgrading, because config files with unknown keys fail validation.
+
 ### `connectors/connector-<id>.yaml`
 
 Each connector references a Cofinity-X Portal **external technical user** (**Identity Wallet Management** role) by its service account ID. The pipeline reads its OAuth credentials, populates the connector's EDC identity, stores the OAuth client secret in AWS Secrets Manager, and registers the connector for discovery, with no manual steps.
@@ -148,7 +151,7 @@ dataPlaneCpu: 256
 dataPlaneMemoryLimitMiB: 512
 interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-flow
 backgroundStateMachineIterationMillis: "60000"  # policy monitor + data-plane selector
-edcStateRemovalPolicy: DESTROY       # DESTROY or RETAIN
+# stateRemovalPolicy: DESTROY        # Optional; overrides deployment.yaml stateRemovalPolicy (default RETAIN)
 serviceAccountId: "<external-technical-user-id>"
 # logLevel: DEBUG                    # Optional; overrides deployment.yaml logLevel for this connector
 
@@ -167,6 +170,28 @@ serviceAccountId: "<external-technical-user-id>"
 
 When all three optional fields (`certificateArn`, `domainName`, `hostedZoneId`) are provided in `deployment.yaml`, the stack creates an API Gateway custom domain and maps EDC APIs as base paths (`/status`, `/management`, `/protocol`, `/data`). The default `execute-api` endpoints are disabled. The AWS Certificate Manager certificate must be in `us-east-1` regardless of stack region (API Gateway requirement for edge-optimized endpoints).
 
+### Digital Twin Registry (Eclipse BaSyx)
+
+An optional `basyx` block in `deployment.yaml` deploys an [Eclipse BaSyx](https://github.com/eclipse-basyx/basyx-go-components) Digital Twin Registry (DTR), and optionally a Submodel Repository, for a BPNL:
+
+```yaml
+basyx:
+  BPNL00000007J65N:
+    enabled: true
+    services: [dtr, submodelRepository] # dtr is required
+    dtrConnector: example               # Optional; defaults to the BPNL's first connector by file name
+    stateRemovalPolicy: RETAIN          # Optional; overrides deployment.yaml stateRemovalPolicy
+```
+
+Each enabled BPNL gets its own `<deploymentName>-BaSyx-<BPNL>` stack with an Aurora Serverless v2 PostgreSQL cluster, an Amazon Cognito user pool for machine-to-machine tokens, and one ECS service per BaSyx service. The services are reachable only from the `dtrConnector`'s data plane, over plain HTTP inside the private subnets, with a Cognito token that grants read access. The pipeline then offers the DTR as the catalog asset `dataspace-connector-dtr` on the `dtrConnector`. You can enable `basyx` for a connector that is already running; the stack is created on the next pipeline run. [EDC Asset Examples](docs/edc-asset-examples.md) shows the DTR asset and how to offer submodels from the Submodel Repository.
+
+Things to know:
+
+- **Removing a `dtrConnector`:** remove or move its `basyx` entry first. The BaSyx stack references the connector's data-plane security group, so CloudFormation blocks deleting a connector that BaSyx still uses.
+- **Removing a `basyx` entry:** the pipeline deletes the DTR asset and the BaSyx stack. With `RETAIN`, the Aurora cluster and its credentials secret stay in your account. Like a retained connector's DynamoDB table, the retained cluster keeps its fixed name, so delete it manually before re-enabling the BPNL.
+- **Idle cost:** the cluster is configured to pause at 0 ACU, but the DTR runs a database maintenance job every minute, so expect it to stay at its 0.5 ACU minimum.
+- **Token rate:** the data plane requests a new Cognito token for each DTR call. Cognito allows 150 client-credentials token requests per second per account and Region, shared by all user pools.
+
 ## Managing Connectors
 
 ### Adding a Connector
@@ -181,7 +206,7 @@ When all three optional fields (`certificateArn`, `domainName`, `hostedZoneId`) 
 2. Commit and push. The pipeline deregisters the connector from the portal and destroys its stack.
 
 > [!NOTE]
-> If the connector used `edcStateRemovalPolicy: RETAIN`, its DynamoDB table and S3 bucket are retained (not deleted) for data preservation; delete them manually if no longer needed. The manually-created portal technical user is also left in place.
+> If the connector's resolved `stateRemovalPolicy` is `RETAIN` (the default), its DynamoDB table and S3 bucket are retained (not deleted) for data preservation; delete them manually if no longer needed. The manually-created portal technical user is also left in place.
 
 ## Teardown
 
@@ -258,9 +283,8 @@ The EDC connector consists of two main components: a **Control Plane** that mana
 
 ## Backlog / Ideas 💡
 
-* Deployment of Digital Twin Registry (DTR) or entire [Tractus-X Hausanschluss](https://github.com/eclipse-tractusx/tractus-x-umbrella/blob/main/docs/user/common/guides/hausanschluss-bundles.md)
+* Deployment of the entire [Tractus-X Hausanschluss](https://github.com/eclipse-tractusx/tractus-x-umbrella/blob/main/docs/user/common/guides/hausanschluss-bundles.md)
 * Configurable switch between DynamoDB and Aurora PostgreSQL for control plane persistence
-* Include examples for EDC assets, such as OAuth 2.0 and S3
 * Data plane extension to serve DynamoDB data as EDC asset type
 
 ## Security

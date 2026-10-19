@@ -28,6 +28,7 @@ import {
   EDC_SECRETS_MANAGER_ALIASES,
   deriveConnectorTableName,
   deriveSecretPrefix,
+  resolveStateRemovalPolicy,
   toEdcIamEnvVars,
   toRemovalPolicy,
 } from "./config/config";
@@ -54,6 +55,8 @@ export interface ConnectorStackProps extends StackProps {
 }
 
 export class ConnectorStack extends Stack {
+  readonly dataPlane: EdcDataPlane;
+
   constructor(scope: Construct, id: string, props: ConnectorStackProps) {
     super(scope, id, props);
 
@@ -61,7 +64,9 @@ export class ConnectorStack extends Stack {
     const connectorId = connector.connectorId;
     const profile = connector.profile ?? deployment.profile;
     const logLevel = connector.logLevel ?? deployment.logLevel;
-    const removalPolicy = toRemovalPolicy(connector.edcStateRemovalPolicy);
+    const removalPolicy = toRemovalPolicy(
+      resolveStateRemovalPolicy(deployment, connector.stateRemovalPolicy),
+    );
 
     const edcIamEnvVars = toEdcIamEnvVars(props.edcIam);
 
@@ -242,6 +247,7 @@ export class ConnectorStack extends Stack {
       vpc: infra.vpc,
     });
     dataPlane.node.addDependency(controlPlane);
+    this.dataPlane = dataPlane;
 
     new CfnOutput(this, "EdcDataPlaneBucketName", {
       value: s3Bucket.bucketName,

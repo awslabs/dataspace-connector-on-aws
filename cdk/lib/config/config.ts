@@ -29,6 +29,14 @@ export const LOG_LEVELS = [
 ] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
+/** What happens to stored state (EDC DynamoDB/S3, BaSyx Aurora) when its stack is deleted. */
+export const STATE_REMOVAL_POLICIES = ["DESTROY", "RETAIN"] as const;
+export type StateRemovalPolicy = (typeof STATE_REMOVAL_POLICIES)[number];
+export const DEFAULT_STATE_REMOVAL_POLICY: StateRemovalPolicy = "RETAIN";
+
+export const BASYX_SERVICES = ["dtr", "submodelRepository"] as const;
+export type BasyxService = (typeof BASYX_SERVICES)[number];
+
 // ─── pipeline.yaml ────────────────────────────────────────────────────────────
 
 export interface PipelineYaml {
@@ -72,6 +80,20 @@ export interface DeploymentYaml {
   /** EDC log level for all connectors; a connector may override it. Unset keeps the Tractus-X default. */
   readonly logLevel?: LogLevel;
   readonly portal: PortalConfig;
+  /** Default removal policy for stored state; connectors and BaSyx entries may override it. Default RETAIN. */
+  readonly stateRemovalPolicy?: StateRemovalPolicy;
+  /** Eclipse BaSyx (Digital Twin Registry + Submodel Repository) per BPNL, keyed by BPNL. */
+  readonly basyx?: Record<string, BasyxEntry>;
+}
+
+/** One BaSyx deployment for one BPNL. */
+export interface BasyxEntry {
+  readonly enabled: boolean;
+  readonly services: BasyxService[];
+  /** Connector that offers the DTR asset. Default: the BPNL's first connector (file name order). */
+  readonly dtrConnector?: string;
+  /** Overrides the deployment.yaml stateRemovalPolicy for this BaSyx database. */
+  readonly stateRemovalPolicy?: StateRemovalPolicy;
 }
 
 // ─── connectors/connector-*.yaml ──────────────────────────────────────────────
@@ -110,7 +132,8 @@ export interface ConnectorYaml {
    * independently of the poll intervals. Default "10000" (abandon window 50s); EDC's own default is 500ms.
    */
   readonly dataPlaneFlowLeaseMillis?: string;
-  readonly edcStateRemovalPolicy: "DESTROY" | "RETAIN";
+  /** Overrides the deployment.yaml stateRemovalPolicy for this connector's DynamoDB table and S3 bucket. */
+  readonly stateRemovalPolicy?: StateRemovalPolicy;
   /** Cofinity-X portal technical user (service account) ID, authored by the operator. */
   readonly serviceAccountId: string;
   /** EDC log level for this connector, overriding the deployment.yaml logLevel. */
@@ -252,13 +275,170 @@ export function deriveConnectorTableName(
 }
 
 /** Maps the YAML removal-policy string to the CDK enum. */
-export function toRemovalPolicy(value: "DESTROY" | "RETAIN"): RemovalPolicy {
+export function toRemovalPolicy(value: StateRemovalPolicy): RemovalPolicy {
   return value === "RETAIN" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY;
 }
 
 /** Wraps IAM role ARN strings as principals. */
 export function toPrincipals(arns?: string[] | null): IPrincipal[] {
   return (arns ?? []).map((arn) => new ArnPrincipal(arn));
+}
+
+// ─── Allowed keys ─────────────────────────────────────────────────────────────
+
+/**
+ * Allowed keys per file and nesting level. `keys` describes a fixed object,
+ * `mapOf` a map keyed by user values (e.g. BPNL) whose values follow the inner
+ * spec. A leaf ({}) accepts any value; field checks validate its type. Each
+ * level `satisfies Record<keyof T, ...>`, so a new interface field fails to
+ * compile until it is listed here.
+ */
+interface KeySpec {
+  readonly keys?: Readonly<Record<string, KeySpec>>;
+  readonly mapOf?: KeySpec;
+}
+
+const LEAF: KeySpec = {};
+
+const IDENTITY_KEY_SPEC: KeySpec = {
+  keys: {
+    trustedIssuer: LEAF,
+    stsOauthTokenUrl: LEAF,
+    stsDimUrl: LEAF,
+    participantId: LEAF,
+    dcpId: LEAF,
+    didResolver: LEAF,
+  } satisfies Record<keyof PortalIdentity, KeySpec>,
+};
+
+const PIPELINE_KEY_SPEC: KeySpec = {
+  keys: {
+    appRepo: LEAF,
+    appVersion: LEAF,
+    configSource: LEAF,
+    configRepoName: LEAF,
+    connectionArn: LEAF,
+    requireApproval: LEAF,
+    deploymentName: LEAF,
+  } satisfies Record<keyof PipelineYaml, KeySpec>,
+};
+
+const DEPLOYMENT_KEY_SPEC: KeySpec = {
+  keys: {
+    profile: LEAF,
+    vpcIpAddresses: LEAF,
+    containerInsights: LEAF,
+    managementApiPrincipals: LEAF,
+    observabilityApiPrincipals: LEAF,
+    certificateArn: LEAF,
+    domainName: LEAF,
+    hostedZoneId: LEAF,
+    logLevel: LEAF,
+    portal: {
+      keys: {
+        environment: LEAF,
+        identity: IDENTITY_KEY_SPEC,
+      } satisfies Record<keyof PortalConfig, KeySpec>,
+    },
+    stateRemovalPolicy: LEAF,
+    basyx: {
+      mapOf: {
+        keys: {
+          enabled: LEAF,
+          services: LEAF,
+          dtrConnector: LEAF,
+          stateRemovalPolicy: LEAF,
+        } satisfies Record<keyof BasyxEntry, KeySpec>,
+      },
+    },
+  } satisfies Record<keyof DeploymentYaml, KeySpec>,
+};
+
+const CONNECTOR_KEY_SPEC: KeySpec = {
+  keys: {
+    connectorId: LEAF,
+    profile: LEAF,
+    controlPlaneCpu: LEAF,
+    controlPlaneMemoryLimitMiB: LEAF,
+    dataPlaneCpu: LEAF,
+    dataPlaneMemoryLimitMiB: LEAF,
+    interactiveStateMachineIterationMillis: LEAF,
+    backgroundStateMachineIterationMillis: LEAF,
+    dataPlaneFlowLeaseMillis: LEAF,
+    stateRemovalPolicy: LEAF,
+    serviceAccountId: LEAF,
+    logLevel: LEAF,
+    portal: {
+      keys: {
+        identity: IDENTITY_KEY_SPEC,
+      } satisfies Record<keyof ConnectorPortalOverride, KeySpec>,
+    },
+  } satisfies Record<keyof ConnectorYaml, KeySpec>,
+};
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Throws on the first key not allowed by spec: `<file>: unknown key '<dotted.path>'`. */
+function rejectUnknownKeys(
+  value: unknown,
+  spec: KeySpec,
+  file: string,
+  path: string[] = [],
+): void {
+  if (!isPlainObject(value)) return;
+  for (const [key, child] of Object.entries(value)) {
+    const childPath = [...path, key];
+    const childSpec = spec.mapOf ?? spec.keys?.[key];
+    if (childSpec === undefined) {
+      throw new Error(`${file}: unknown key '${childPath.join(".")}'`);
+    }
+    rejectUnknownKeys(child, childSpec, file, childPath);
+  }
+}
+
+// ─── Derived values ───────────────────────────────────────────────────────────
+
+/** Resolves a removal policy: the override, else the deployment value, else RETAIN. */
+export function resolveStateRemovalPolicy(
+  deployment: DeploymentYaml,
+  override?: StateRemovalPolicy,
+): StateRemovalPolicy {
+  return (
+    override ?? deployment.stateRemovalPolicy ?? DEFAULT_STATE_REMOVAL_POLICY
+  );
+}
+
+/** An enabled BaSyx entry with its resolved DTR connector. */
+export interface EnabledBasyx {
+  readonly bpnl: string;
+  readonly entry: BasyxEntry;
+  readonly dtrConnectorId: string;
+}
+
+/**
+ * Enabled BaSyx entries, sorted by BPNL. dtrConnectorId defaults to the BPNL's
+ * first connector in file name order; validateBasyx guarantees one exists.
+ */
+export function enabledBasyx(config: DeploymentConfig): EnabledBasyx[] {
+  const { deployment, connectors } = config;
+  return Object.entries(deployment.basyx ?? {})
+    .filter(([, entry]) => entry.enabled)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([bpnl, entry]) => {
+      const dtrConnectorId =
+        entry.dtrConnector ??
+        connectors.find(
+          (c) => resolveConnectorIdentity(deployment, c).participantId === bpnl,
+        )!.connectorId;
+      return { bpnl, entry, dtrConnectorId };
+    });
+}
+
+/** CloudFormation stack name of a BPNL's BaSyx stack. */
+export function basyxStackName(stackPrefix: string, bpnl: string): string {
+  return `${stackPrefix}-BaSyx-${bpnl}`;
 }
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
@@ -278,13 +458,14 @@ export function loadDeploymentConfig(configPath: string): DeploymentConfig {
   const deployment = yaml.load(
     readFileSync(deploymentPath, "utf-8"),
   ) as DeploymentYaml;
+  rejectUnknownKeys(deployment, DEPLOYMENT_KEY_SPEC, "deployment.yaml");
   validateDeployment(deployment, deploymentPath);
 
   const connectorsDir = join(configPath, "connectors");
   const files = existsSync(connectorsDir)
-    ? readdirSync(connectorsDir).filter(
-        (f) => f.startsWith("connector-") && f.endsWith(".yaml"),
-      )
+    ? readdirSync(connectorsDir)
+        .filter((f) => f.startsWith("connector-") && f.endsWith(".yaml"))
+        .sort()
     : [];
 
   if (files.length === 0) {
@@ -297,11 +478,33 @@ export function loadDeploymentConfig(configPath: string): DeploymentConfig {
     const connector = yaml.load(
       readFileSync(join(connectorsDir, file), "utf-8"),
     ) as ConnectorYaml;
+    rejectUnknownKeys(connector, CONNECTOR_KEY_SPEC, `connectors/${file}`);
     validateConnector(connector, file);
+    validateStateRemovalPolicy(
+      connector.stateRemovalPolicy,
+      `connectors/${file}`,
+      "stateRemovalPolicy",
+    );
     return connector;
   });
 
+  validateBasyx(deployment, connectors);
+
   return { deployment, connectors };
+}
+
+/** Loads pipeline.yaml from configPath and rejects unknown keys. */
+export function loadPipelineConfig(configPath: string): PipelineYaml {
+  const pipelinePath = join(configPath, "pipeline.yaml");
+  if (!existsSync(pipelinePath)) {
+    throw new Error(
+      `pipeline.yaml not found at ${pipelinePath}. ` +
+        `Provide --context config-path=<path>.`,
+    );
+  }
+  const pipeline = yaml.load(readFileSync(pipelinePath, "utf-8"));
+  rejectUnknownKeys(pipeline, PIPELINE_KEY_SPEC, "pipeline.yaml");
+  return pipeline as PipelineYaml;
 }
 
 function validateDeployment(data: DeploymentYaml, filePath: string): void {
@@ -328,6 +531,11 @@ function validateDeployment(data: DeploymentYaml, filePath: string): void {
     throw new Error(`${filePath}: portal section requires 'environment'`);
   }
   validateLogLevel(data.logLevel, filePath);
+  validateStateRemovalPolicy(
+    data.stateRemovalPolicy,
+    "deployment.yaml",
+    "stateRemovalPolicy",
+  );
 }
 
 function validateConnector(data: ConnectorYaml, fileName: string): void {
@@ -337,7 +545,6 @@ function validateConnector(data: ConnectorYaml, fileName: string): void {
     "controlPlaneMemoryLimitMiB",
     "dataPlaneCpu",
     "dataPlaneMemoryLimitMiB",
-    "edcStateRemovalPolicy",
     "serviceAccountId",
   ];
   const missing = required.filter(
@@ -358,5 +565,91 @@ export function validateLogLevel(logLevel: unknown, source: string): void {
     throw new Error(
       `${source}: logLevel must be one of ${LOG_LEVELS.join(", ")}, got "${String(logLevel)}"`,
     );
+  }
+}
+
+/** Throws unless value is omitted, "RETAIN" or "DESTROY". */
+function validateStateRemovalPolicy(
+  value: unknown,
+  file: string,
+  path: string,
+): void {
+  if (
+    value !== undefined &&
+    !STATE_REMOVAL_POLICIES.includes(value as StateRemovalPolicy)
+  ) {
+    throw new Error(
+      `${file}: ${path} must be "RETAIN" or "DESTROY", got "${String(value)}"`,
+    );
+  }
+}
+
+const BPNL_PATTERN = /^BPNL[0-9A-Z]{12}$/;
+
+/** Validates the deployment.yaml basyx block against the loaded connectors. */
+function validateBasyx(
+  deployment: DeploymentYaml,
+  connectors: ConnectorYaml[],
+): void {
+  const basyx: unknown = deployment.basyx;
+  if (basyx === undefined || basyx === null) return;
+  const file = "deployment.yaml";
+  if (!isPlainObject(basyx)) {
+    throw new Error(`${file}: basyx must be a map keyed by BPNL`);
+  }
+  const bpnlOf = (c: ConnectorYaml) =>
+    resolveConnectorIdentity(deployment, c).participantId;
+
+  for (const [bpnl, raw] of Object.entries(basyx)) {
+    const at = `basyx.${bpnl}`;
+    if (!BPNL_PATTERN.test(bpnl)) {
+      throw new Error(`${file}: basyx key '${bpnl}' is not a valid BPNL`);
+    }
+    if (!isPlainObject(raw)) {
+      throw new Error(`${file}: ${at} must be a map`);
+    }
+    const entry = raw as Partial<BasyxEntry>;
+    if (typeof entry.enabled !== "boolean") {
+      throw new Error(`${file}: ${at}.enabled must be true or false`);
+    }
+    const services: unknown = entry.services;
+    if (!Array.isArray(services) || services.length === 0) {
+      throw new Error(`${file}: ${at}.services must be a non-empty list`);
+    }
+    for (const service of services) {
+      if (!BASYX_SERVICES.includes(service as BasyxService)) {
+        throw new Error(
+          `${file}: ${at}.services: unknown service '${String(service)}' (allowed: ${BASYX_SERVICES.join(", ")})`,
+        );
+      }
+    }
+    if (!services.includes("dtr")) {
+      throw new Error(`${file}: ${at}.services must include 'dtr'`);
+    }
+    validateStateRemovalPolicy(
+      entry.stateRemovalPolicy,
+      file,
+      `${at}.stateRemovalPolicy`,
+    );
+    if (!entry.enabled) continue;
+
+    if (!connectors.some((c) => bpnlOf(c) === bpnl)) {
+      throw new Error(
+        `${file}: ${at}: no connector in this deployment has participantId ${bpnl}`,
+      );
+    }
+    if (entry.dtrConnector !== undefined) {
+      const dtr = connectors.find((c) => c.connectorId === entry.dtrConnector);
+      if (dtr === undefined) {
+        throw new Error(
+          `${file}: ${at}.dtrConnector '${String(entry.dtrConnector)}' does not exist`,
+        );
+      }
+      if (bpnlOf(dtr) !== bpnl) {
+        throw new Error(
+          `${file}: ${at}.dtrConnector '${dtr.connectorId}' belongs to ${String(bpnlOf(dtr))}`,
+        );
+      }
+    }
   }
 }

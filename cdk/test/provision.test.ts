@@ -32,7 +32,7 @@ function connector(overrides: Partial<ConnectorYaml> = {}): ConnectorYaml {
     controlPlaneMemoryLimitMiB: 1024,
     dataPlaneCpu: 256,
     dataPlaneMemoryLimitMiB: 512,
-    edcStateRemovalPolicy: "DESTROY",
+    stateRemovalPolicy: "DESTROY",
     serviceAccountId: "sa-1",
     ...overrides,
   } as ConnectorYaml;
