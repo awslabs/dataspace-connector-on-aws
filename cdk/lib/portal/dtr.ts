@@ -249,9 +249,6 @@ function storedHash(asset: unknown): string | undefined {
   const props = (asset as { privateProperties?: Record<string, unknown> })
     ?.privateProperties;
   if (!props) return undefined;
-  const value =
-    props[DTR_HASH_PROPERTY] ??
-    props[`edc:${DTR_HASH_PROPERTY}`] ??
-    props[`${EDC_NS}${DTR_HASH_PROPERTY}`];
+  const value = props[DTR_HASH_PROPERTY];
   return typeof value === "string" ? value : undefined;
 }
