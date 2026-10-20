@@ -21,6 +21,7 @@ edc-spi-contract = { module = "org.eclipse.edc:contract-spi", version.ref = "edc
 edc-spi-core = { module = "org.eclipse.edc:core-spi", version.ref = "edc" }
 edc-spi-dataplane = { module = "org.eclipse.edc:data-plane-spi", version.ref = "edc" }
 edc-spi-dataplane-selector = { module = "org.eclipse.edc:data-plane-selector-spi", version.ref = "edc" }
+edc-spi-oauth2 = { module = "org.eclipse.edc:oauth2-spi", version.ref = "edc" }
 edc-spi-policy = { module = "org.eclipse.edc:policy-spi", version.ref = "edc" }
 edc-spi-policy-monitor = { module = "org.eclipse.edc:policy-monitor-spi", version.ref = "edc" }
 edc-spi-store-edr = { module = "org.eclipse.edc:edr-store-spi", version.ref = "edc" }
@@ -30,6 +31,7 @@ edc-transaction-local = { module = "org.eclipse.edc:transaction-local", version.
 edc-vault-aws = { module = "org.eclipse.edc.aws:vault-aws", version.ref = "edc" }
 jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-jupiter" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
 log4j-api = { module = "org.apache.logging.log4j:log4j-api", version.ref = "log4j" }

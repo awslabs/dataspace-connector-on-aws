@@ -5,10 +5,11 @@
  * ABAC rules and OIDC trust lists for the BaSyx services.
  *
  * Derived from BaSyx Go examples/CatenaXample/security/{dtr,smrepo} at commit
- * 71552c0 with three changes: the caller is identified by the token's
- * client_id (the dtrConnector's data plane), only READ is granted, and there
- * is no anonymous access. The per-BPN visibility formulas on the Edc-Bpn
- * header are kept unchanged.
+ * 71552c0 and the Catena-X values of eclipse-basyx/charts. Callers are
+ * identified by the token's client_id instead of a role claim: the
+ * dtrConnector's data plane reads with the per-BPN Edc-Bpn visibility
+ * formulas, the provider's writer client has full access like the chart's
+ * data_provider role. There is no anonymous access.
  */
 
 import { BasyxService } from "../config/config";
@@ -17,6 +18,12 @@ import { READ_SCOPE } from "./names";
 type Json = string | number | boolean | null | Json[] | { [k: string]: Json };
 
 const CLIENT_FORMULA = "data_plane_client";
+const WRITER_FORMULA = "writer_client";
+
+export interface AccessRuleClients {
+  readonly clientId: string;
+  readonly writerClientId: string;
+}
 
 function isClient(clientId: string): Json {
   return {
@@ -24,8 +31,15 @@ function isClient(clientId: string): Json {
   };
 }
 
-function clientFormula(clientId: string): Json {
-  return { name: CLIENT_FORMULA, formula: isClient(clientId) };
+function clientFormulas(clients: AccessRuleClients): Json[] {
+  return [
+    { name: CLIENT_FORMULA, formula: isClient(clients.clientId) },
+    { name: WRITER_FORMULA, formula: isClient(clients.writerClientId) },
+  ];
+}
+
+function writerRule(objects: string[]): Json {
+  return { USEACL: "full", USEOBJECTS: objects, USEFORMULA: WRITER_FORMULA };
 }
 
 /** Edc-Bpn equals a field value, or the field is marked PUBLIC_READABLE. */
@@ -44,12 +58,20 @@ function withClient(clientId: string, formula: Json): Json {
 
 const COMMON_DEFS = {
   DEFATTRIBUTES: [
-    { name: "data_plane", attributes: [{ CLAIMPATH: "/client_id" }] },
+    { name: "client", attributes: [{ CLAIMPATH: "/client_id" }] },
   ],
   DEFACLS: [
     {
       name: "read",
-      acl: { USEATTRIBUTES: "data_plane", RIGHTS: ["READ"], ACCESS: "ALLOW" },
+      acl: { USEATTRIBUTES: "client", RIGHTS: ["READ"], ACCESS: "ALLOW" },
+    },
+    {
+      name: "full",
+      acl: {
+        USEATTRIBUTES: "client",
+        RIGHTS: ["CREATE", "READ", "UPDATE", "DELETE"],
+        ACCESS: "ALLOW",
+      },
     },
   ],
 };
@@ -60,11 +82,15 @@ const AAS_SUBMODEL_SUPPLEMENTAL =
   "$aasdesc#submodelDescriptors[].supplementalSemanticIds[].keys[].value";
 const SM_SUPPLEMENTAL = "$sm#supplementalSemanticIds[].keys[].value";
 
-function dtrRules(clientId: string): Json {
+const ALL_ROUTES = { name: "all_routes", objects: [{ ROUTE: "*" }] };
+
+function dtrRules(clients: AccessRuleClients): Json {
+  const { clientId } = clients;
   return {
     AllAccessPermissionRules: {
       ...COMMON_DEFS,
       DEFOBJECTS: [
+        ALL_ROUTES,
         { name: "description", objects: [{ ROUTE: "/description" }] },
         {
           name: "all_shell_descriptors",
@@ -79,7 +105,7 @@ function dtrRules(clientId: string): Json {
         },
       ],
       DEFFORMULAS: [
-        clientFormula(clientId),
+        ...clientFormulas(clients),
         {
           name: "aas_bpn_match",
           formula: {
@@ -103,6 +129,7 @@ function dtrRules(clientId: string): Json {
         },
       ],
       rules: [
+        writerRule(["all_routes", "all_shell_descriptors"]),
         {
           USEACL: "read",
           USEOBJECTS: ["description"],
@@ -164,11 +191,13 @@ function dtrRules(clientId: string): Json {
   };
 }
 
-function submodelRepositoryRules(clientId: string): Json {
+function submodelRepositoryRules(clients: AccessRuleClients): Json {
+  const { clientId } = clients;
   return {
     AllAccessPermissionRules: {
       ...COMMON_DEFS,
       DEFOBJECTS: [
+        ALL_ROUTES,
         { name: "description", objects: [{ ROUTE: "/description" }] },
         {
           name: "submodel_routes",
@@ -182,7 +211,7 @@ function submodelRepositoryRules(clientId: string): Json {
         },
       ],
       DEFFORMULAS: [
-        clientFormula(clientId),
+        ...clientFormulas(clients),
         {
           name: "submodel_bpn_or_public",
           formula: bpnOrPublic(SM_SUPPLEMENTAL),
@@ -193,6 +222,7 @@ function submodelRepositoryRules(clientId: string): Json {
         },
       ],
       rules: [
+        writerRule(["all_routes"]),
         {
           USEACL: "read",
           USEOBJECTS: ["description"],
@@ -223,12 +253,10 @@ function submodelRepositoryRules(clientId: string): Json {
 /** ABAC rule file content for a service, as a JSON string. */
 export function renderAccessRules(
   service: BasyxService,
-  options: { clientId: string },
+  clients: AccessRuleClients,
 ): string {
   const rules =
-    service === "dtr"
-      ? dtrRules(options.clientId)
-      : submodelRepositoryRules(options.clientId);
+    service === "dtr" ? dtrRules(clients) : submodelRepositoryRules(clients);
   return JSON.stringify(rules);
 }
 

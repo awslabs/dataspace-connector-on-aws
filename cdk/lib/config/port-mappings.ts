@@ -32,5 +32,7 @@ export const DATA_PLANE_PORT_MAPPING_DEFAULT: DataPlanePortMapping = {
 export interface AlbOutputs {
   readonly dnsName: string;
   readonly securityGroupId: string;
+  /** Attached to EDC tasks; the ALB admits it on the control ports. */
+  readonly taskSecurityGroupId: string;
   readonly targetGroups: { [port: number]: IApplicationTargetGroup };
 }

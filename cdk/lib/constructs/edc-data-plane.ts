@@ -160,7 +160,14 @@ export class EdcDataPlane extends Construct {
       containerName: containerName,
       containerPort: dataPlanePortMapping.default,
       profile: props.profile,
-      securityGroups: [securityGroup],
+      securityGroups: [
+        securityGroup,
+        SecurityGroup.fromSecurityGroupId(
+          this,
+          "EdcTaskSecurityGroup",
+          props.albOutputs.taskSecurityGroupId,
+        ),
+      ],
       targetGroup: props.albOutputs.targetGroups[dataPlanePortMapping.default],
       taskDefinition: taskDefinition,
     });

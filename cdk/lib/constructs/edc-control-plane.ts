@@ -154,7 +154,14 @@ export class EdcControlPlane extends Construct {
       containerName: containerName,
       containerPort: portMapping.default,
       profile: props.profile,
-      securityGroups: [securityGroup],
+      securityGroups: [
+        securityGroup,
+        SecurityGroup.fromSecurityGroupId(
+          this,
+          "EdcTaskSecurityGroup",
+          props.albOutputs.taskSecurityGroupId,
+        ),
+      ],
       targetGroup: props.albOutputs.targetGroups[portMapping.default],
       taskDefinition: taskDefinition,
     });

@@ -9,6 +9,7 @@ export const DTR_CONTEXT_PATH = "/api/v3";
 export const RESOURCE_SERVER_ID = "dataspace-connector-basyx";
 export const READ_SCOPE_NAME = "read";
 export const READ_SCOPE = `${RESOURCE_SERVER_ID}/${READ_SCOPE_NAME}`;
+export const WRITE_SCOPE_NAME = "write";
 
 /** Short name of each service: its Cloud Map name, container name and database. */
 export const SERVICE_NAMES = {
@@ -76,4 +77,12 @@ export function basyxClientSecretAlias(
   dtrConnectorId: string,
 ): string {
   return `${deriveSecretPrefix(deploymentName, dtrConnectorId)}basyx.dtr.oauth.client.secret`;
+}
+
+/** Secrets Manager name of the provider's writer client secret. */
+export function basyxWriterSecretName(
+  deploymentName: string,
+  bpnl: string,
+): string {
+  return `${deploymentName}/basyx/${bpnl}/writer-client-secret`;
 }

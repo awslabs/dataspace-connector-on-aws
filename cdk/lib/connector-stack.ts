@@ -203,6 +203,7 @@ export class ConnectorStack extends Stack {
     const albOutputs = {
       dnsName: infra.albDnsName,
       securityGroupId: infra.albSecurityGroupId,
+      taskSecurityGroupId: infra.edcTaskSecurityGroupId,
       targetGroups,
     };
 

@@ -297,7 +297,7 @@ fetch_data(connector_id="<target-connector>", transfer_process_id="<transfer-id>
 
 The data plane acts as a proxy, it forwards the request to the provider's actual data source (the `baseUrl` or S3 object configured in the asset's data address) and returns the response. If the response body contains the expected data from the asset's data source, the end-to-end flow is validated.
 
-For advanced use cases (sub-paths, query parameters, POST bodies), `fetch_data` accepts `method`, `path`, `query_params`, and `body`:
+For advanced use cases (sub-paths, query parameters, POST bodies, extra request headers), `fetch_data` accepts `method`, `path`, `query_params`, `body` (a JSON object or array) and `headers`:
 
 ```python
 fetch_data(

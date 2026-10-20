@@ -58,6 +58,7 @@ export class SharedInfraStack extends Stack {
   readonly albArn: string;
   readonly albDnsName: string;
   readonly albSecurityGroupId: string;
+  readonly edcTaskSecurityGroupId: string;
   readonly controlPlaneImage: DockerImageAsset;
   readonly dataPlaneImage: DockerImageAsset;
   readonly dataPlaneUrl: string;
@@ -118,6 +119,27 @@ export class SharedInfraStack extends Stack {
       albSg.addEgressRule(Peer.ipv4(this.vpc.vpcCidrBlock), Port.tcp(port)),
     );
 
+    // The VPC link shares the ALB security group (replacing a VPC link's
+    // security group replaces the link), so API Gateway traffic is allowed by
+    // a self-reference. Connector tasks reach the ALB only on the control ports.
+    const edcTaskSg = new SecurityGroup(this, "EdcTaskSecurityGroup", {
+      description:
+        "Attached to EDC tasks so they can call the ALB control ports",
+      allowAllOutbound: false,
+      vpc: this.vpc,
+    });
+    for (const port of [
+      cpPorts.default,
+      cpPorts.management,
+      cpPorts.protocol,
+      dpPorts.public,
+    ]) {
+      albSg.addIngressRule(albSg, Port.tcp(port), "API Gateway VPC link");
+    }
+    for (const port of [cpPorts.control, dpPorts.control]) {
+      albSg.addIngressRule(edcTaskSg, Port.tcp(port), "EDC tasks");
+    }
+
     const alb = new ApplicationLoadBalancer(this, "Alb", {
       internetFacing: false,
       securityGroup: albSg,
@@ -128,6 +150,7 @@ export class SharedInfraStack extends Stack {
     for (const port of new Set(allPorts)) {
       const listener = alb.addListener(`Listener${port}`, {
         port,
+        open: false,
         protocol: ApplicationProtocol.HTTP,
         defaultAction: ListenerAction.fixedResponse(404, {
           messageBody: "No matching EDC connector",
@@ -139,6 +162,7 @@ export class SharedInfraStack extends Stack {
     this.albArn = alb.loadBalancerArn;
     this.albDnsName = alb.loadBalancerDnsName;
     this.albSecurityGroupId = albSg.securityGroupId;
+    this.edcTaskSecurityGroupId = edcTaskSg.securityGroupId;
 
     const vpcLink = new VpcLink(this, "VpcLink", {
       vpc: this.vpc,

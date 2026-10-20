@@ -75,9 +75,11 @@ import {
   DTR_CONTEXT_PATH,
   READ_SCOPE,
   READ_SCOPE_NAME,
+  WRITE_SCOPE_NAME,
   RESOURCE_SERVER_ID,
   SERVICE_NAMES,
   basyxClientSecretAlias,
+  basyxWriterSecretName,
   basyxNamespaceName,
   cognitoDomainPrefix,
   cognitoTokenUrl,
@@ -178,9 +180,13 @@ export class BasyxStack extends Stack {
       scopeName: READ_SCOPE_NAME,
       scopeDescription: "Read access to the BaSyx services",
     });
+    const writeScope = new ResourceServerScope({
+      scopeName: WRITE_SCOPE_NAME,
+      scopeDescription: "Write access to the BaSyx services",
+    });
     const resourceServer = userPool.addResourceServer("ResourceServer", {
       identifier: RESOURCE_SERVER_ID,
-      scopes: [readScope],
+      scopes: [readScope, writeScope],
     });
     const client = userPool.addClient("DataPlaneClient", {
       generateSecret: true,
@@ -202,6 +208,25 @@ export class BasyxStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
+    // The provider's own apps register twins and submodels with this client.
+    const writer = userPool.addClient("WriterClient", {
+      generateSecret: true,
+      accessTokenValidity: Duration.hours(1),
+      oAuth: {
+        flows: { clientCredentials: true },
+        scopes: [readScope, writeScope].map((s) =>
+          OAuthScope.resourceServer(resourceServer, s),
+        ),
+      },
+      supportedIdentityProviders: [UserPoolClientIdentityProvider.COGNITO],
+    });
+    const writerSecret = new Secret(this, "WriterClientSecret", {
+      secretName: basyxWriterSecretName(deploymentName, bpnl),
+      description: `Cognito client secret for writing to the BaSyx services of ${bpnl}`,
+      secretStringValue: writer.userPoolClientSecret,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
     // ─── Services ────────────────────────────────────────────────────────────
     const issuer = userPool.userPoolProviderUrl;
     const services: BasyxService[] = ["dtr"];
@@ -216,6 +241,7 @@ export class BasyxStack extends Stack {
           service,
           accessRules: renderAccessRules(service, {
             clientId: client.userPoolClientId,
+            writerClientId: writer.userPoolClientId,
           }),
           trustList: renderTrustList(issuer),
           cluster: props.cluster,
@@ -236,6 +262,8 @@ export class BasyxStack extends Stack {
     out("ClientId", client.userPoolClientId);
     out("Scope", READ_SCOPE);
     out("ClientSecretAlias", clientSecretAlias);
+    out("WriterClientId", writer.userPoolClientId);
+    out("WriterClientSecretArn", writerSecret.secretArn);
   }
 }
 

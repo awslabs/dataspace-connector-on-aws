@@ -363,3 +363,29 @@ def test_fetch_data_403_has_hint(monkeypatch):
     out = run(fn(server.fetch_data)(transfer_process_id="tp1", connector_id="c"))
     assert out["status"] == 403
     assert "public/" in out["hint"] and "token" in out["hint"].lower()
+
+
+def test_fetch_data_sends_empty_array_body(monkeypatch):
+    async def fake_api(method, path, payload=None, connector_id=None):
+        return {"endpoint": "https://dp.example.com/data/carbonex", "authorization": "tok"}
+
+    monkeypatch.setattr(server, "_api_request", fake_api)
+    FakeAsyncClient.queue = [FakeResponse(200, json_body=[])]
+    monkeypatch.setattr(server.httpx, "AsyncClient", FakeAsyncClient)
+
+    run(fn(server.fetch_data)(transfer_process_id="tp1", method="POST", path="lookup/shellsByAssetLink", body=[]))
+    assert FakeAsyncClient.last["kwargs"]["content"] == b"[]"
+    assert FakeAsyncClient.last["kwargs"]["headers"]["Content-Type"] == "application/json"
+
+
+def test_fetch_data_extra_headers_cannot_override_authorization(monkeypatch):
+    async def fake_api(method, path, payload=None, connector_id=None):
+        return {"endpoint": "https://dp.example.com/data/carbonex", "authorization": "tok"}
+
+    monkeypatch.setattr(server, "_api_request", fake_api)
+    FakeAsyncClient.queue = [FakeResponse(200, json_body={})]
+    monkeypatch.setattr(server.httpx, "AsyncClient", FakeAsyncClient)
+
+    run(fn(server.fetch_data)(transfer_process_id="tp1", headers={"Edc-Bpn": "BPNL0000000FORGED", "Authorization": "x"}))
+    sent = FakeAsyncClient.last["kwargs"]["headers"]
+    assert sent["Edc-Bpn"] == "BPNL0000000FORGED" and sent["Authorization"] == "tok"

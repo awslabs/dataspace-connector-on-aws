@@ -14,6 +14,7 @@ plugins {
 dependencies {
     runtimeOnly(libs.tx.dataplane.base)
     runtimeOnly(project(":extensions:data-plane:ddb"))
+    runtimeOnly(project(":extensions:data-plane:oauth2-token-cache"))
     runtimeOnly(project(":extensions:data-plane:s3-edr"))
 
     runtimeOnly(libs.edc.dpf.awss3.validator)

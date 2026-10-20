@@ -5,6 +5,7 @@ import { renderAccessRules, renderTrustList } from "../lib/basyx/access-rules";
 import { BASYX_SERVICES } from "../lib/config/config";
 
 const CLIENT_ID = "abc123client";
+const WRITER_ID = "writer456client";
 
 /** Collects every value under the given key anywhere in a JSON tree. */
 function collect(node: unknown, key: string, out: unknown[] = []): unknown[] {
@@ -19,12 +20,29 @@ function collect(node: unknown, key: string, out: unknown[] = []): unknown[] {
 }
 
 describe.each(BASYX_SERVICES)("access rules: %s", (service) => {
-  const text = renderAccessRules(service, { clientId: CLIENT_ID });
+  const text = renderAccessRules(service, {
+    clientId: CLIENT_ID,
+    writerClientId: WRITER_ID,
+  });
   const rules = JSON.parse(text);
+  const { DEFACLS, DEFFORMULAS } = rules.AllAccessPermissionRules;
+  const formulas = new Map<string, unknown>(
+    DEFFORMULAS.map((f: { name: string; formula: unknown }) => [
+      f.name,
+      JSON.stringify(f.formula),
+    ]),
+  );
+  const rightsOf = (acl: string) =>
+    DEFACLS.find((a: { name: string }) => a.name === acl).acl.RIGHTS;
 
-  test("grants READ only", () => {
-    const rights = collect(rules, "RIGHTS").flat();
-    expect(new Set(rights)).toEqual(new Set(["READ"]));
+  test("only the writer client gets write rights", () => {
+    for (const rule of rules.AllAccessPermissionRules.rules) {
+      const formula = formulas.get(rule.USEFORMULA) as string;
+      if (rightsOf(rule.USEACL).some((r: string) => r !== "READ")) {
+        expect(formula).toContain(`{"$strVal":"${WRITER_ID}"}`);
+        expect(formula).not.toContain(CLIENT_ID);
+      }
+    }
   });
 
   test("has no anonymous access", () => {
@@ -32,16 +50,13 @@ describe.each(BASYX_SERVICES)("access rules: %s", (service) => {
     expect(text).not.toContain("ANONYMOUS");
   });
 
-  test("every rule requires the data-plane client", () => {
-    const formulas = new Map<string, unknown>(
-      rules.AllAccessPermissionRules.DEFFORMULAS.map(
-        (f: { name: string; formula: unknown }) => [f.name, f.formula],
-      ),
-    );
+  test("every rule requires a known client", () => {
     for (const rule of rules.AllAccessPermissionRules.rules) {
-      const formula = JSON.stringify(formulas.get(rule.USEFORMULA));
+      const formula = formulas.get(rule.USEFORMULA) as string;
       expect(formula).toContain('{"CLAIMPATH":"/client_id"}');
-      expect(formula).toContain(`{"$strVal":"${CLIENT_ID}"}`);
+      expect(formula.includes(CLIENT_ID) || formula.includes(WRITER_ID)).toBe(
+        true,
+      );
     }
   });
 

@@ -877,8 +877,9 @@ async def fetch_data(
     method: str = "GET",
     path: Optional[str] = None,
     query_params: Optional[dict[str, Any]] = None,
-    body: Optional[dict[str, Any]] = None,
+    body: Optional[dict[str, Any] | list[Any]] = None,
     media_type: Optional[str] = None,
+    headers: Optional[dict[str, str]] = None,
     connector_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
@@ -893,7 +894,8 @@ async def fetch_data(
     By default the Tractus-X public sub-path "public/" is appended to the EDR
     endpoint (the standard data plane public API path). Override with an explicit
     path only if the asset needs a different sub-path; query_params/body/method
-    support parameterized or proxied sources.
+    support parameterized or proxied sources. body is a JSON object or array.
+    headers adds request headers; the EDR Authorization header always wins.
 
     Returns: {status, headers, body}. body may be a JSON string that the caller
     parses. On 403, the cause is usually the wrong sub-path (the public API is
@@ -918,9 +920,9 @@ async def fetch_data(
     sub_path = path if path is not None else "public/"
     target_url = f"{endpoint.rstrip('/')}/{sub_path.lstrip('/')}"
 
-    headers: dict[str, str] = {"Authorization": authorization}
+    request_headers: dict[str, str] = {**(headers or {}), "Authorization": authorization}
     if body is not None:
-        headers["Content-Type"] = media_type or "application/json"
+        request_headers["Content-Type"] = media_type or "application/json"
     request_body = json.dumps(body).encode("utf-8") if body is not None else None
 
     async with httpx.AsyncClient() as client:
@@ -928,7 +930,7 @@ async def fetch_data(
             method.upper(),
             target_url,
             content=request_body,
-            headers=headers,
+            headers=request_headers,
             params=query_params,
             timeout=60.0,
         )

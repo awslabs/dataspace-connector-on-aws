@@ -128,7 +128,7 @@ describe("DeploymentStage BaSyx wiring", () => {
       ];
     });
     expect(names).toHaveLength(2);
-    expect(names[0]).toHaveLength(5);
+    expect(names[0]).toHaveLength(6);
     expect(names[0].filter((n) => names[1].includes(n))).toEqual([]);
   });
 });
