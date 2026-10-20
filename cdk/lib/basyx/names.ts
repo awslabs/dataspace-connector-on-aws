@@ -1,17 +1,25 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { deriveSecretPrefix } from "../config/config";
+import {
+  BasyxService,
+  connectorPriority,
+  deriveSecretPrefix,
+} from "../config/config";
 
+/** Container port and the shared ALB's data-plane read listener port. */
 export const BASYX_PORT = 5004;
-export const DTR_CONTEXT_PATH = "/api/v3";
+/** First path segment of every BaSyx route on the ALB and the management API. */
+export const BASYX_PATH_PREFIX = "basyx";
+/** Header that carries the Cognito token through the IAM-authorized management API. */
+export const BASYX_TOKEN_HEADER = "X-BaSyx-Authorization";
 
 export const RESOURCE_SERVER_ID = "dataspace-connector-basyx";
 export const READ_SCOPE_NAME = "read";
 export const READ_SCOPE = `${RESOURCE_SERVER_ID}/${READ_SCOPE_NAME}`;
 export const WRITE_SCOPE_NAME = "write";
 
-/** Short name of each service: its Cloud Map name, container name and database. */
+/** Short name of each service: its path segment, container name and database. */
 export const SERVICE_NAMES = {
   dtr: "dtr",
   submodelRepository: "smrepo",
@@ -20,11 +28,18 @@ export const SERVICE_NAMES = {
 const COGNITO_DOMAIN_PREFIX_MAX = 63;
 const COGNITO_FORBIDDEN_WORDS = ["aws", "amazon", "cognito"];
 
-export function basyxNamespaceName(
-  deploymentName: string,
-  bpnl: string,
-): string {
-  return `${bpnl.toLowerCase()}.${deploymentName.toLowerCase()}.basyx.internal`;
+/**
+ * Context path a service serves under. The ALB can't rewrite paths, so the
+ * BPNL and service are part of it; the DTR keeps its API version suffix.
+ */
+export function basyxContextPath(bpnl: string, service: BasyxService): string {
+  const base = `/${BASYX_PATH_PREFIX}/${bpnl}/${SERVICE_NAMES[service]}`;
+  return service === "dtr" ? `${base}/api/v3` : base;
+}
+
+/** ALB listener rule priority of a BPNL's service, from the connector priority hash. */
+export function basyxPriority(bpnl: string, service: BasyxService): number {
+  return connectorPriority(`${BASYX_PATH_PREFIX}/${bpnl}/${service}`);
 }
 
 /**
@@ -64,8 +79,9 @@ export function cognitoTokenUrl(domainPrefix: string, region: string): string {
   return `https://${domainPrefix}.auth.${region}.amazoncognito.com/oauth2/token`;
 }
 
-export function dtrUrl(namespaceName: string): string {
-  return `http://${SERVICE_NAMES.dtr}.${namespaceName}:${BASYX_PORT}${DTR_CONTEXT_PATH}`;
+/** DTR URL the dtrConnector's data plane reads from, on the shared ALB. */
+export function dtrUrl(albDnsName: string, bpnl: string): string {
+  return `http://${albDnsName}:${BASYX_PORT}${basyxContextPath(bpnl, "dtr")}`;
 }
 
 /**

@@ -183,14 +183,32 @@ basyx:
     stateRemovalPolicy: RETAIN          # Optional; overrides deployment.yaml stateRemovalPolicy
 ```
 
-Each enabled BPNL gets its own `<deploymentName>-BaSyx-<BPNL>` stack with an Aurora Serverless v2 PostgreSQL cluster, an Amazon Cognito user pool for machine-to-machine tokens, and one ECS service per BaSyx service. The services are reachable only from the `dtrConnector`'s data plane, over plain HTTP inside the private subnets, with a Cognito token that grants read access. The pipeline then offers the DTR as the catalog asset `dataspace-connector-dtr` on the `dtrConnector`. You can enable `basyx` for a connector that is already running; the stack is created on the next pipeline run. [EDC Asset Examples](docs/edc-asset-examples.md) shows the DTR asset and how to offer submodels from the Submodel Repository.
+Each enabled BPNL gets its own `<deploymentName>-BaSyx-<BPNL>` stack with an Aurora Serverless v2 PostgreSQL cluster, an Amazon Cognito user pool for machine-to-machine tokens, and one ECS service per BaSyx service. The services sit behind the shared internal load balancer under `/basyx/<BPNL>/dtr/api/v3` and `/basyx/<BPNL>/smrepo`. The pipeline offers the DTR as the catalog asset `dataspace-connector-dtr` on the `dtrConnector`, whose data plane reads it with a Cognito token that grants read access. You can enable `basyx` for a connector that is already running; the stack is created on the next pipeline run. [EDC Asset Examples](docs/edc-asset-examples.md) shows the DTR asset and how to offer submodels from the Submodel Repository.
+
+#### Registering twins and submodels
+
+The pipeline creates the services empty. Your own applications register shell descriptors and submodels through the management API, so the same `managementApiPrincipals` that manage the connectors can write to BaSyx. Each request needs two credentials:
+
+1. A SigV4 signature for the management API, like any other management call.
+2. A Cognito token of the BaSyx writer client in the `X-BaSyx-Authorization` header. API Gateway uses `Authorization` for the SigV4 signature and passes this header on to BaSyx as `Authorization`.
+
+Get the writer token with the client credentials grant. The stack outputs `TokenUrl` and `WriterClientId`, and the client secret is in the Secrets Manager secret `WriterClientSecretArn`:
+
+```bash
+curl -s -u "<WriterClientId>:<writer client secret>" -d grant_type=client_credentials \
+  -d scope="dataspace-connector-basyx/read dataspace-connector-basyx/write" "<TokenUrl>"
+```
+
+Then call the BaSyx API under `<ManagementApiUrl>/basyx/<BPNL>/dtr/api/v3/` or `<ManagementApiUrl>/basyx/<BPNL>/smrepo/`, for example `POST .../dtr/api/v3/shell-descriptors`. The writer has full access to both services, like the `data_provider` role in the [Catena-X values of the BaSyx Helm chart](https://github.com/eclipse-basyx/charts). API Gateway limits a request to 10 MB and 29 seconds, which matters for large submodel uploads.
+
+To make a shell descriptor visible to a consumer, list the consumer's BPNL in the descriptor's `specificAssetIds` `externalSubjectId`. The data plane sends the consumer's BPNL from the contract agreement as the `Edc-Bpn` header, and the DTR filters by it.
 
 Things to know:
 
 - **Removing a `dtrConnector`:** remove or move its `basyx` entry first. The BaSyx stack references the connector's data-plane security group, so CloudFormation blocks deleting a connector that BaSyx still uses.
 - **Removing a `basyx` entry:** the pipeline deletes the DTR asset and the BaSyx stack. With `RETAIN`, the Aurora cluster and its credentials secret stay in your account. Like a retained connector's DynamoDB table, the retained cluster keeps its fixed name, so delete it manually before re-enabling the BPNL.
 - **Idle cost:** the cluster is configured to pause at 0 ACU, but the DTR runs a database maintenance job every minute, so expect it to stay at its 0.5 ACU minimum.
-- **Token rate:** the data plane requests a new Cognito token for each DTR call. Cognito allows 150 client-credentials token requests per second per account and Region, shared by all user pools.
+- **Token rate:** each data plane task caches the Cognito token until shortly before it expires, so it requests about one token per hour.
 
 ## Managing Connectors
 

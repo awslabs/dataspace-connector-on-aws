@@ -50,9 +50,11 @@ import {
 } from "aws-cdk-lib/aws-cognito";
 
 import {
-  DnsRecordType,
-  PrivateDnsNamespace,
-} from "aws-cdk-lib/aws-servicediscovery";
+  ApplicationProtocol,
+  ApplicationTargetGroup,
+  CfnListenerRule,
+  TargetType,
+} from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { ISecret, Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 
@@ -72,19 +74,28 @@ import {
 } from "./versions";
 import {
   BASYX_PORT,
-  DTR_CONTEXT_PATH,
   READ_SCOPE,
   READ_SCOPE_NAME,
   WRITE_SCOPE_NAME,
   RESOURCE_SERVER_ID,
   SERVICE_NAMES,
   basyxClientSecretAlias,
+  basyxContextPath,
+  basyxPriority,
   basyxWriterSecretName,
-  basyxNamespaceName,
   cognitoDomainPrefix,
   cognitoTokenUrl,
   dtrUrl,
 } from "./names";
+
+export interface BasyxAlb {
+  readonly dnsName: string;
+  readonly securityGroupId: string;
+  /** Management listener, reached by writers through the management API. */
+  readonly managementListenerArn: string;
+  /** BaSyx read listener, reached by the dtrConnector's data plane. */
+  readonly readListenerArn: string;
+}
 
 export interface BasyxStackProps extends StackProps {
   readonly bpnl: string;
@@ -96,7 +107,8 @@ export interface BasyxStackProps extends StackProps {
   readonly stateRemovalPolicy: StateRemovalPolicy;
   readonly vpc: IVpc;
   readonly cluster: ICluster;
-  /** Security group of the dtrConnector's data plane, the only allowed caller. */
+  readonly alb: BasyxAlb;
+  /** Security group of the dtrConnector's data plane, the only reader. */
   readonly dataPlaneSecurityGroup: ISecurityGroup;
 }
 
@@ -105,7 +117,7 @@ export class BasyxStack extends Stack {
   constructor(scope: Construct, id: string, props: BasyxStackProps) {
     super(scope, id, props);
 
-    const { bpnl, deploymentName, profile, vpc } = props;
+    const { alb, bpnl, deploymentName, profile, vpc } = props;
     const production = profile === "production";
     const removalPolicy = toRemovalPolicy(props.stateRemovalPolicy);
     const domainPrefix = cognitoDomainPrefix(deploymentName, bpnl);
@@ -121,10 +133,16 @@ export class BasyxStack extends Stack {
       description: `BaSyx Aurora cluster of ${bpnl}`,
       vpc,
     });
-    basyxSg.addIngressRule(
-      Peer.securityGroupId(props.dataPlaneSecurityGroup.securityGroupId),
+    const albSg = SecurityGroup.fromSecurityGroupId(
+      this,
+      "AlbSecurityGroup",
+      alb.securityGroupId,
+    );
+    basyxSg.addIngressRule(albSg, Port.tcp(BASYX_PORT), "Shared ALB");
+    albSg.addIngressRule(
+      props.dataPlaneSecurityGroup,
       Port.tcp(BASYX_PORT),
-      "dtrConnector data plane",
+      `${props.dtrConnectorId} data plane reads BaSyx of ${bpnl}`,
     );
     basyxSg.addEgressRule(auroraSg, Port.tcp(5432), "Aurora");
     basyxSg.addEgressRule(
@@ -133,11 +151,6 @@ export class BasyxStack extends Stack {
       "ECR, Cognito JWKS, logs",
     );
     auroraSg.addIngressRule(basyxSg, Port.tcp(5432), "BaSyx services");
-
-    const namespace = new PrivateDnsNamespace(this, "Namespace", {
-      name: basyxNamespaceName(deploymentName, bpnl),
-      vpc,
-    });
 
     // ─── Aurora ──────────────────────────────────────────────────────────────
     // Retained with the cluster, so an operator can still log in to a retained cluster.
@@ -239,17 +252,19 @@ export class BasyxStack extends Stack {
         service === "dtr" ? "Dtr" : "SubmodelRepository",
         {
           service,
+          bpnl,
           accessRules: renderAccessRules(service, {
             clientId: client.userPoolClientId,
             writerClientId: writer.userPoolClientId,
           }),
           trustList: renderTrustList(issuer),
+          alb,
           cluster: props.cluster,
           database,
           databaseSecret: credentialsSecret,
-          namespace,
           profile,
           securityGroup: basyxSg,
+          vpc,
         },
       );
     }
@@ -257,7 +272,7 @@ export class BasyxStack extends Stack {
     // ─── Outputs (read by finalize) ──────────────────────────────────────────
     const out = (key: string, value: string) =>
       new CfnOutput(this, key, { key, value });
-    out("DtrUrl", dtrUrl(namespace.namespaceName));
+    out("DtrUrl", dtrUrl(alb.dnsName, bpnl));
     out("TokenUrl", cognitoTokenUrl(domainPrefix, this.region));
     out("ClientId", client.userPoolClientId);
     out("Scope", READ_SCOPE);
@@ -269,14 +284,16 @@ export class BasyxStack extends Stack {
 
 interface BasyxFargateServiceProps {
   readonly service: BasyxService;
+  readonly bpnl: string;
   readonly accessRules: string;
   readonly trustList: string;
+  readonly alb: BasyxAlb;
   readonly cluster: ICluster;
   readonly database: IDatabaseCluster;
   readonly databaseSecret: ISecret;
-  readonly namespace: PrivateDnsNamespace;
   readonly profile: DeploymentProfile;
   readonly securityGroup: ISecurityGroup;
+  readonly vpc: IVpc;
 }
 
 const SECURITY_DIR = "/security";
@@ -293,6 +310,7 @@ class BasyxFargateService extends Construct {
 
     const { service, profile } = props;
     const name = SERVICE_NAMES[service];
+    const contextPath = basyxContextPath(props.bpnl, service);
     const retention =
       profile === "production"
         ? RetentionDays.ONE_MONTH
@@ -415,8 +433,8 @@ class BasyxFargateService extends Construct {
         ABAC_POLICY_FILE_IMPORT: "always",
         OIDC_TRUSTLISTPATH: `${SECURITY_DIR}/trustlist.json`,
         GENERAL_ENABLECUSTOMMIDDLEWAREHEADERINJECTION: "true",
+        SERVER_CONTEXTPATH: contextPath,
         ...(service === "dtr" && {
-          SERVER_CONTEXTPATH: DTR_CONTEXT_PATH,
           GENERAL_SUPPORTSSINGULARSUPPLEMENTALSEMANTICID: "true",
         }),
       },
@@ -459,14 +477,38 @@ class BasyxFargateService extends Construct {
       minHealthyPercent: 100,
       maxHealthyPercent: 200,
       platformVersion: FargatePlatformVersion.LATEST,
-      cloudMapOptions: {
-        cloudMapNamespace: props.namespace,
-        name,
-        dnsRecordType: DnsRecordType.A,
-        dnsTtl: Duration.seconds(10),
-      },
     });
     // The cluster endpoint only resolves once the writer instance exists.
     fargateService.node.addDependency(props.database);
+
+    // Same target group on both listeners: writes arrive on the management
+    // listener through the management API, reads from the data plane on its own.
+    const targetGroup = new ApplicationTargetGroup(this, "TargetGroup", {
+      port: BASYX_PORT,
+      protocol: ApplicationProtocol.HTTP,
+      targetType: TargetType.IP,
+      vpc: props.vpc,
+      healthCheck: { path: `${contextPath}/health` },
+      targets: [fargateService],
+    });
+    const priority = basyxPriority(props.bpnl, service);
+    for (const [ruleId, listenerArn] of [
+      ["ManagementListenerRule", props.alb.managementListenerArn],
+      ["ReadListenerRule", props.alb.readListenerArn],
+    ]) {
+      new CfnListenerRule(this, ruleId, {
+        actions: [
+          { type: "forward", targetGroupArn: targetGroup.targetGroupArn },
+        ],
+        conditions: [
+          {
+            field: "path-pattern",
+            pathPatternConfig: { values: [`${contextPath}/*`] },
+          },
+        ],
+        listenerArn,
+        priority,
+      });
+    }
   }
 }

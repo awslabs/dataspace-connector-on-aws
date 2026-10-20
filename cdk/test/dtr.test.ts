@@ -113,6 +113,7 @@ describe("ensureDtr", () => {
     expect(await ensureDtr(api, def)).toBe(true);
     expect(calls).toEqual([
       ["GET", `/assets/${DTR_ID}`],
+      ["DELETE", `/contractdefinitions/${DTR_ID}`],
       ["POST", "/policydefinitions"],
       ["POST", "/policydefinitions"],
       ["POST", "/contractdefinitions"],
@@ -131,21 +132,25 @@ describe("ensureDtr", () => {
     expect(calls).toEqual([["GET", `/assets/${DTR_ID}`]]);
   });
 
-  test("changed hash updates existing objects with PUT", async () => {
+  test("changed hash frees the policies, then updates them with PUT", async () => {
+    // Tractus-X refuses policy writes while a contract definition references them.
     const { api, calls } = fakeApi({
       [`GET /assets/${DTR_ID}`]: {
         status: 200,
         body: { privateProperties: { [DTR_HASH_PROPERTY]: "stale" } },
       },
       "POST /policydefinitions": { status: 409 },
-      "POST /contractdefinitions": { status: 409 },
       "POST /assets": { status: 409 },
     });
     expect(await ensureDtr(api, def)).toBe(true);
-    expect(calls.filter(([m]) => m === "PUT")).toEqual([
+    expect(calls.slice(1)).toEqual([
+      ["DELETE", `/contractdefinitions/${DTR_ID}`],
+      ["POST", "/policydefinitions"],
       ["PUT", `/policydefinitions/${DTR_ACCESS_POLICY_ID}`],
+      ["POST", "/policydefinitions"],
       ["PUT", `/policydefinitions/${DTR_USAGE_POLICY_ID}`],
-      ["PUT", "/contractdefinitions"],
+      ["POST", "/contractdefinitions"],
+      ["POST", "/assets"],
       ["PUT", "/assets"],
     ]);
   });

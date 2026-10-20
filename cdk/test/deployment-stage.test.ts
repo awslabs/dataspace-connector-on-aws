@@ -123,12 +123,18 @@ describe("DeploymentStage BaSyx wiring", () => {
         b.stackName,
         ...props("AWS::RDS::DBCluster", "DBClusterIdentifier"),
         ...props("AWS::Cognito::UserPoolDomain", "Domain"),
-        ...props("AWS::ServiceDiscovery::PrivateDnsNamespace", "Name"),
         ...props("AWS::SecretsManager::Secret", "Name").filter(Boolean),
+        ...Object.values(
+          t.findResources("AWS::ElasticLoadBalancingV2::ListenerRule"),
+        ).flatMap((r) => [
+          r.Properties.Priority,
+          r.Properties.Conditions[0].PathPatternConfig.Values[0],
+        ]),
       ];
     });
     expect(names).toHaveLength(2);
-    expect(names[0]).toHaveLength(6);
+    // 5 names, plus priority and path of 2 services on 2 listeners each.
+    expect(names[0]).toHaveLength(13);
     expect(names[0].filter((n) => names[1].includes(n))).toEqual([]);
   });
 });

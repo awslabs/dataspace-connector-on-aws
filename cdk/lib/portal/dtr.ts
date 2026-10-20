@@ -173,6 +173,8 @@ export function canonicalJson(value: unknown): string {
  * Creates or updates the DTR offer when its stored hash differs. Write order is
  * policies, contract definition, asset: the asset carries the hash, so a run
  * that fails partway leaves no matching hash and the next run retries.
+ * Tractus-X rejects writes to a policy that a contract definition references,
+ * so the contract definition is deleted first and recreated after.
  * Returns true when it wrote.
  */
 export async function ensureDtr(
@@ -184,6 +186,7 @@ export async function ensureDtr(
     return false;
   }
 
+  await api("DELETE", `/contractdefinitions/${DTR_ID}`, undefined, [404]);
   await upsert(api, "/policydefinitions", definition.accessPolicy, true);
   await upsert(api, "/policydefinitions", definition.usagePolicy, true);
   await upsert(api, "/contractdefinitions", definition.contractDefinition);

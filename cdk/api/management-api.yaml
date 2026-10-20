@@ -2535,6 +2535,40 @@ paths:
           integration.request.path.agreementId: method.request.path.agreementId
         uri: http://${loadBalancerDnsName}/{connectorId}/api/management/v3/contractagreements/retirements/{agreementId}
         integrationTarget: ${albArn}
+  /basyx/{any+}:
+    x-amazon-apigateway-any-method:
+      description: Proxy a write or read to a BaSyx service. The Cognito token goes in X-BaSyx-Authorization, because API Gateway consumes Authorization for SigV4.
+      operationId: basyxProxy
+      responses:
+        "200":
+          description: Response of the BaSyx service
+      tags:
+        - BaSyx
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.any: method.request.path.any
+          integration.request.header.Authorization: method.request.header.X-BaSyx-Authorization
+        uri: http://${loadBalancerDnsName}/basyx/{any}
+        integrationTarget: ${albArn}
+      parameters:
+        - name: any
+          in: path
+          required: true
+          schema:
+            type: string
+          description: BPNL, service and BaSyx API path, for example BPNL00000007J65N/dtr/api/v3/shell-descriptors
+        - name: X-BaSyx-Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Bearer token of the BaSyx writer client
 components:
   parameters:
     ConnectorId:

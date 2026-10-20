@@ -65,7 +65,7 @@ A submodel asset that points at one submodel in the BaSyx Submodel Repository de
   "dataAddress": {
     "@type": "DataAddress",
     "type": "HttpData",
-    "baseUrl": "http://smrepo.<namespace>:5004/submodels/<submodelIdBase64Url>",
+    "baseUrl": "http://<albHost>:5004/basyx/<BPNL>/smrepo/submodels/<submodelIdBase64Url>",
     "proxyPath": "true",
     "proxyQueryParams": "true",
     "oauth2:tokenUrl": "<TokenUrl>",
@@ -76,7 +76,7 @@ A submodel asset that points at one submodel in the BaSyx Submodel Repository de
 }
 ```
 
-`<namespace>` is the host part of `DtrUrl` after `dtr.`. Take `<batteryPassSemanticId>` from the battery passport aspect model version your use case requires (CX-0160). Offer the asset with a usage policy that includes `FrameworkAgreement` `DataExchangeGovernance:1.0` and `UsagePurpose` `cx.circular.dpp:1`.
+`<albHost>` is the host part of `DtrUrl`. Take `<batteryPassSemanticId>` from the battery passport aspect model version your use case requires (CX-0160). Offer the asset with a usage policy that includes `FrameworkAgreement` `DataExchangeGovernance:1.0` and `UsagePurpose` `cx.circular.dpp:1`.
 
 ## Amazon S3 object
 

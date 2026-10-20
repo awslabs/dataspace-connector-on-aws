@@ -3,7 +3,7 @@
 
 import {
   basyxClientSecretAlias,
-  basyxNamespaceName,
+  basyxContextPath,
   cognitoDomainPrefix,
   cognitoTokenUrl,
   dtrUrl,
@@ -14,11 +14,13 @@ import {
 const BPNL = "BPNL00000007J65N";
 
 describe("BaSyx names", () => {
-  test("namespace, domain prefix, URLs and secret alias", () => {
-    const ns = basyxNamespaceName("DataspaceConnector", BPNL);
-    expect(ns).toBe("bpnl00000007j65n.dataspaceconnector.basyx.internal");
-    expect(dtrUrl(ns)).toBe(
-      "http://dtr.bpnl00000007j65n.dataspaceconnector.basyx.internal:5004/api/v3",
+  test("context paths, domain prefix, URLs and secret alias", () => {
+    expect(basyxContextPath(BPNL, "dtr")).toBe(`/basyx/${BPNL}/dtr/api/v3`);
+    expect(basyxContextPath(BPNL, "submodelRepository")).toBe(
+      `/basyx/${BPNL}/smrepo`,
+    );
+    expect(dtrUrl("alb.internal", BPNL)).toBe(
+      `http://alb.internal:5004/basyx/${BPNL}/dtr/api/v3`,
     );
     const prefix = cognitoDomainPrefix("DataspaceConnector", BPNL);
     expect(prefix).toBe("dataspaceconnector-basyx-bpnl00000007j65n");

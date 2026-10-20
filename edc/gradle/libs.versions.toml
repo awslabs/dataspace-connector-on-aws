@@ -40,8 +40,12 @@ log4j-core = { module = "org.apache.logging.log4j:log4j-core", version.ref = "lo
 log4j-layout-template-json = { module = "org.apache.logging.log4j:log4j-layout-template-json", version.ref = "log4j" }
 log4j-slf4j2-impl = { module = "org.apache.logging.log4j:log4j-slf4j2-impl", version.ref = "log4j" }
 tx-controlplane-base = { module = "org.eclipse.tractusx.edc:edc-controlplane-base", version.ref = "tx" }
+tx-core-agreements-bpns = { module = "org.eclipse.tractusx.edc:bpns-evaluation-core", version.ref = "tx" }
+tx-core-agreements-retirement = { module = "org.eclipse.tractusx.edc:retirement-evaluation-core", version.ref = "tx" }
 tx-core-bpn-validation = { module = "org.eclipse.tractusx.edc:bpn-validation-core", version.ref = "tx" }
 tx-dataplane-base = { module = "org.eclipse.tractusx.edc:edc-dataplane-base", version.ref = "tx" }
+tx-spi-agreements-bpns = { module = "org.eclipse.tractusx.edc:bpns-evaluation-spi", version.ref = "tx" }
+tx-spi-agreements-retirement = { module = "org.eclipse.tractusx.edc:retirement-evaluation-spi", version.ref = "tx" }
 tx-spi-bpn-validation = { module = "org.eclipse.tractusx.edc:bpn-validation-spi", version.ref = "tx"}
 
 [plugins]

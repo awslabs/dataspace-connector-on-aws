@@ -7,6 +7,8 @@ import { Construct } from "constructs";
 import { SharedInfraStack } from "./shared-infra-stack";
 import { ConnectorStack } from "./connector-stack";
 import { BasyxStack } from "./basyx/basyx-stack";
+import { BASYX_PORT, basyxPriority } from "./basyx/names";
+import { CONTROL_PLANE_PORT_MAPPING_DEFAULT } from "./config/port-mappings";
 
 import {
   connectorPriority,
@@ -71,8 +73,8 @@ export class DeploymentStage extends Stage {
 
     // A BaSyx stack needs its dtrConnector's data-plane security group, so it is
     // synthesized whenever that connector is. A running connector is synthesized
-    // on every run, so enabling basyx later takes effect on the next run. Stack
-    // dependencies come from the cross-stack references (VPC, cluster, SG).
+    // on every run, so enabling basyx later takes effect on the next run. Its
+    // listener rules share the priority space with the connectors' rules.
     enabledBasyx(props.config).forEach(({ bpnl, entry, dtrConnectorId }) => {
       const connectorStack = connectorStacks.get(dtrConnectorId);
       if (!connectorStack) {
@@ -80,6 +82,16 @@ export class DeploymentStage extends Stage {
           `basyx ${bpnl}: dtrConnector ${dtrConnectorId} not deployed yet, skipping`,
         );
         return;
+      }
+      for (const service of entry.services) {
+        const priority = basyxPriority(bpnl, service);
+        const existing = priorities.get(priority);
+        if (existing) {
+          throw new Error(
+            `Priority collision: "${existing}" and basyx ${bpnl} ${service} both hash to priority ${priority}. Rename the connector to resolve.`,
+          );
+        }
+        priorities.set(priority, `basyx ${bpnl} ${service}`);
       }
       new BasyxStack(this, `BaSyx-${bpnl}`, {
         bpnl,
@@ -93,6 +105,15 @@ export class DeploymentStage extends Stage {
         ),
         vpc: sharedInfra.vpc,
         cluster: sharedInfra.ecsCluster,
+        alb: {
+          dnsName: sharedInfra.albDnsName,
+          securityGroupId: sharedInfra.albSecurityGroupId,
+          managementListenerArn:
+            sharedInfra.listenerArns[
+              CONTROL_PLANE_PORT_MAPPING_DEFAULT.management
+            ],
+          readListenerArn: sharedInfra.listenerArns[BASYX_PORT],
+        },
         dataPlaneSecurityGroup: connectorStack.dataPlane.securityGroup,
       });
     });

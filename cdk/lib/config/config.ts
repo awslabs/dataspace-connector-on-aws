@@ -191,6 +191,10 @@ export function validateConnectorId(connectorId: string): void {
       `Invalid connectorId "${connectorId}". Must be 2-60 chars, lowercase alphanumeric + hyphens, cannot start/end with hyphen.`,
     );
   }
+  // The first path segment of the BaSyx routes on the ALB and the management API.
+  if (connectorId === "basyx") {
+    throw new Error(`Invalid connectorId "basyx". The name is reserved.`);
+  }
 }
 
 /**

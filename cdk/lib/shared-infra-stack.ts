@@ -47,6 +47,7 @@ import {
 } from "./config/port-mappings";
 import { EdcApi } from "./constructs/edc-api";
 import { EdcSecretCleanup } from "./constructs/edc-secret-cleanup";
+import { BASYX_PORT } from "./basyx/names";
 
 export interface SharedInfraStackProps extends StackProps {
   readonly config: DeploymentYaml;
@@ -115,7 +116,11 @@ export class SharedInfraStack extends Stack {
     });
 
     const allPorts = [...Object.values(cpPorts), ...Object.values(dpPorts)];
-    new Set(allPorts).forEach((port) =>
+    // Data planes read BaSyx through its own listener, so the management port
+    // stays reachable from the VPC link only. It exists in every deployment so
+    // that removing a basyx entry never removes an export a BaSyx stack imports.
+    const listenerPorts = [...allPorts, BASYX_PORT];
+    new Set(listenerPorts).forEach((port) =>
       albSg.addEgressRule(Peer.ipv4(this.vpc.vpcCidrBlock), Port.tcp(port)),
     );
 
@@ -147,13 +152,16 @@ export class SharedInfraStack extends Stack {
     });
 
     this.listenerArns = {};
-    for (const port of new Set(allPorts)) {
+    for (const port of new Set(listenerPorts)) {
       const listener = alb.addListener(`Listener${port}`, {
         port,
         open: false,
         protocol: ApplicationProtocol.HTTP,
         defaultAction: ListenerAction.fixedResponse(404, {
-          messageBody: "No matching EDC connector",
+          messageBody:
+            port === BASYX_PORT
+              ? "No matching BaSyx service"
+              : "No matching EDC connector",
         }),
       });
       this.listenerArns[port] = listener.listenerArn;

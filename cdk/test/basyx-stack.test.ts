@@ -10,6 +10,7 @@ import { BasyxStack } from "../lib/basyx/basyx-stack";
 import { StateRemovalPolicy } from "../lib/config/config";
 
 const env = { account: "111111111111", region: "eu-central-1" };
+const ALB_SG = "sg-0123456789abcdef0";
 
 function synth(stateRemovalPolicy: StateRemovalPolicy = "RETAIN"): Template {
   const app = new App();
@@ -25,6 +26,12 @@ function synth(stateRemovalPolicy: StateRemovalPolicy = "RETAIN"): Template {
     stateRemovalPolicy,
     vpc,
     cluster: new Cluster(infra, "Cluster", { vpc }),
+    alb: {
+      dnsName: "alb.internal",
+      securityGroupId: ALB_SG,
+      managementListenerArn: "arn:listener/8182",
+      readListenerArn: "arn:listener/5004",
+    },
     dataPlaneSecurityGroup: new SecurityGroup(infra, "DataPlaneSg", { vpc }),
   });
   return Template.fromStack(stack);
@@ -50,24 +57,45 @@ test.each([
   },
 );
 
-test("only the data plane reaches BaSyx, only BaSyx reaches Aurora", () => {
-  const basyxSg = Object.entries(
-    retained.findResources("AWS::EC2::SecurityGroup"),
-  ).find(([id]) => id.startsWith("BasyxSecurityGroup"))![1];
-  expect(basyxSg.Properties.SecurityGroupIngress).toEqual([
+test("only the ALB reaches BaSyx, only the data plane reads via the ALB", () => {
+  const ingress = Object.values(
+    retained.findResources("AWS::EC2::SecurityGroupIngress"),
+  ).map((r) => r.Properties);
+  expect(ingress).toHaveLength(3);
+  expect(ingress).toContainEqual(
+    expect.objectContaining({ FromPort: 5004, SourceSecurityGroupId: ALB_SG }),
+  );
+  expect(ingress).toContainEqual(
     expect.objectContaining({
+      GroupId: ALB_SG,
       FromPort: 5004,
       SourceSecurityGroupId: { "Fn::ImportValue": expect.any(String) },
     }),
-  ]);
-  const ingress = Object.values(
-    retained.findResources("AWS::EC2::SecurityGroupIngress"),
   );
-  expect(ingress).toHaveLength(1);
-  expect(ingress[0].Properties.FromPort).toBe(5432);
+  expect(ingress).toContainEqual(expect.objectContaining({ FromPort: 5432 }));
   expect(
     JSON.stringify(retained.findResources("AWS::EC2::SecurityGroup")),
   ).not.toContain('"IpProtocol":"-1"');
+});
+
+test("each service is routed under its context path on both listeners", () => {
+  const rules = Object.values(
+    retained.findResources("AWS::ElasticLoadBalancingV2::ListenerRule"),
+  ).map((r) => r.Properties);
+  const paths = (arn: string) =>
+    rules
+      .filter((r) => r.ListenerArn === arn)
+      .map((r) => r.Conditions[0].PathPatternConfig.Values[0])
+      .sort();
+  const expected = [
+    "/basyx/BPNL00000007J65N/dtr/api/v3/*",
+    "/basyx/BPNL00000007J65N/smrepo/*",
+  ];
+  expect(paths("arn:listener/8182")).toEqual(expected);
+  expect(paths("arn:listener/5004")).toEqual(expected);
+  expect(
+    retained.findResources("AWS::ServiceDiscovery::PrivateDnsNamespace"),
+  ).toEqual({});
 });
 
 test("runtimes start only after security files, database and migration", () => {
