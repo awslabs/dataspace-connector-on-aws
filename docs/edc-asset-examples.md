@@ -76,7 +76,7 @@ A submodel asset that points at one submodel in the BaSyx Submodel Repository de
 }
 ```
 
-`<albHost>` is the host part of `DtrUrl`. Take `<batteryPassSemanticId>` from the battery passport aspect model version your use case requires (CX-0160). Offer the asset with a usage policy that includes `FrameworkAgreement` `DataExchangeGovernance:1.0` and `UsagePurpose` `cx.circular.dpp:1`.
+`<albHost>` is the host part of `DtrUrl`. Take `<batteryPassSemanticId>` from the battery passport aspect model version your use case requires (CX-0160). Offer the asset with a usage policy that includes `FrameworkAgreement` `DataExchangeGovernance:1.0` and `UsagePurpose` `cx.circular.dpp:1`. [Digital Twins with Eclipse BaSyx](digital-twins-with-basyx.md) shows how the submodel and its shell descriptor are written and how a consumer reaches the asset.
 
 ## Amazon S3 object
 
