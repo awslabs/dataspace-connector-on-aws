@@ -250,8 +250,8 @@ def _status_hint(status: int, body: Any) -> Optional[str]:
     if status in (401, 403):
         return (
             "Not authorized. Verify AWS credentials and execute-api:Invoke permission. For fetch_data, "
-            "a 403 usually means the wrong sub-path (the public API is at '<endpoint>/public/') or an "
-            "expired EDR token."
+            "a 403 usually means an empty path (at least one segment after the endpoint is needed) "
+            "or an expired EDR token."
         )
     return None
 
@@ -891,16 +891,18 @@ async def fetch_data(
     token transparently. To inspect the raw EDR without fetching, use
     get_resource(resource_type="edr", resource_id=<transfer_process_id>).
 
-    By default the Tractus-X public sub-path "public/" is appended to the EDR
-    endpoint (the standard data plane public API path). Override with an explicit
-    path only if the asset needs a different sub-path; query_params/body/method
-    support parameterized or proxied sources. body is a JSON object or array.
-    headers adds request headers; the EDR Authorization header always wins.
+    path is appended to the EDR endpoint and defaults to "public/". The data
+    plane route needs at least one segment after the endpoint. Amazon S3 assets
+    ignore that segment, so the default works for them. An HttpData asset with
+    proxyPath=true forwards path to its backend, so pass the backend sub-path
+    instead (e.g. "shell-descriptors" for a Digital Twin Registry).
+    query_params/body/method support parameterized or proxied sources. body is a
+    JSON object or array. headers adds request headers; the EDR Authorization
+    header always wins.
 
     Returns: {status, headers, body}. body may be a JSON string that the caller
-    parses. On 403, the cause is usually the wrong sub-path (the public API is
-    at "<endpoint>/public/") or an expired EDR token (re-initiate the transfer and
-    fetch again).
+    parses. On 403, the cause is usually an empty path or an expired EDR token
+    (re-initiate the transfer and fetch again).
     """
     edr = await _api_request(
         "GET", f"/v3/edrs/{transfer_process_id}/dataaddress", connector_id=connector_id
@@ -954,11 +956,10 @@ async def fetch_data(
     }
     if response.status_code == 403:
         result["hint"] = (
-            "403 from the data plane. Two common causes: (1) wrong sub-path: the Tractus-X "
-            "public API is at '<endpoint>/public/', which this tool appends by default; pass an "
-            "explicit 'path' only if your asset needs a different one. (2) the EDR token expired: "
-            "re-initiate the transfer and fetch again (Tractus-X refreshes tokens when the EDR is "
-            "re-resolved)."
+            "403 from the data plane. Two common causes: (1) an empty path: the data plane "
+            "route needs at least one segment after the endpoint (the default 'public/' "
+            "satisfies it). (2) the EDR token expired: re-initiate the transfer and fetch again "
+            "(Tractus-X refreshes tokens when the EDR is re-resolved)."
         )
     return result
 

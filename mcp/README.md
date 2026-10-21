@@ -24,7 +24,7 @@ This MCP server provides 12 general-purpose EDC primitives that map closely to t
 - **initiate_negotiation** - Start a contract negotiation for a catalog offer (pass the offer's permission/prohibition/obligation through exactly).
 - **initiate_transfer** - Start a data transfer against a finalized agreement.
 - **manage_transfer** - Suspend / resume / complete / terminate a transfer. Pass `transfer_process_id="all_started"` to apply the action to every STARTED transfer (reaps idle provider-side pull transfers, which keep consuming DynamoDB on this AWS deployment).
-- **fetch_data** - Resolve the EDR and fetch the payload from the data plane public API (appends `public/` by default; refreshes the token transparently).
+- **fetch_data** - Resolve the EDR and fetch the payload from the data plane (`path` defaults to `public/`, which S3 assets ignore; proxied HttpData assets need the backend sub-path; refreshes the token transparently).
 
 ## Installation
 
@@ -217,7 +217,7 @@ transfer = initiate_transfer(
 )
 tp = get_resource(connector_id=cid, resource_type="transfer_processes", resource_id=transfer["@id"])
 
-# 5. Fetch the payload (the /public/ sub-path is appended automatically)
+# 5. Fetch the payload (path defaults to public/, which S3 assets ignore)
 data = fetch_data(connector_id=cid, transfer_process_id=transfer["@id"])
 
 # (optional) inspect the raw EDR instead of fetching

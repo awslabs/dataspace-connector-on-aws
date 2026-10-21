@@ -53,7 +53,7 @@ This power provides 12 general-purpose EDC primitives. Workflow orchestration (t
 - `initiate_negotiation`: Start a contract negotiation (pass the catalog offer's policy through exactly)
 - `initiate_transfer`: Start a data transfer using a contract agreement
 - `manage_transfer`: Suspend / resume / complete / terminate a transfer; pass `transfer_process_id="all_started"` to terminate every STARTED transfer (idle provider-side pull transfers accrue DynamoDB cost)
-- `fetch_data`: Fetch data from the provider's data plane for an active transfer, resolving the EDR and appending the `public/` sub-path automatically (handles token refresh transparently)
+- `fetch_data`: Fetch data from the provider's data plane for an active transfer, resolving the EDR and appending `path` (default `public/`; proxied HttpData assets need the backend sub-path) (handles token refresh transparently)
 
 ## Onboarding
 
@@ -163,14 +163,14 @@ initiate_transfer(
 # 5. Poll until STARTED
 get_resource(connector_id="<your-connector>", resource_type="transfer_processes", resource_id="<transfer-id>")
 
-# 6. Fetch the data (appends the /public/ sub-path automatically)
+# 6. Fetch the data (path defaults to public/, which S3 assets ignore)
 fetch_data(connector_id="<your-connector>", transfer_process_id="<transfer-id>")
 
-# Fetch with a sub-path and query params
+# Proxied HttpData asset: path and query params go to the backend
 fetch_data(
     connector_id="<your-connector>",
     transfer_process_id="<transfer-id>",
-    path="/public/items",
+    path="items",
     query_params={"limit": "10"}
 )
 

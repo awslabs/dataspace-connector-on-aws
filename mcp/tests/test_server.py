@@ -87,7 +87,7 @@ def test_status_hint_maps_codes():
     assert "referenced" in server._status_hint(409, "").lower()
     assert "policy" in server._status_hint(400, "Policy not equal to offer").lower()
     assert "state" in server._status_hint(400, "some other error").lower()
-    assert "public/" in server._status_hint(403, "")
+    assert "empty path" in server._status_hint(403, "")
     assert server._status_hint(500, "") is None
 
 
@@ -362,7 +362,7 @@ def test_fetch_data_403_has_hint(monkeypatch):
 
     out = run(fn(server.fetch_data)(transfer_process_id="tp1", connector_id="c"))
     assert out["status"] == 403
-    assert "public/" in out["hint"] and "token" in out["hint"].lower()
+    assert "empty path" in out["hint"] and "token" in out["hint"].lower()
 
 
 def test_fetch_data_sends_empty_array_body(monkeypatch):

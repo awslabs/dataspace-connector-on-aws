@@ -293,7 +293,7 @@ Once `STARTED`, fetch the payload with `fetch_data`, which resolves the EDR and 
 fetch_data(connector_id="<target-connector>", transfer_process_id="<transfer-id>")
 ```
 
-`fetch_data` returns `{status, headers, body}`. It appends the Tractus-X public API sub-path `public/` to the EDR endpoint by default (the endpoint looks like `.../data/<connectorId>/`, and the public API is at `.../data/<connectorId>/public/`); pass an explicit `path` only if the asset needs a different sub-path. It refreshes the EDR token transparently, so the agent can call it repeatedly over time without worrying about token expiry.
+`fetch_data` returns `{status, headers, body}`. It appends `path` to the EDR endpoint, defaulting to `public/`. The data plane route needs at least one segment after the endpoint, and Amazon S3 assets ignore that segment, so the default works for them. An HttpData asset with `proxyPath=true` forwards `path` to its backend, so pass the backend sub-path instead (for a Digital Twin Registry, e.g. `path="shell-descriptors"`). It refreshes the EDR token transparently, so the agent can call it repeatedly over time without worrying about token expiry.
 
 The data plane acts as a proxy, it forwards the request to the provider's actual data source (the `baseUrl` or S3 object configured in the asset's data address) and returns the response. If the response body contains the expected data from the asset's data source, the end-to-end flow is validated.
 
@@ -304,7 +304,7 @@ fetch_data(
     connector_id="<target-connector>",
     transfer_process_id="<transfer-id>",
     method="GET",
-    path="/public/items",
+    path="items",
     query_params={"limit": "10"}
 )
 ```
