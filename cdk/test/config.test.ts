@@ -395,6 +395,35 @@ describe("stateRemovalPolicy validation", () => {
   });
 });
 
+describe("profile validation", () => {
+  test("connector value", () => {
+    const dir = writeConfig(baseDeployment(), {
+      a: { ...baseConnector("aa"), profile: "prod" },
+    });
+    expect(() => loadDeploymentConfig(dir)).toThrow(
+      'connectors/connector-a.yaml: profile must be "development" or "production", got "prod"',
+    );
+  });
+
+  test("basyx entry value", () => {
+    const dir = writeConfig(
+      withBasyx({ services: ["dtr"], profile: "prod" }),
+      oneConnector(),
+    );
+    expect(() => loadDeploymentConfig(dir)).toThrow(
+      `deployment.yaml: basyx.${BPNL}.profile must be "development" or "production", got "prod"`,
+    );
+  });
+
+  test("basyx entry accepts a valid profile", () => {
+    const dir = writeConfig(
+      withBasyx({ services: ["dtr"], profile: "production" }),
+      oneConnector(),
+    );
+    expect(() => loadDeploymentConfig(dir)).not.toThrow();
+  });
+});
+
 describe("basyx validation", () => {
   const load = (
     entry: Record<string, unknown>,

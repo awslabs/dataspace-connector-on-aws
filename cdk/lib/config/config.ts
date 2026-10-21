@@ -91,6 +91,8 @@ export interface BasyxEntry {
   readonly services: BasyxService[];
   /** Connector that offers the DTR asset. Default: the BPNL's first connector (file name order). */
   readonly dtrConnector?: string;
+  /** Overrides the deployment.yaml profile for this BaSyx stack. */
+  readonly profile?: DeploymentProfile;
   /** Overrides the deployment.yaml stateRemovalPolicy for this BaSyx database. */
   readonly stateRemovalPolicy?: StateRemovalPolicy;
 }
@@ -349,6 +351,7 @@ const DEPLOYMENT_KEY_SPEC: KeySpec = {
         keys: {
           services: LEAF,
           dtrConnector: LEAF,
+          profile: LEAF,
           stateRemovalPolicy: LEAF,
         } satisfies Record<keyof BasyxEntry, KeySpec>,
       },
@@ -523,11 +526,7 @@ function validateDeployment(data: DeploymentYaml, filePath: string): void {
       `${filePath}: missing required fields: ${missing.join(", ")}`,
     );
   }
-  if (!["development", "production"].includes(data.profile)) {
-    throw new Error(
-      `${filePath}: profile must be "development" or "production", got "${data.profile}"`,
-    );
-  }
+  validateProfile(data.profile, filePath, "profile");
   if (!data.portal.environment) {
     throw new Error(`${filePath}: portal section requires 'environment'`);
   }
@@ -557,7 +556,19 @@ function validateConnector(data: ConnectorYaml, fileName: string): void {
     );
   }
   validateConnectorId(data.connectorId);
+  if (data.profile !== undefined) {
+    validateProfile(data.profile, `connectors/${fileName}`, "profile");
+  }
   validateLogLevel(data.logLevel, fileName);
+}
+
+/** Throws unless value is "development" or "production". */
+function validateProfile(value: unknown, file: string, path: string): void {
+  if (value !== "development" && value !== "production") {
+    throw new Error(
+      `${file}: ${path} must be "development" or "production", got "${String(value)}"`,
+    );
+  }
 }
 
 /** Throws unless logLevel is omitted or one of LOG_LEVELS. */
@@ -623,6 +634,9 @@ function validateBasyx(
     }
     if (!services.includes("dtr")) {
       throw new Error(`${file}: ${at}.services must include 'dtr'`);
+    }
+    if (entry.profile !== undefined) {
+      validateProfile(entry.profile, file, `${at}.profile`);
     }
     validateStateRemovalPolicy(
       entry.stateRemovalPolicy,

@@ -179,6 +179,7 @@ basyx:
   BPNL00000007J65N:
     services: [dtr, submodelRepository] # dtr is required
     dtrConnector: example               # Optional; defaults to the BPNL's first connector by file name
+    profile: production                 # Optional; overrides deployment.yaml profile for this BaSyx stack
     stateRemovalPolicy: RETAIN          # Optional; overrides deployment.yaml stateRemovalPolicy
 ```
 

@@ -77,6 +77,35 @@ describe("DeploymentStage BaSyx wiring", () => {
     expect(basyxStacks(stage(true, {}))).toHaveLength(1);
   });
 
+  test("basyx profile overrides the deployment profile", () => {
+    const base = config(false);
+    const backupRetention = (profile?: "production") => {
+      const host = new Stack(new App(), "Host", { env });
+      const s = new DeploymentStage(host, "DataspaceConnector", {
+        config: {
+          ...base,
+          deployment: {
+            ...base.deployment,
+            profile: "development",
+            basyx: { [BPNL]: { services: ["dtr"], profile } },
+          },
+        },
+        resolvedEdcIam: edcIam,
+        activeBpnls: [BPNL],
+        deploymentName: "DataspaceConnector",
+        env,
+      });
+      const [cluster] = Object.values(
+        Template.fromStack(basyxStacks(s)[0]).findResources(
+          "AWS::RDS::DBCluster",
+        ),
+      );
+      return cluster.Properties.BackupRetentionPeriod;
+    };
+    expect(backupRetention()).toBe(1);
+    expect(backupRetention("production")).toBe(7);
+  });
+
   test("two BPNLs: every fixed name differs", () => {
     const OTHER = "BPNL00000000TWO2";
     const base = config(false);

@@ -86,7 +86,7 @@ export class DeploymentStage extends Stage {
         entry,
         dtrConnectorId,
         deploymentName: props.deploymentName,
-        profile: deployment.profile,
+        profile: entry.profile ?? deployment.profile,
         stateRemovalPolicy: resolveStateRemovalPolicy(
           deployment,
           entry.stateRemovalPolicy,
