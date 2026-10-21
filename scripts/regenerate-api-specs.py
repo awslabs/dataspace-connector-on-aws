@@ -4,7 +4,8 @@
 #
 # Regenerate cdk/api management + dsp specs from the local 0.12.2 EDC build.
 # Round-trip preserving (ruamel): keeps untouched operations and the file header
-# byte-for-byte; only adds new 0.12.2 paths and removes paths absent from 0.12.2.
+# byte-for-byte; only adds new 0.12.2 paths and removes /{connectorId} paths absent
+# from 0.12.2. Paths outside /{connectorId} (the BaSyx route) are left alone.
 #
 # Usage (from repo root):
 #   (cd edc && ./gradlew :control-plane:resolveApi)
@@ -72,7 +73,8 @@ def sync(spec_name, context, auth, add_pred):
     path = os.path.join(API, f"{spec_name}.yaml")
     doc = yaml.load(open(path))
     paths = doc["paths"]
-    cur = {p.replace("/{connectorId}", "", 1): p for p in paths}
+    # Only connector-scoped paths come from EDC; others (e.g. /basyx/{any+}) are ours.
+    cur = {p.replace("/{connectorId}", "", 1): p for p in paths if p.startswith("/{connectorId}/")}
     removed = [full for edc, full in cur.items() if edc not in RAWP]
     for full in removed:
         del paths[full]

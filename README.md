@@ -136,7 +136,7 @@ portal:
     didResolver: "https://..."
 ```
 
-`stateRemovalPolicy` decides whether stored state (each connector's DynamoDB table and S3 bucket) is kept or deleted when its stack is deleted. It defaults to `RETAIN`, and a connector file can override it. The connector field was previously named `edcStateRemovalPolicy`; rename it to `stateRemovalPolicy` when upgrading, because config files with unknown keys fail validation.
+`stateRemovalPolicy` decides whether stored state (each connector's DynamoDB table and S3 bucket) is kept or deleted when its stack is deleted. It defaults to `RETAIN`, and a connector file can override it.
 
 ### `connectors/connector-<id>.yaml`
 
@@ -177,13 +177,12 @@ An optional `basyx` block in `deployment.yaml` deploys an [Eclipse BaSyx](https:
 ```yaml
 basyx:
   BPNL00000007J65N:
-    enabled: true
     services: [dtr, submodelRepository] # dtr is required
     dtrConnector: example               # Optional; defaults to the BPNL's first connector by file name
     stateRemovalPolicy: RETAIN          # Optional; overrides deployment.yaml stateRemovalPolicy
 ```
 
-Each enabled BPNL gets its own `<deploymentName>-BaSyx-<BPNL>` stack with an Aurora Serverless v2 PostgreSQL cluster, an Amazon Cognito user pool for machine-to-machine tokens, and one ECS service per BaSyx service. The services sit behind the shared internal load balancer under `/basyx/<BPNL>/dtr/api/v3` and `/basyx/<BPNL>/smrepo`. The pipeline offers the DTR as the catalog asset `dataspace-connector-dtr` on the `dtrConnector`, whose data plane reads it with a Cognito token that grants read access. You can enable `basyx` for a connector that is already running; the stack is created on the next pipeline run. [EDC Asset Examples](docs/edc-asset-examples.md) shows the DTR asset and how to offer submodels from the Submodel Repository.
+Each listed BPNL gets its own `<deploymentName>-BaSyx-<BPNL>` stack with an Aurora Serverless v2 PostgreSQL cluster, an Amazon Cognito user pool for machine-to-machine tokens, and one ECS service per BaSyx service. The services sit behind the shared internal load balancer under `/basyx/<BPNL>/dtr/api/v3` and `/basyx/<BPNL>/smrepo`. The pipeline offers the DTR as the catalog asset `dataspace-connector-dtr` on the `dtrConnector`, whose data plane reads it with a Cognito token that grants read access. You can add a `basyx` entry for a connector that is already running; the stack is created on the next pipeline run. [EDC Asset Examples](docs/edc-asset-examples.md) shows the DTR asset and how to offer submodels from the Submodel Repository.
 
 #### Registering twins and submodels
 
@@ -196,7 +195,7 @@ Get the writer token with the client credentials grant. The stack outputs `Token
 
 ```bash
 curl -s -u "<WriterClientId>:<writer client secret>" -d grant_type=client_credentials \
-  -d scope="dataspace-connector-basyx/read dataspace-connector-basyx/write" "<TokenUrl>"
+  -d scope=dataspace-connector-basyx/read "<TokenUrl>"
 ```
 
 Then call the BaSyx API under `<ManagementApiUrl>/basyx/<BPNL>/dtr/api/v3/` or `<ManagementApiUrl>/basyx/<BPNL>/smrepo/`, for example `POST .../dtr/api/v3/shell-descriptors`. The writer has full access to both services, like the `data_provider` role in the [Catena-X values of the BaSyx Helm chart](https://github.com/eclipse-basyx/charts). API Gateway limits a request to 10 MB and 29 seconds, which matters for large submodel uploads.
@@ -205,8 +204,7 @@ To make a shell descriptor visible to a consumer, list the consumer's BPNL in th
 
 Things to know:
 
-- **Removing a `dtrConnector`:** remove or move its `basyx` entry first. The BaSyx stack references the connector's data-plane security group, so CloudFormation blocks deleting a connector that BaSyx still uses.
-- **Removing a `basyx` entry:** the pipeline deletes the DTR asset and the BaSyx stack. With `RETAIN`, the Aurora cluster and its credentials secret stay in your account. Like a retained connector's DynamoDB table, the retained cluster keeps its fixed name, so delete it manually before re-enabling the BPNL.
+- **Removing a `basyx` entry:** the pipeline deletes the DTR asset and the BaSyx stack. With `RETAIN`, the Aurora cluster and its credentials secret stay in your account. Like a retained connector's DynamoDB table, the retained cluster keeps its fixed name, so delete it manually before adding the BPNL again.
 - **Idle cost:** the cluster is configured to pause at 0 ACU, but the DTR runs a database maintenance job every minute, so expect it to stay at its 0.5 ACU minimum.
 - **Token rate:** each data plane task caches the Cognito token until shortly before it expires, so it requests about one token per hour.
 

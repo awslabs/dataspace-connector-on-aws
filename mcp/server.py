@@ -920,7 +920,10 @@ async def fetch_data(
     sub_path = path if path is not None else "public/"
     target_url = f"{endpoint.rstrip('/')}/{sub_path.lstrip('/')}"
 
-    request_headers: dict[str, str] = {**(headers or {}), "Authorization": authorization}
+    # Header names are case-insensitive; drop caller copies of the ones set here.
+    overridden = {"authorization"} | ({"content-type"} if body is not None else set())
+    request_headers = {k: v for k, v in (headers or {}).items() if k.lower() not in overridden}
+    request_headers["Authorization"] = authorization
     if body is not None:
         request_headers["Content-Type"] = media_type or "application/json"
     request_body = json.dumps(body).encode("utf-8") if body is not None else None

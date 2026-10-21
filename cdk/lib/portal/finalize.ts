@@ -13,7 +13,7 @@
  *     its phase to REGISTERED.
  *
  *   Phase A2 — BaSyx
- *     Per BPNL with an enabled basyx entry or a BaSyx stack: create or update
+ *     Per BPNL with a basyx entry or a BaSyx stack: create or update
  *     the DTR offer on its dtrConnector, remove it from the BPNL's other
  *     connectors, and delete the BaSyx stack once its entry is gone.
  *
@@ -39,6 +39,7 @@ import {
   DeleteStackCommand,
   DescribeStacksCommand,
   paginateListStacks,
+  StackStatus,
   waitUntilStackDeleteComplete,
 } from "@aws-sdk/client-cloudformation";
 
@@ -51,7 +52,7 @@ import {
   basyxStackName,
   deriveAdminSecretName,
   deriveSecretPrefix,
-  enabledBasyx,
+  basyxEntries,
   loadDeploymentConfig,
   resolveConnectorIdentity,
 } from "../config/config";
@@ -170,8 +171,8 @@ interface BasyxDeps {
 }
 
 /**
- * Phase A2: the DTR offer and orphan BaSyx stacks, per BPNL that has an
- * enabled basyx entry or a BaSyx stack. On the dtrConnector the offer is
+ * Phase A2: the DTR offer and orphan BaSyx stacks, per BPNL that has a
+ * basyx entry or a BaSyx stack. On the dtrConnector the offer is
  * created or updated; on the BPNL's other deployed connectors it is removed;
  * a BaSyx stack whose entry is gone is deleted after its offer. Deployments
  * without BaSyx make no calls. Returns the BPNLs that failed.
@@ -182,7 +183,7 @@ export async function reconcileBasyx(
   deps: BasyxDeps,
 ): Promise<string[]> {
   const targets = new Map(
-    enabledBasyx(config).map((b) => [b.bpnl, b.dtrConnectorId]),
+    basyxEntries(config).map((b) => [b.bpnl, b.dtrConnectorId]),
   );
   const live = await deps.liveBasyxStacks();
   const bpnls = [...new Set([...targets.keys(), ...live])].sort();
@@ -336,8 +337,6 @@ async function main(): Promise<void> {
   );
 
   // ── Phase A2: DTR offer and orphan BaSyx stacks ───────────────────────────
-  // Before Phase B: a dtrConnector stack can only be deleted once the BaSyx
-  // stack that imports its security group is gone.
 
   const managementBaseUrl = await resolveApiBaseUrl(
     cfn,
@@ -507,10 +506,15 @@ async function liveBasyxStacks(
   stackPrefix: string,
 ): Promise<Set<string>> {
   const prefix = basyxStackName(stackPrefix, "");
+  const StackStatusFilter = Object.values(StackStatus).filter(
+    (s) => s !== StackStatus.DELETE_COMPLETE,
+  );
   const bpnls = new Set<string>();
-  for await (const page of paginateListStacks({ client: cfn }, {})) {
+  for await (const page of paginateListStacks(
+    { client: cfn },
+    { StackStatusFilter },
+  )) {
     for (const s of page.StackSummaries ?? []) {
-      if (s.StackStatus === "DELETE_COMPLETE") continue;
       if (s.StackName?.startsWith(prefix)) {
         bpnls.add(s.StackName.slice(prefix.length));
       }

@@ -40,9 +40,7 @@ function config(basyx: boolean): DeploymentConfig {
         ...loaded.deployment.portal,
         identity: { ...loaded.deployment.portal.identity, participantId: BPNL },
       },
-      ...(basyx
-        ? { basyx: { [BPNL]: { enabled: true, services: ["dtr"] } } }
-        : {}),
+      ...(basyx ? { basyx: { [BPNL]: { services: ["dtr"] } } } : {}),
     },
   };
 }
@@ -66,25 +64,17 @@ describe("DeploymentStage BaSyx wiring", () => {
     expect(basyxStacks(stage(false, edcIam))).toHaveLength(0);
   });
 
-  test("enabled entry with its dtrConnector deployed: one BaSyx stack", () => {
+  test("basyx entry: one BaSyx stack, depending on SharedInfra only", () => {
     const s = stage(true, edcIam);
     const [basyx] = basyxStacks(s);
     expect(basyx.stackName).toBe(basyxStackName("DataspaceConnector", BPNL));
     // Dependencies come from cross-stack references, which resolve at synth.
     s.synth();
-    expect(basyx.dependencies.map((d) => d.node.id).sort()).toEqual([
-      "Connector-example",
-      "SharedInfra",
-    ]);
+    expect(basyx.dependencies.map((d) => d.node.id)).toEqual(["SharedInfra"]);
   });
 
-  test("dtrConnector not deployed this run: BaSyx skipped", () => {
-    const log = jest.spyOn(console, "log").mockImplementation(() => {});
-    expect(basyxStacks(stage(true, {}))).toHaveLength(0);
-    expect(log).toHaveBeenCalledWith(
-      `basyx ${BPNL}: dtrConnector example not deployed yet, skipping`,
-    );
-    log.mockRestore();
+  test("dtrConnector not deployed this run: BaSyx still deployed", () => {
+    expect(basyxStacks(stage(true, {}))).toHaveLength(1);
   });
 
   test("two BPNLs: every fixed name differs", () => {
@@ -102,8 +92,8 @@ describe("DeploymentStage BaSyx wiring", () => {
         deployment: {
           ...base.deployment,
           basyx: {
-            [BPNL]: { enabled: true, services: ["dtr", "submodelRepository"] },
-            [OTHER]: { enabled: true, services: ["dtr", "submodelRepository"] },
+            [BPNL]: { services: ["dtr", "submodelRepository"] },
+            [OTHER]: { services: ["dtr", "submodelRepository"] },
           },
         },
       },

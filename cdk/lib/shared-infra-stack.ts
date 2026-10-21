@@ -126,7 +126,9 @@ export class SharedInfraStack extends Stack {
 
     // The VPC link shares the ALB security group (replacing a VPC link's
     // security group replaces the link), so API Gateway traffic is allowed by
-    // a self-reference. Connector tasks reach the ALB only on the control ports.
+    // a self-reference. Connector tasks reach the ALB only on the control ports
+    // and the BaSyx read port; a BaSyx read also needs that BPNL's Cognito token,
+    // whose secret only its dtrConnector's data plane can read.
     const edcTaskSg = new SecurityGroup(this, "EdcTaskSecurityGroup", {
       description:
         "Attached to EDC tasks so they can call the ALB control ports",
@@ -141,7 +143,7 @@ export class SharedInfraStack extends Stack {
     ]) {
       albSg.addIngressRule(albSg, Port.tcp(port), "API Gateway VPC link");
     }
-    for (const port of [cpPorts.control, dpPorts.control]) {
+    for (const port of [cpPorts.control, dpPorts.control, BASYX_PORT]) {
       albSg.addIngressRule(edcTaskSg, Port.tcp(port), "EDC tasks");
     }
 

@@ -13,7 +13,7 @@ import { CONTROL_PLANE_PORT_MAPPING_DEFAULT } from "./config/port-mappings";
 import {
   connectorPriority,
   DeploymentConfig,
-  enabledBasyx,
+  basyxEntries,
   resolveStateRemovalPolicy,
 } from "./config/config";
 import { ResolvedEdcIam } from "./portal/provision-output";
@@ -38,7 +38,6 @@ export class DeploymentStage extends Stage {
     });
 
     const priorities = new Map<number, string>();
-    const connectorStacks = new Map<string, ConnectorStack>();
 
     connectors.forEach((connector) => {
       // Deploy-gate: only connectors provision resolved to IDENTITY_READY have
@@ -68,21 +67,10 @@ export class DeploymentStage extends Stage {
         },
       );
       stack.addDependency(sharedInfra);
-      connectorStacks.set(connector.connectorId, stack);
     });
 
-    // A BaSyx stack needs its dtrConnector's data-plane security group, so it is
-    // synthesized whenever that connector is. A running connector is synthesized
-    // on every run, so enabling basyx later takes effect on the next run. Its
-    // listener rules share the priority space with the connectors' rules.
-    enabledBasyx(props.config).forEach(({ bpnl, entry, dtrConnectorId }) => {
-      const connectorStack = connectorStacks.get(dtrConnectorId);
-      if (!connectorStack) {
-        console.log(
-          `basyx ${bpnl}: dtrConnector ${dtrConnectorId} not deployed yet, skipping`,
-        );
-        return;
-      }
+    // BaSyx listener rules share the priority space with the connectors' rules.
+    basyxEntries(props.config).forEach(({ bpnl, entry, dtrConnectorId }) => {
       for (const service of entry.services) {
         const priority = basyxPriority(bpnl, service);
         const existing = priorities.get(priority);
@@ -114,7 +102,6 @@ export class DeploymentStage extends Stage {
             ],
           readListenerArn: sharedInfra.listenerArns[BASYX_PORT],
         },
-        dataPlaneSecurityGroup: connectorStack.dataPlane.securityGroup,
       });
     });
 

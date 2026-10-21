@@ -55,8 +55,6 @@ export interface ConnectorStackProps extends StackProps {
 }
 
 export class ConnectorStack extends Stack {
-  readonly dataPlane: EdcDataPlane;
-
   constructor(scope: Construct, id: string, props: ConnectorStackProps) {
     super(scope, id, props);
 
@@ -248,7 +246,6 @@ export class ConnectorStack extends Stack {
       vpc: infra.vpc,
     });
     dataPlane.node.addDependency(controlPlane);
-    this.dataPlane = dataPlane;
 
     new CfnOutput(this, "EdcDataPlaneBucketName", {
       value: s3Bucket.bucketName,

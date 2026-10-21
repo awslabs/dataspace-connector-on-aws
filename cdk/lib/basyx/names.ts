@@ -17,7 +17,6 @@ export const BASYX_TOKEN_HEADER = "X-BaSyx-Authorization";
 export const RESOURCE_SERVER_ID = "dataspace-connector-basyx";
 export const READ_SCOPE_NAME = "read";
 export const READ_SCOPE = `${RESOURCE_SERVER_ID}/${READ_SCOPE_NAME}`;
-export const WRITE_SCOPE_NAME = "write";
 
 /** Short name of each service: its path segment, container name and database. */
 export const SERVICE_NAMES = {

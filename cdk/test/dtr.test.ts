@@ -8,7 +8,6 @@ import {
   DTR_ID,
   DTR_USAGE_POLICY_ID,
   buildDtrDefinition,
-  canonicalJson,
   ensureDtr,
   removeDtr,
 } from "../lib/portal/dtr";
@@ -93,12 +92,6 @@ describe("buildDtrDefinition", () => {
     expect(buildDtrDefinition({ ...outputs }).hash).toBe(def.hash);
     expect(buildDtrDefinition({ ...outputs, clientId: "other" }).hash).not.toBe(
       def.hash,
-    );
-  });
-
-  test("canonicalJson ignores key order", () => {
-    expect(canonicalJson({ b: 1, a: { d: 2, c: [3] } })).toBe(
-      canonicalJson({ a: { c: [3], d: 2 }, b: 1 }),
     );
   });
 });

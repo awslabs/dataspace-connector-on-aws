@@ -237,7 +237,7 @@ describe("reconcileBasyx", () => {
   test("creates the offer on the dtrConnector and probes the others", async () => {
     const { run, order } = setup({
       basyx: {
-        BPNL1: { enabled: true, services: ["dtr"], dtrConnector: "beta" },
+        BPNL1: { services: ["dtr"], dtrConnector: "beta" },
       },
       live: ["BPNL1"],
     });
@@ -259,7 +259,7 @@ describe("reconcileBasyx", () => {
 
   test("dtrConnector not yet deployed: no offer, stack kept", async () => {
     const { run, order, deleteBasyxStack } = setup({
-      basyx: { BPNL1: { enabled: true, services: ["dtr"] } },
+      basyx: { BPNL1: { services: ["dtr"] } },
       rows: [row({ phase: "IDENTITY_PENDING" }), row({ connectorId: "beta" })],
     });
     expect(await run()).toEqual([]);

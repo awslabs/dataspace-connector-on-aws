@@ -6,7 +6,8 @@ import { AuroraPostgresEngineVersion } from "aws-cdk-lib/aws-rds";
 /**
  * Pinned container images for the BaSyx stack. Each digest is the multi-arch
  * image index (arm64 included), resolved from the registry on 2026-10-19.
- * Bump the version and all digests together.
+ * Bump the version and all digests together. BaSyx publishes to Docker Hub
+ * only, so the stack copies these into ECR (see image/Dockerfile).
  */
 export const BASYX_VERSION = "1.1.2";
 

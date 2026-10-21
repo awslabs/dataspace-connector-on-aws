@@ -386,6 +386,6 @@ def test_fetch_data_extra_headers_cannot_override_authorization(monkeypatch):
     FakeAsyncClient.queue = [FakeResponse(200, json_body={})]
     monkeypatch.setattr(server.httpx, "AsyncClient", FakeAsyncClient)
 
-    run(fn(server.fetch_data)(transfer_process_id="tp1", headers={"Edc-Bpn": "BPNL0000000FORGED", "Authorization": "x"}))
+    run(fn(server.fetch_data)(transfer_process_id="tp1", headers={"Edc-Bpn": "BPNL0000000FORGED", "authorization": "x"}))
     sent = FakeAsyncClient.last["kwargs"]["headers"]
-    assert sent["Edc-Bpn"] == "BPNL0000000FORGED" and sent["Authorization"] == "tok"
+    assert sent == {"Edc-Bpn": "BPNL0000000FORGED", "Authorization": "tok"}

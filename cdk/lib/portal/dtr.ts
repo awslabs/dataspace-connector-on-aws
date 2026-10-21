@@ -133,9 +133,10 @@ export function buildDtrDefinition(outputs: BasyxOutputs): DtrDefinition {
     },
   };
 
+  // The definition is built by this code, so its key order is stable.
   const hash = createHash("sha256")
     .update(
-      canonicalJson([
+      JSON.stringify([
         accessPolicy,
         usagePolicy,
         contractDefinition,
@@ -156,25 +157,13 @@ export function buildDtrDefinition(outputs: BasyxOutputs): DtrDefinition {
   };
 }
 
-/** JSON with object keys sorted at every level. */
-export function canonicalJson(value: unknown): string {
-  return JSON.stringify(value, (_key, v: unknown) =>
-    v && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(
-          Object.entries(v as Record<string, unknown>).sort(([a], [b]) =>
-            a < b ? -1 : a > b ? 1 : 0,
-          ),
-        )
-      : v,
-  );
-}
-
 /**
  * Creates or updates the DTR offer when its stored hash differs. Write order is
  * policies, contract definition, asset: the asset carries the hash, so a run
  * that fails partway leaves no matching hash and the next run retries.
  * Tractus-X rejects writes to a policy that a contract definition references,
- * so the contract definition is deleted first and recreated after.
+ * so the contract definition is deleted first and recreated after; until then
+ * the DTR is missing from the catalog. Existing agreements are not affected.
  * Returns true when it wrote.
  */
 export async function ensureDtr(
@@ -247,7 +236,7 @@ async function upsert(
   await api("PUT", idInPath ? `${collection}/${id}` : collection, body);
 }
 
-/** The hash from an asset GET response, whichever way EDC compacted the key. */
+/** The hash stored in an asset GET response's private properties. */
 function storedHash(asset: unknown): string | undefined {
   const props = (asset as { privateProperties?: Record<string, unknown> })
     ?.privateProperties;

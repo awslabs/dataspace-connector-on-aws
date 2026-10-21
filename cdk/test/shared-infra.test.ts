@@ -48,7 +48,7 @@ describe("SharedInfra ALB security group", () => {
     expect(portsFrom(albSgId)).toEqual([8181, 8182, 8185, 8282]);
   });
 
-  test("admits EDC tasks on the control ports only", () => {
-    expect(portsFrom(taskSgId)).toEqual([9191, 9192]);
+  test("admits EDC tasks on the control ports and the BaSyx read port only", () => {
+    expect(portsFrom(taskSgId)).toEqual([5004, 9191, 9192]);
   });
 });

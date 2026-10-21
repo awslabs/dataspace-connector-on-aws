@@ -6,46 +6,9 @@
  * (AWS_IAM auth). Requests are SigV4-signed with the caller's IAM credentials.
  */
 
-import { createHash, createHmac, Hash, Hmac } from "crypto";
 import { defaultProvider } from "@aws-sdk/credential-provider-node";
+import { Sha256 } from "@smithy/core/checksum";
 import { SignatureV4 } from "@smithy/signature-v4";
-
-type SourceData = string | ArrayBuffer | ArrayBufferView;
-
-function toBytes(data: SourceData): string | Uint8Array {
-  if (typeof data === "string") return data;
-  if (data instanceof ArrayBuffer) return new Uint8Array(data);
-  return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-}
-
-/** SHA-256 / HMAC-SHA256 over node:crypto, in the shape SignatureV4 expects. */
-export class NodeSha256 {
-  private hash: Hash | Hmac;
-  private readonly secret?: string | Uint8Array;
-
-  constructor(secret?: SourceData) {
-    this.secret = secret === undefined ? undefined : toBytes(secret);
-    this.hash = this.create();
-  }
-
-  update(data: SourceData): void {
-    this.hash.update(toBytes(data));
-  }
-
-  async digest(): Promise<Uint8Array> {
-    return new Uint8Array(this.hash.digest());
-  }
-
-  reset(): void {
-    this.hash = this.create();
-  }
-
-  private create(): Hash | Hmac {
-    return this.secret === undefined
-      ? createHash("sha256")
-      : createHmac("sha256", this.secret);
-  }
-}
 
 export interface ManagementResponse {
   readonly status: number;
@@ -73,7 +36,7 @@ export function managementApi(
     credentials: defaultProvider(),
     region,
     service: "execute-api",
-    sha256: NodeSha256,
+    sha256: Sha256,
   }),
 ): ManagementRequest {
   const base = new URL(

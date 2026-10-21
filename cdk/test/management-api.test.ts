@@ -1,31 +1,16 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import { Sha256 } from "@smithy/core/checksum";
 import { SignatureV4 } from "@smithy/signature-v4";
-import { NodeSha256, managementApi } from "../lib/portal/management-api";
-
-const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
-
-test("NodeSha256 matches SHA-256 and HMAC-SHA256 vectors", async () => {
-  const sha = new NodeSha256();
-  sha.update("abc");
-  expect(hex(await sha.digest())).toBe(
-    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-  );
-  // RFC 4231 test case 2
-  const hmac = new NodeSha256("Jefe");
-  hmac.update("what do ya want for nothing?");
-  expect(hex(await hmac.digest())).toBe(
-    "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
-  );
-});
+import { managementApi } from "../lib/portal/management-api";
 
 describe("managementApi", () => {
   const signer = new SignatureV4({
     credentials: { accessKeyId: "AKIDEXAMPLE", secretAccessKey: "secret" },
     region: "eu-central-1",
     service: "execute-api",
-    sha256: NodeSha256,
+    sha256: Sha256,
   });
   const fetchMock = jest.fn();
   beforeAll(() => {

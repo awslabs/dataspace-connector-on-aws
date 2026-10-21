@@ -3,7 +3,7 @@
 
 import { App, Stack } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { SecurityGroup, Vpc } from "aws-cdk-lib/aws-ec2";
+import { Vpc } from "aws-cdk-lib/aws-ec2";
 import { Cluster } from "aws-cdk-lib/aws-ecs";
 
 import { BasyxStack } from "../lib/basyx/basyx-stack";
@@ -19,7 +19,7 @@ function synth(stateRemovalPolicy: StateRemovalPolicy = "RETAIN"): Template {
   const stack = new BasyxStack(app, "BaSyx", {
     env,
     bpnl: "BPNL00000007J65N",
-    entry: { enabled: true, services: ["dtr", "submodelRepository"] },
+    entry: { services: ["dtr", "submodelRepository"] },
     dtrConnectorId: "dtr1",
     deploymentName: "DataspaceConnector",
     profile: "development",
@@ -32,7 +32,6 @@ function synth(stateRemovalPolicy: StateRemovalPolicy = "RETAIN"): Template {
       managementListenerArn: "arn:listener/8182",
       readListenerArn: "arn:listener/5004",
     },
-    dataPlaneSecurityGroup: new SecurityGroup(infra, "DataPlaneSg", { vpc }),
   });
   return Template.fromStack(stack);
 }
@@ -57,20 +56,13 @@ test.each([
   },
 );
 
-test("only the ALB reaches BaSyx, only the data plane reads via the ALB", () => {
+test("only the ALB reaches BaSyx", () => {
   const ingress = Object.values(
     retained.findResources("AWS::EC2::SecurityGroupIngress"),
   ).map((r) => r.Properties);
-  expect(ingress).toHaveLength(3);
+  expect(ingress).toHaveLength(2);
   expect(ingress).toContainEqual(
     expect.objectContaining({ FromPort: 5004, SourceSecurityGroupId: ALB_SG }),
-  );
-  expect(ingress).toContainEqual(
-    expect.objectContaining({
-      GroupId: ALB_SG,
-      FromPort: 5004,
-      SourceSecurityGroupId: { "Fn::ImportValue": expect.any(String) },
-    }),
   );
   expect(ingress).toContainEqual(expect.objectContaining({ FromPort: 5432 }));
   expect(
@@ -113,6 +105,50 @@ test("runtimes start only after security files, database and migration", () => {
   expect(deps(dtr, "migrate")).toEqual([]);
   expect(deps(smrepo, "smrepo")).toEqual(["write-security-files", "migrate"]);
   expect(deps(smrepo, "migrate")).toEqual(["create-database"]);
+});
+
+test("BaSyx images come from ECR, not Docker Hub", () => {
+  const images = Object.values(
+    retained.findResources("AWS::ECS::TaskDefinition"),
+  ).flatMap((td) =>
+    (td.Properties.ContainerDefinitions as { Image: unknown }[]).map((c) =>
+      JSON.stringify(c.Image),
+    ),
+  );
+  expect(images.some((i) => i.includes("eclipsebasyx"))).toBe(false);
+  expect(images.filter((i) => i.includes(".dkr.ecr."))).toHaveLength(4);
+});
+
+test("one log group per task, one stream prefix per container", () => {
+  expect(
+    Object.keys(retained.findResources("AWS::Logs::LogGroup")),
+  ).toHaveLength(2);
+});
+
+test("a deploymentName that breaks the Cognito prefix rules fails synth", () => {
+  const app = new App();
+  const infra = new Stack(app, "Infra", { env });
+  const vpc = new Vpc(infra, "Vpc", { maxAzs: 2 });
+  expect(
+    () =>
+      new BasyxStack(app, "BaSyx", {
+        env,
+        bpnl: "BPNL00000007J65N",
+        entry: { services: ["dtr"] },
+        dtrConnectorId: "dtr1",
+        deploymentName: "AmazonConnector",
+        profile: "development",
+        stateRemovalPolicy: "RETAIN",
+        vpc,
+        cluster: new Cluster(infra, "Cluster", { vpc }),
+        alb: {
+          dnsName: "alb.internal",
+          securityGroupId: ALB_SG,
+          managementListenerArn: "arn:listener/8182",
+          readListenerArn: "arn:listener/5004",
+        },
+      }),
+  ).toThrow('contains the reserved word "amazon"');
 });
 
 test("services wait for the Aurora writer instance", () => {

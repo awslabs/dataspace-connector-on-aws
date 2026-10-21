@@ -88,7 +88,6 @@ export interface DeploymentYaml {
 
 /** One BaSyx deployment for one BPNL. */
 export interface BasyxEntry {
-  readonly enabled: boolean;
   readonly services: BasyxService[];
   /** Connector that offers the DTR asset. Default: the BPNL's first connector (file name order). */
   readonly dtrConnector?: string;
@@ -348,7 +347,6 @@ const DEPLOYMENT_KEY_SPEC: KeySpec = {
     basyx: {
       mapOf: {
         keys: {
-          enabled: LEAF,
           services: LEAF,
           dtrConnector: LEAF,
           stateRemovalPolicy: LEAF,
@@ -414,21 +412,20 @@ export function resolveStateRemovalPolicy(
   );
 }
 
-/** An enabled BaSyx entry with its resolved DTR connector. */
-export interface EnabledBasyx {
+/** A BaSyx entry with its resolved DTR connector. */
+export interface ResolvedBasyx {
   readonly bpnl: string;
   readonly entry: BasyxEntry;
   readonly dtrConnectorId: string;
 }
 
 /**
- * Enabled BaSyx entries, sorted by BPNL. dtrConnectorId defaults to the BPNL's
+ * BaSyx entries, sorted by BPNL. dtrConnectorId defaults to the BPNL's
  * first connector in file name order; validateBasyx guarantees one exists.
  */
-export function enabledBasyx(config: DeploymentConfig): EnabledBasyx[] {
+export function basyxEntries(config: DeploymentConfig): ResolvedBasyx[] {
   const { deployment, connectors } = config;
   return Object.entries(deployment.basyx ?? {})
-    .filter(([, entry]) => entry.enabled)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([bpnl, entry]) => {
       const dtrConnectorId =
@@ -613,9 +610,6 @@ function validateBasyx(
       throw new Error(`${file}: ${at} must be a map`);
     }
     const entry = raw as Partial<BasyxEntry>;
-    if (typeof entry.enabled !== "boolean") {
-      throw new Error(`${file}: ${at}.enabled must be true or false`);
-    }
     const services: unknown = entry.services;
     if (!Array.isArray(services) || services.length === 0) {
       throw new Error(`${file}: ${at}.services must be a non-empty list`);
@@ -635,8 +629,6 @@ function validateBasyx(
       file,
       `${at}.stateRemovalPolicy`,
     );
-    if (!entry.enabled) continue;
-
     if (!connectors.some((c) => bpnlOf(c) === bpnl)) {
       throw new Error(
         `${file}: ${at}: no connector in this deployment has participantId ${bpnl}`,

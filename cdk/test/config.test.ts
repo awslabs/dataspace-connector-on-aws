@@ -23,7 +23,7 @@ import {
 import {
   basyxStackName,
   DeploymentConfig,
-  enabledBasyx,
+  basyxEntries,
   loadDeploymentConfig,
   loadPipelineConfig,
   resolveStateRemovalPolicy,
@@ -329,10 +329,7 @@ describe("unknown config keys", () => {
   });
 
   test("deployment.yaml key inside a basyx entry", () => {
-    const dir = writeConfig(
-      withBasyx({ enabled: true, service: ["dtr"] }),
-      oneConnector(),
-    );
+    const dir = writeConfig(withBasyx({ service: ["dtr"] }), oneConnector());
     expect(() => loadDeploymentConfig(dir)).toThrow(
       `deployment.yaml: unknown key 'basyx.${BPNL}.service'`,
     );
@@ -389,7 +386,7 @@ describe("stateRemovalPolicy validation", () => {
 
   test("basyx entry value", () => {
     const dir = writeConfig(
-      withBasyx({ enabled: true, services: ["dtr"], stateRemovalPolicy: "X" }),
+      withBasyx({ services: ["dtr"], stateRemovalPolicy: "X" }),
       oneConnector(),
     );
     expect(() => loadDeploymentConfig(dir)).toThrow(
@@ -406,69 +403,56 @@ describe("basyx validation", () => {
   ) => loadDeploymentConfig(writeConfig(withBasyx(entry, key), connectors));
 
   test("invalid BPNL key", () => {
-    expect(() => load({ enabled: true, services: ["dtr"] }, "BPNL123")).toThrow(
+    expect(() => load({ services: ["dtr"] }, "BPNL123")).toThrow(
       "deployment.yaml: basyx key 'BPNL123' is not a valid BPNL",
     );
   });
 
-  test("enabled not boolean", () => {
-    expect(() => load({ enabled: "yes", services: ["dtr"] })).toThrow(
-      `deployment.yaml: basyx.${BPNL}.enabled must be true or false`,
+  test("the removed enabled flag", () => {
+    expect(() => load({ enabled: true, services: ["dtr"] })).toThrow(
+      `deployment.yaml: unknown key 'basyx.${BPNL}.enabled'`,
     );
   });
 
   test("services empty", () => {
-    expect(() => load({ enabled: true, services: [] })).toThrow(
+    expect(() => load({ services: [] })).toThrow(
       `deployment.yaml: basyx.${BPNL}.services must be a non-empty list`,
     );
   });
 
   test("unknown service", () => {
-    expect(() => load({ enabled: true, services: ["dtr", "dpp"] })).toThrow(
+    expect(() => load({ services: ["dtr", "dpp"] })).toThrow(
       `deployment.yaml: basyx.${BPNL}.services: unknown service 'dpp' (allowed: dtr, submodelRepository)`,
     );
   });
 
   test("services without dtr", () => {
-    expect(() =>
-      load({ enabled: true, services: ["submodelRepository"] }),
-    ).toThrow(`deployment.yaml: basyx.${BPNL}.services must include 'dtr'`);
+    expect(() => load({ services: ["submodelRepository"] })).toThrow(
+      `deployment.yaml: basyx.${BPNL}.services must include 'dtr'`,
+    );
   });
 
-  test("enabled BPNL without connector", () => {
-    expect(() =>
-      load({ enabled: true, services: ["dtr"] }, OTHER_BPNL),
-    ).toThrow(
+  test("BPNL without connector", () => {
+    expect(() => load({ services: ["dtr"] }, OTHER_BPNL)).toThrow(
       `deployment.yaml: basyx.${OTHER_BPNL}: no connector in this deployment has participantId ${OTHER_BPNL}`,
     );
   });
 
   test("dtrConnector does not exist", () => {
-    expect(() =>
-      load({ enabled: true, services: ["dtr"], dtrConnector: "nope" }),
-    ).toThrow(
+    expect(() => load({ services: ["dtr"], dtrConnector: "nope" })).toThrow(
       `deployment.yaml: basyx.${BPNL}.dtrConnector 'nope' does not exist`,
     );
   });
 
   test("dtrConnector belongs to another BPNL", () => {
     expect(() =>
-      load({ enabled: true, services: ["dtr"], dtrConnector: "bb" }, BPNL, {
+      load({ services: ["dtr"], dtrConnector: "bb" }, BPNL, {
         a: baseConnector("aa"),
         b: otherBpnlConnector("bb"),
       }),
     ).toThrow(
       `deployment.yaml: basyx.${BPNL}.dtrConnector 'bb' belongs to ${OTHER_BPNL}`,
     );
-  });
-
-  test("enabled: false skips the connector checks", () => {
-    expect(() =>
-      load(
-        { enabled: false, services: ["dtr"], dtrConnector: "nope" },
-        OTHER_BPNL,
-      ),
-    ).not.toThrow();
   });
 });
 
@@ -493,7 +477,7 @@ describe("resolveStateRemovalPolicy", () => {
   });
 });
 
-describe("enabledBasyx", () => {
+describe("basyxEntries", () => {
   const config = (basyx: Record<string, unknown>): DeploymentConfig =>
     loadDeploymentConfig(
       writeConfig(
@@ -507,23 +491,20 @@ describe("enabledBasyx", () => {
     );
 
   test("defaults dtrConnector to the BPNL's first connector by file name", () => {
-    expect(
-      enabledBasyx(config({ [BPNL]: { enabled: true, services: ["dtr"] } })),
-    ).toEqual([
+    expect(basyxEntries(config({ [BPNL]: { services: ["dtr"] } }))).toEqual([
       {
         bpnl: BPNL,
-        entry: { enabled: true, services: ["dtr"] },
+        entry: { services: ["dtr"] },
         dtrConnectorId: "bb",
       },
     ]);
   });
 
-  test("uses an explicit dtrConnector, skips disabled, sorts by BPNL", () => {
-    const result = enabledBasyx(
+  test("uses an explicit dtrConnector, sorts by BPNL", () => {
+    const result = basyxEntries(
       config({
-        [BPNL]: { enabled: true, services: ["dtr"], dtrConnector: "zz" },
-        [OTHER_BPNL]: { enabled: true, services: ["dtr"] },
-        BPNL00000000CCCC: { enabled: false, services: ["dtr"] },
+        [BPNL]: { services: ["dtr"], dtrConnector: "zz" },
+        [OTHER_BPNL]: { services: ["dtr"] },
       }),
     );
     expect(result.map((r) => [r.bpnl, r.dtrConnectorId])).toEqual([

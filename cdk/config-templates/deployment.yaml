@@ -26,7 +26,6 @@ observabilityApiPrincipals:
 # dtrConnector (default: the BPNL's first connector by file name).
 # basyx:
 #   BPNL00000000XXXX:
-#     enabled: true
 #     services: [dtr, submodelRepository] # dtr is required
 #     dtrConnector: example
 #     stateRemovalPolicy: RETAIN # Optional override

@@ -9,6 +9,7 @@ import {
   StackProps,
 } from "aws-cdk-lib";
 import { Construct } from "constructs";
+import { resolve } from "path";
 
 import {
   ISecurityGroup,
@@ -55,6 +56,7 @@ import {
   CfnListenerRule,
   TargetType,
 } from "aws-cdk-lib/aws-elasticloadbalancingv2";
+import { DockerImageAsset, Platform } from "aws-cdk-lib/aws-ecr-assets";
 import { ISecret, Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 
@@ -76,7 +78,6 @@ import {
   BASYX_PORT,
   READ_SCOPE,
   READ_SCOPE_NAME,
-  WRITE_SCOPE_NAME,
   RESOURCE_SERVER_ID,
   SERVICE_NAMES,
   basyxClientSecretAlias,
@@ -86,6 +87,7 @@ import {
   cognitoDomainPrefix,
   cognitoTokenUrl,
   dtrUrl,
+  validateCognitoDomainPrefix,
 } from "./names";
 
 export interface BasyxAlb {
@@ -108,8 +110,6 @@ export interface BasyxStackProps extends StackProps {
   readonly vpc: IVpc;
   readonly cluster: ICluster;
   readonly alb: BasyxAlb;
-  /** Security group of the dtrConnector's data plane, the only reader. */
-  readonly dataPlaneSecurityGroup: ISecurityGroup;
 }
 
 /** One BPNL's BaSyx Go services (DTR, optionally the Submodel Repository). */
@@ -120,6 +120,7 @@ export class BasyxStack extends Stack {
     const { alb, bpnl, deploymentName, profile, vpc } = props;
     const production = profile === "production";
     const removalPolicy = toRemovalPolicy(props.stateRemovalPolicy);
+    validateCognitoDomainPrefix(deploymentName, bpnl);
     const domainPrefix = cognitoDomainPrefix(deploymentName, bpnl);
 
     // ─── Network ─────────────────────────────────────────────────────────────
@@ -139,11 +140,6 @@ export class BasyxStack extends Stack {
       alb.securityGroupId,
     );
     basyxSg.addIngressRule(albSg, Port.tcp(BASYX_PORT), "Shared ALB");
-    albSg.addIngressRule(
-      props.dataPlaneSecurityGroup,
-      Port.tcp(BASYX_PORT),
-      `${props.dtrConnectorId} data plane reads BaSyx of ${bpnl}`,
-    );
     basyxSg.addEgressRule(auroraSg, Port.tcp(5432), "Aurora");
     basyxSg.addEgressRule(
       Peer.anyIpv4(),
@@ -168,9 +164,6 @@ export class BasyxStack extends Stack {
       credentials: Credentials.fromSecret(credentialsSecret),
       defaultDatabaseName: SERVICE_NAMES.dtr,
       writer: ClusterInstance.serverlessV2("Writer"),
-      readers: production
-        ? [ClusterInstance.serverlessV2("Reader", { scaleWithWriter: true })]
-        : [],
       serverlessV2MinCapacity: 0,
       serverlessV2MaxCapacity: production ? 8 : 4,
       serverlessV2AutoPauseDuration: Duration.seconds(300),
@@ -189,24 +182,23 @@ export class BasyxStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
     });
     userPool.addDomain("Domain", { cognitoDomain: { domainPrefix } });
+    // BaSyx accepts only tokens with this scope; what a client may do is
+    // decided by its client_id in the access rules.
     const readScope = new ResourceServerScope({
       scopeName: READ_SCOPE_NAME,
-      scopeDescription: "Read access to the BaSyx services",
-    });
-    const writeScope = new ResourceServerScope({
-      scopeName: WRITE_SCOPE_NAME,
-      scopeDescription: "Write access to the BaSyx services",
+      scopeDescription: "Access to the BaSyx services",
     });
     const resourceServer = userPool.addResourceServer("ResourceServer", {
       identifier: RESOURCE_SERVER_ID,
-      scopes: [readScope, writeScope],
+      scopes: [readScope],
     });
+    const scopes = [OAuthScope.resourceServer(resourceServer, readScope)];
     const client = userPool.addClient("DataPlaneClient", {
       generateSecret: true,
       accessTokenValidity: Duration.hours(1),
       oAuth: {
         flows: { clientCredentials: true },
-        scopes: [OAuthScope.resourceServer(resourceServer, readScope)],
+        scopes,
       },
       supportedIdentityProviders: [UserPoolClientIdentityProvider.COGNITO],
     });
@@ -227,9 +219,7 @@ export class BasyxStack extends Stack {
       accessTokenValidity: Duration.hours(1),
       oAuth: {
         flows: { clientCredentials: true },
-        scopes: [readScope, writeScope].map((s) =>
-          OAuthScope.resourceServer(resourceServer, s),
-        ),
+        scopes,
       },
       supportedIdentityProviders: [UserPoolClientIdentityProvider.COGNITO],
     });
@@ -242,11 +232,7 @@ export class BasyxStack extends Stack {
 
     // ─── Services ────────────────────────────────────────────────────────────
     const issuer = userPool.userPoolProviderUrl;
-    const services: BasyxService[] = ["dtr"];
-    if (props.entry.services.includes("submodelRepository")) {
-      services.push("submodelRepository");
-    }
-    for (const service of services) {
+    for (const service of props.entry.services) {
       new BasyxFargateService(
         this,
         service === "dtr" ? "Dtr" : "SubmodelRepository",
@@ -296,6 +282,24 @@ interface BasyxFargateServiceProps {
   readonly vpc: IVpc;
 }
 
+// From both lib/basyx (tests) and dist/basyx (synth).
+const IMAGE_DIR = resolve(__dirname, "../../lib/basyx/image");
+
+/** A pinned BaSyx image, copied into the CDK assets repository in ECR. */
+function basyxImage(
+  scope: Construct,
+  id: string,
+  image: string,
+): ContainerImage {
+  return ContainerImage.fromDockerImageAsset(
+    new DockerImageAsset(scope, id, {
+      directory: IMAGE_DIR,
+      buildArgs: { IMAGE: image },
+      platform: Platform.LINUX_ARM64,
+    }),
+  );
+}
+
 const SECURITY_DIR = "/security";
 const SECURITY_VOLUME = "security";
 
@@ -315,11 +319,12 @@ class BasyxFargateService extends Construct {
       profile === "production"
         ? RetentionDays.ONE_MONTH
         : RetentionDays.ONE_WEEK;
-    const logging = (name: string) =>
+    const logGroup = new LogGroup(this, "LogGroup", { retention });
+    const logging = (container: string) =>
       LogDriver.awsLogs({
-        logGroup: new LogGroup(this, `${name}LogGroup`, { retention }),
+        logGroup,
         mode: AwsLogDriverMode.NON_BLOCKING,
-        streamPrefix: name,
+        streamPrefix: container,
       });
 
     const taskDefinition = new FargateTaskDefinition(this, "TaskDefinition", {
@@ -399,7 +404,11 @@ class BasyxFargateService extends Construct {
 
     const migrate = taskDefinition.addContainer("Migrate", {
       containerName: "migrate",
-      image: ContainerImage.fromRegistry(BASYX_IMAGES.configurationService),
+      image: basyxImage(
+        this,
+        "MigrateImage",
+        BASYX_IMAGES.configurationService,
+      ),
       essential: false,
       environment: postgresEnv,
       secrets: postgresSecrets,
@@ -418,7 +427,9 @@ class BasyxFargateService extends Construct {
         : "/app/submodelrepositoryservice";
     const runtime = taskDefinition.addContainer("Runtime", {
       containerName: name,
-      image: ContainerImage.fromRegistry(
+      image: basyxImage(
+        this,
+        "RuntimeImage",
         service === "dtr" ? BASYX_IMAGES.dtr : BASYX_IMAGES.submodelRepository,
       ),
       essential: true,

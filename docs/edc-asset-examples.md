@@ -8,7 +8,7 @@ Values in angle brackets are placeholders.
 
 The data plane fetches a token with the OAuth 2.0 client-credentials flow before each request to the backend and sends it as a bearer token. `oauth2:clientSecretKey` is the name of a secret in AWS Secrets Manager under the connector's secret prefix (`<deploymentName>/<connectorId>/`), which the data plane can read. The `oauth2:` keys are read literally by EDC, so keep them as shown.
 
-This is the asset the pipeline creates for the Digital Twin Registry when `basyx` is enabled (see the README):
+This is the asset the pipeline creates for the Digital Twin Registry of a `basyx` entry (see the README):
 
 ```json
 {
