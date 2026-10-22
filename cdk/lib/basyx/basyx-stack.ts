@@ -26,7 +26,6 @@ import {
   ContainerDependencyCondition,
   ContainerImage,
   CpuArchitecture,
-  FargatePlatformVersion,
   FargateService,
   FargateTaskDefinition,
   ICluster,
@@ -64,7 +63,6 @@ import {
   BasyxEntry,
   BasyxService,
   DeploymentProfile,
-  StateRemovalPolicy,
   toRemovalPolicy,
 } from "../config/config";
 import { renderAccessRules, renderTrustList } from "./access-rules";
@@ -89,6 +87,8 @@ import {
   dtrUrl,
   validateCognitoDomainPrefix,
 } from "./names";
+import { CONTROL_PLANE_PORTS } from "../config/port-mappings";
+import { DtrOffer } from "../constructs/dtr-offer";
 
 export interface BasyxAlb {
   readonly dnsName: string;
@@ -102,14 +102,11 @@ export interface BasyxAlb {
 export interface BasyxStackProps extends StackProps {
   readonly bpnl: string;
   readonly entry: BasyxEntry;
-  readonly dtrConnectorId: string;
   readonly deploymentName: string;
-  readonly profile: DeploymentProfile;
-  /** Already resolved against the deployment default. */
-  readonly stateRemovalPolicy: StateRemovalPolicy;
   readonly vpc: IVpc;
   readonly cluster: ICluster;
   readonly alb: BasyxAlb;
+  readonly dtrOfferServiceToken: string;
 }
 
 /** One BPNL's BaSyx Go services (DTR, optionally the Submodel Repository). */
@@ -117,9 +114,10 @@ export class BasyxStack extends Stack {
   constructor(scope: Construct, id: string, props: BasyxStackProps) {
     super(scope, id, props);
 
-    const { alb, bpnl, deploymentName, profile, vpc } = props;
+    const { alb, bpnl, deploymentName, entry, vpc } = props;
+    const { profile } = entry;
     const production = profile === "production";
-    const removalPolicy = toRemovalPolicy(props.stateRemovalPolicy);
+    const removalPolicy = toRemovalPolicy(entry.stateRemovalPolicy);
     validateCognitoDomainPrefix(deploymentName, bpnl);
     const domainPrefix = cognitoDomainPrefix(deploymentName, bpnl);
 
@@ -192,37 +190,30 @@ export class BasyxStack extends Stack {
       identifier: RESOURCE_SERVER_ID,
       scopes: [readScope],
     });
-    const scopes = [OAuthScope.resourceServer(resourceServer, readScope)];
-    const client = userPool.addClient("DataPlaneClient", {
-      generateSecret: true,
-      accessTokenValidity: Duration.hours(1),
-      oAuth: {
-        flows: { clientCredentials: true },
-        scopes,
-      },
-      supportedIdentityProviders: [UserPoolClientIdentityProvider.COGNITO],
-    });
+    const addClient = (clientId: string) =>
+      userPool.addClient(clientId, {
+        generateSecret: true,
+        accessTokenValidity: Duration.hours(1),
+        oAuth: {
+          flows: { clientCredentials: true },
+          scopes: [OAuthScope.resourceServer(resourceServer, readScope)],
+        },
+        supportedIdentityProviders: [UserPoolClientIdentityProvider.COGNITO],
+      });
+    const client = addClient("DataPlaneClient");
     const clientSecretAlias = basyxClientSecretAlias(
       deploymentName,
-      props.dtrConnectorId,
+      entry.dtrConnector,
     );
     new Secret(this, "DataPlaneClientSecret", {
       secretName: clientSecretAlias,
-      description: `Cognito client secret the ${props.dtrConnectorId} data plane uses to call BaSyx`,
+      description: `Cognito client secret the ${entry.dtrConnector} data plane uses to call BaSyx`,
       secretStringValue: client.userPoolClientSecret,
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
     // The provider's own apps register twins and submodels with this client.
-    const writer = userPool.addClient("WriterClient", {
-      generateSecret: true,
-      accessTokenValidity: Duration.hours(1),
-      oAuth: {
-        flows: { clientCredentials: true },
-        scopes,
-      },
-      supportedIdentityProviders: [UserPoolClientIdentityProvider.COGNITO],
-    });
+    const writer = addClient("WriterClient");
     const writerSecret = new Secret(this, "WriterClientSecret", {
       secretName: basyxWriterSecretName(deploymentName, bpnl),
       description: `Cognito client secret for writing to the BaSyx services of ${bpnl}`,
@@ -232,7 +223,7 @@ export class BasyxStack extends Stack {
 
     // ─── Services ────────────────────────────────────────────────────────────
     const issuer = userPool.userPoolProviderUrl;
-    for (const service of props.entry.services) {
+    for (const service of entry.services) {
       new BasyxFargateService(
         this,
         service === "dtr" ? "Dtr" : "SubmodelRepository",
@@ -255,14 +246,27 @@ export class BasyxStack extends Stack {
       );
     }
 
-    // ─── Outputs (read by finalize) ──────────────────────────────────────────
+    // ─── DTR offer on the dtrConnector ───────────────────────────────────────
+    const offer = {
+      DtrUrl: dtrUrl(alb.dnsName, bpnl),
+      TokenUrl: cognitoTokenUrl(domainPrefix, this.region),
+      ClientId: client.userPoolClientId,
+      Scope: READ_SCOPE,
+      ClientSecretAlias: clientSecretAlias,
+    };
+    new DtrOffer(this, "DtrOffer", {
+      serviceToken: props.dtrOfferServiceToken,
+      properties: {
+        ManagementUrl: `http://${alb.dnsName}:${CONTROL_PLANE_PORTS.management}`,
+        ConnectorId: entry.dtrConnector,
+        ...offer,
+      },
+    });
+
+    // ─── Outputs, for writers and further assets ─────────────────────────────
     const out = (key: string, value: string) =>
       new CfnOutput(this, key, { key, value });
-    out("DtrUrl", dtrUrl(alb.dnsName, bpnl));
-    out("TokenUrl", cognitoTokenUrl(domainPrefix, this.region));
-    out("ClientId", client.userPoolClientId);
-    out("Scope", READ_SCOPE);
-    out("ClientSecretAlias", clientSecretAlias);
+    for (const [key, value] of Object.entries(offer)) out(key, value);
     out("WriterClientId", writer.userPoolClientId);
     out("WriterClientSecretArn", writerSecret.secretArn);
   }
@@ -432,7 +436,6 @@ class BasyxFargateService extends Construct {
         "RuntimeImage",
         service === "dtr" ? BASYX_IMAGES.dtr : BASYX_IMAGES.submodelRepository,
       ),
-      essential: true,
       // The image default adds -config /config/config.yaml; everything comes from env here.
       command: [binary],
       environment: {
@@ -486,8 +489,6 @@ class BasyxFargateService extends Construct {
           : undefined,
       circuitBreaker: { enable: true, rollback: true },
       minHealthyPercent: 100,
-      maxHealthyPercent: 200,
-      platformVersion: FargatePlatformVersion.LATEST,
     });
     // The cluster endpoint only resolves once the writer instance exists.
     fargateService.node.addDependency(props.database);

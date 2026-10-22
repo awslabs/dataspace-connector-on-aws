@@ -1,48 +1,23 @@
-# Shared infrastructure configuration for Dataspace Connector on AWS
-# See: https://github.com/awslabs/dataspace-connector-on-aws
+# Reference: https://github.com/awslabs/dataspace-connector-on-aws#deploymentyaml
 
-profile: development # "development" (Fargate Spot, 1 NAT) or "production" (On-Demand, 2 NATs)
-vpcIpAddresses: "10.0.0.0/20"
-containerInsights: true
-
-# IAM principals allowed to call the Management and Observability APIs (IAM auth)
-managementApiPrincipals:
-  # - "arn:aws:iam::<account-id>:role/<role-name>"
-observabilityApiPrincipals:
-  # - "arn:aws:iam::<account-id>:role/<role-name>"
-
-# Optional: EDC control/data plane log level for all connectors (a connector can
-# override it): TRACE, DEBUG, INFO, WARN, ERROR or OFF, applied to all loggers.
-# Unset keeps the Tractus-X default: EDC monitor at INFO, other loggers OFF.
+portal:
+  environment: beta
+  bpnl: "BPNL000000000000"
+# profile: development
+# vpcIpAddresses: "10.0.0.0/20"
+# containerInsights: false
+# managementApiPrincipals:
+#   - "arn:aws:iam::<account-id>:role/<role-name>"
+# observabilityApiPrincipals:
+#   - "arn:aws:iam::<account-id>:role/<role-name>"
 # logLevel: DEBUG
-
-# Optional: what happens to stored state (connector DynamoDB tables and S3
-# buckets, BaSyx databases) when its stack is deleted: RETAIN (default) or
-# DESTROY. Connectors and BaSyx entries can override it.
 # stateRemovalPolicy: RETAIN
-
-# Optional: Eclipse BaSyx Digital Twin Registry (DTR) and Submodel Repository,
-# one deployment per BPNL. The DTR is offered as a catalog asset on
-# dtrConnector (default: the BPNL's first connector by file name).
-# basyx:
-#   BPNL00000000XXXX:
-#     services: [dtr, submodelRepository] # dtr is required
-#     dtrConnector: example
-#     stateRemovalPolicy: RETAIN # Optional override
-
-# Optional: custom domain for EDC API endpoints
-# certificateArn: "arn:aws:acm:<region>:<account-id>:certificate/<certificate-id>"
+# certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id>"
 # domainName: "edc.example.com"
 # hostedZoneId: "Z0123456789ABCDEFGHIJ"
-
-# Cofinity-X Portal integration. For each connector the pipeline creates a
-# technical user (Identity Wallet Management role), stores its OAuth secret in
-# Secrets Manager, derives the EDC identity and registers the connector for
-# discovery. Removing a connector deletes both.
-#
-# Before the first push, create one secret per BPNL named
-# <deploymentName>/portal-admin/<BPNL> holding {"clientId":"...","clientSecret":"..."}
-# of a portal technical user with the Connector Management role.
-portal:
-  environment: beta # "beta" or "production"
-  bpnl: "BPNL000000000000" # Default BPNL of every connector; a connector may set its own
+# basyx:
+#   BPNL000000000000:
+#     services: [dtr, submodelRepository]
+#     dtrConnector: example
+#     profile: development
+#     stateRemovalPolicy: RETAIN

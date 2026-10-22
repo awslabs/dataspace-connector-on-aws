@@ -8,13 +8,12 @@ import { SharedInfraStack } from "./shared-infra-stack";
 import { ConnectorStack } from "./connector-stack";
 import { BasyxStack } from "./basyx/basyx-stack";
 import { BASYX_PORT, basyxPriority } from "./basyx/names";
-import { CONTROL_PLANE_PORT_MAPPING_DEFAULT } from "./config/port-mappings";
+import { CONTROL_PLANE_PORTS } from "./config/port-mappings";
 
 import {
   connectorPriority,
   DeploymentConfig,
   basyxEntries,
-  resolveStateRemovalPolicy,
 } from "./config/config";
 
 export interface DeploymentStageProps extends StageProps {
@@ -34,6 +33,7 @@ export class DeploymentStage extends Stage {
     });
 
     const priorities = new Map<number, string>();
+    const connectorStacks = new Map<string, ConnectorStack>();
 
     connectors.forEach((connector) => {
       const priority = connectorPriority(connector.connectorId);
@@ -56,11 +56,13 @@ export class DeploymentStage extends Stage {
           deploymentName: props.deploymentName,
         },
       );
-      stack.addDependency(sharedInfra);
+      stack.addStackDependency(sharedInfra);
+      connectorStacks.set(connector.connectorId, stack);
     });
 
     // BaSyx listener rules share the priority space with the connectors' rules.
-    basyxEntries(props.config).forEach(({ bpnl, entry, dtrConnectorId }) => {
+    basyxEntries(props.config).forEach((entry) => {
+      const { bpnl } = entry;
       for (const service of entry.services) {
         const priority = basyxPriority(bpnl, service);
         const existing = priorities.get(priority);
@@ -71,28 +73,23 @@ export class DeploymentStage extends Stage {
         }
         priorities.set(priority, `basyx ${bpnl} ${service}`);
       }
-      new BasyxStack(this, `BaSyx-${bpnl}`, {
+      const basyx = new BasyxStack(this, `BaSyx-${bpnl}`, {
         bpnl,
         entry,
-        dtrConnectorId,
         deploymentName: props.deploymentName,
-        profile: entry.profile ?? deployment.profile,
-        stateRemovalPolicy: resolveStateRemovalPolicy(
-          deployment,
-          entry.stateRemovalPolicy,
-        ),
         vpc: sharedInfra.vpc,
         cluster: sharedInfra.ecsCluster,
         alb: {
           dnsName: sharedInfra.albDnsName,
           securityGroupId: sharedInfra.albSecurityGroupId,
           managementListenerArn:
-            sharedInfra.listenerArns[
-              CONTROL_PLANE_PORT_MAPPING_DEFAULT.management
-            ],
+            sharedInfra.listenerArns[CONTROL_PLANE_PORTS.management],
           readListenerArn: sharedInfra.listenerArns[BASYX_PORT],
         },
+        dtrOfferServiceToken: sharedInfra.dtrOfferServiceToken,
       });
+      // The DTR offer is written through the dtrConnector's control plane.
+      basyx.addStackDependency(connectorStacks.get(entry.dtrConnector)!);
     });
 
     Tags.of(this).add("Project", "dataspace-connector-on-aws");

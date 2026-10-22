@@ -1,20 +1,9 @@
-# Pipeline configuration for Dataspace Connector on AWS
-# See: https://github.com/awslabs/dataspace-connector-on-aws
+# Reference: https://github.com/awslabs/dataspace-connector-on-aws#pipelineyaml
 
-# App repo and version (Git tag, branch, or commit hash)
 appRepo: awslabs/dataspace-connector-on-aws
 appVersion: main
-
-# Config repository source: "codecommit" (default) or "github"
-configSource: codecommit
-
-# Namespaces all resources so multiple deployments can coexist in one
-# account/region. Default "DataspaceConnector"; set once before the first deploy.
-# deploymentName: DataspaceConnector
-
-# For configSource: github only — external repo (owner/name) and connection ARN.
+# configSource: codecommit
 # configRepoName: my-org/config-repo
 # connectionArn: "arn:aws:codestar-connections:eu-central-1:123456789012:connection/..."
-
-# Optional manual approval step before deployment
-requireApproval: false
+# deploymentName: DataspaceConnector
+# requireApproval: false

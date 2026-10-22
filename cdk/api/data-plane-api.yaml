@@ -5,14 +5,70 @@ openapi: 3.0.1
 info:
   title: EDC API
   version: "1.0"
+x-amazon-apigateway-request-validators:
+  all:
+    validateRequestBody: true
+    validateRequestParameters: true
+x-amazon-apigateway-request-validator: all
 tags:
-  - description:
-      The public API of the Data Plane is a data proxy enabling a data consumer to actively querydata from the provider data source (e.g. backend Rest API, internal database...) through its Data
-      Planeinstance. Thus the Data Plane is the only entry/output door for the data, which avoids the provider to exposedirectly its data externally.The Data Plane public API being a proxy, it supports all
-      verbs (i.e. GET, POST, PUT, PATCH, DELETE), whichcan then conveyed until the data source is required. This is especially useful when the actual data sourceis a Rest API itself.In the same manner, any
-      set of arbitrary query parameters, path parameters and request body are supported (in the limits fixed by the HTTP server) and can also conveyed to the actual data source.
+  - description: The public API of the Data Plane is a data proxy enabling a data consumer to actively querydata from the provider data source (e.g. backend Rest API, internal database...) through its Data Planeinstance. Thus the Data Plane is the only entry/output door for the data, which avoids the provider to exposedirectly its data externally.The Data Plane public API being a proxy, it supports all verbs (i.e. GET, POST, PUT, PATCH, DELETE), whichcan then conveyed until the data source is required. This is especially useful when the actual data sourceis a Rest API itself.In the same manner, any set of arbitrary query parameters, path parameters and request body are supported (in the limits fixed by the HTTP server) and can also conveyed to the actual data source.
     name: Data Plane public API
 paths:
+  /{connectorId}/token:
+    post:
+      operationId: refreshToken
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
+        - in: query
+          name: grant_type
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: refresh_token
+          required: false
+          schema:
+            type: string
+        - in: header
+          name: Authorization
+          required: false
+          schema:
+            type: string
+      description: Resolves all groups for a particular BPN
+      tags:
+        - Token Refresh API
+      responses:
+        "200":
+          description: The access token and refresh token were updated. Expiry should be interpreted as starting from the time of message reception, allowing for some leeway.
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Request body was malformed, query parameters were missing, etc.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "401":
+          description: The token could not be refreshed due to an authentication error, either the refresh token or the Authorization header were invalid.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/public/token
+        integrationTarget: ${albArn}
   /{connectorId}/{any+}:
     x-amazon-apigateway-any-method:
       description: Proxy any data query, including multi-segment paths, to the Data Plane.

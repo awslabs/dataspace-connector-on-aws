@@ -7,20 +7,15 @@ import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Code, Function, Runtime } from "aws-cdk-lib/aws-lambda";
 import { Provider } from "aws-cdk-lib/custom-resources";
 
-export interface EdcTokenKeyPairProps {
-  readonly privateKeySecretName: string;
-  readonly publicKeySecretName: string;
-}
-
 /**
- * Generates an EC P-256 key pair for EDC data plane EDR token signing
- * and stores both keys in AWS Secrets Manager.
- *
- * Key material is generated inside a Lambda function at deploy time
- * and never leaves AWS. On stack deletion, both secrets are removed.
+ * Provider of the EdcTokenKeyPair custom resource, once per deployment. It
+ * generates an EC P-256 key pair for EDR token signing in Secrets Manager and
+ * deletes both secrets with the resource.
  */
-export class EdcTokenKeyPair extends Construct {
-  constructor(scope: Construct, id: string, props: EdcTokenKeyPairProps) {
+export class EdcTokenKeyPairProvider extends Construct {
+  readonly serviceToken: string;
+
+  constructor(scope: Construct, id: string, deploymentName: string) {
     super(scope, id);
 
     const handler = new Function(this, "Handler", {
@@ -42,68 +37,56 @@ exports.handler = async (event) => {
   if (event.RequestType === "Delete") {
     for (const name of [privName, pubName]) {
       try {
-        await sm.send(
-          new DeleteSecretCommand({
-            SecretId: name,
-            ForceDeleteWithoutRecovery: true,
-          }),
-        );
+        await sm.send(new DeleteSecretCommand({ SecretId: name, ForceDeleteWithoutRecovery: true }));
       } catch (e) {
         if (e.name !== "ResourceNotFoundException") throw e;
       }
     }
-    return {};
-  }
-
-  if (event.RequestType === "Create") {
+  } else if (event.RequestType === "Create") {
     const { publicKey, privateKey } = generateKeyPairSync("ec", {
       namedCurve: "P-256",
       publicKeyEncoding: { type: "spki", format: "pem" },
       privateKeyEncoding: { type: "pkcs8", format: "pem" },
     });
-    await sm.send(
-      new CreateSecretCommand({
-        Name: privName,
-        SecretString: privateKey,
-        Description: "EC private key for EDR token signing",
-      }),
-    );
-    await sm.send(
-      new CreateSecretCommand({
-        Name: pubName,
-        SecretString: publicKey,
-        Description: "EC public key for EDR token verification",
-      }),
-    );
+    await sm.send(new CreateSecretCommand({ Name: privName, SecretString: privateKey }));
+    await sm.send(new CreateSecretCommand({ Name: pubName, SecretString: publicKey }));
   }
-
   return {};
 };
 `),
-      description:
-        "Generates EC P-256 key pair for EDC data plane token signing",
     });
 
-    const stack = Stack.of(this);
-    const secretArnPrefix = `arn:aws:secretsmanager:${stack.region}:${stack.account}:secret:`;
-
+    const { region, account } = Stack.of(this);
     handler.addToRolePolicy(
       new PolicyStatement({
         actions: ["secretsmanager:CreateSecret", "secretsmanager:DeleteSecret"],
         effect: Effect.ALLOW,
         resources: [
-          `${secretArnPrefix}${props.privateKeySecretName}-*`,
-          `${secretArnPrefix}${props.publicKeySecretName}-*`,
+          `arn:aws:secretsmanager:${region}:${account}:secret:${deploymentName}/*/edc.transfer.proxy.token.*`,
         ],
       }),
     );
 
-    const provider = new Provider(this, "Provider", {
+    this.serviceToken = new Provider(this, "Provider", {
       onEventHandler: handler,
-    });
+    }).serviceToken;
+  }
+}
 
+/** A connector's EDR token signing key pair. */
+export class EdcTokenKeyPair extends Construct {
+  constructor(
+    scope: Construct,
+    id: string,
+    props: {
+      serviceToken: string;
+      privateKeySecretName: string;
+      publicKeySecretName: string;
+    },
+  ) {
+    super(scope, id);
     new CustomResource(this, "Resource", {
-      serviceToken: provider.serviceToken,
+      serviceToken: props.serviceToken,
       properties: {
         PrivateKeySecretName: props.privateKeySecretName,
         PublicKeySecretName: props.publicKeySecretName,

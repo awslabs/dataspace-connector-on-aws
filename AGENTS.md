@@ -11,7 +11,7 @@ operating connectors.
 ## Layout
 - `edc/` — EDC runtimes (Gradle/Kotlin, Java 17). `control-plane/`, `data-plane/`
   are shadowJar apps on the Tractus-X base; `extensions/` holds the custom DynamoDB
-  stores and S3 EDR extension. Versions pinned in `edc/gradle/libs.versions.toml`.
+  stores, the S3 EDR extension and the OAuth2 token cache. Versions pinned in `edc/gradle/libs.versions.toml`.
 - `cdk/` — AWS CDK (TypeScript) infra + deploy pipeline. `cdk/api/*.yaml` are the
   API Gateway OpenAPI specs (spec-driven `SpecRestApi`, `http_proxy` passthrough).
 - `mcp/` — Python MCP server (`server.py`) exposing EDC management primitives.

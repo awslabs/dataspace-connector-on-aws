@@ -19,7 +19,6 @@ import software.amazon.edc.extensions.common.ddb.utility.IterationCache
 import software.amazon.edc.extensions.common.ddb.utility.ddbReadLimit
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
-import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
 import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.common.ddb.utility.toPredicate
 import software.amazon.edc.extensions.controlplane.ddb.types.TransferProcess
@@ -57,7 +56,7 @@ class DdbTransferProcessStore(
         val stateValues = criteria.extractStateValues()
         val indexed =
             stateCache.getOrLoad {
-                stateIndex.query(queryRequestFromId(EntityType.TRANSFER_PROCESS)).flatMap { it.items() }
+                stateIndex.query(queryRequestFromPk(EntityType.TRANSFER_PROCESS)).flatMap { it.items() }
             }
         val items =
             if (stateValues != null) {
@@ -100,7 +99,7 @@ class DdbTransferProcessStore(
 
     override fun findForCorrelationId(correlationId: String): EdcTransferProcess? =
         correlationIdIndex
-            .query(queryRequestFromId(correlationId))
+            .query(queryRequestFromPk(correlationId))
             .toList()
             .flatMap { it.items() }
             .firstOrNull()

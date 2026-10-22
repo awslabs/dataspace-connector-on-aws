@@ -8,25 +8,11 @@ provider sequences) lives in the consuming skill/agent layer, not here. This kee
 the server workflow-agnostic, so new dataspace use cases need no new server tools.
 
 Supports two modes:
-- Legacy (single connector): Set EDC_MANAGEMENT_URL only. All tools target that endpoint directly.
-- Multi-connector (Dataspace Connector on AWS): Set EDC_MULTI_CONNECTOR=true.
-  Connector IDs and the Management and DSP (protocol) base URLs are discovered from
-  CloudFormation, so EDC_MANAGEMENT_URL is optional (used as an override if set).
-  Requires connector_id on all tools.
-
-Tools (12):
-- list_connectors             Discover deployed connectors + endpoints from CloudFormation
-- request_catalog             Request a provider's DCAT catalog over DSP
-- query_resources             List/query any control-plane resource collection (enum)
-- get_resource                Read one resource by id, incl. edr (enum)
-- delete_resource             Delete a deletable resource (assets/policies/contract-defs)
-- create_asset                Register a data asset (descriptor + data address)
-- create_policy               Create an ODRL policy definition
-- create_contract_definition  Link assets to access + contract policies (catalog-visible)
-- initiate_negotiation        Start a contract negotiation for a catalog offer
-- initiate_transfer           Start a data transfer against an agreement
-- manage_transfer             Suspend/resume/complete/terminate a transfer (or all STARTED)
-- fetch_data                  Resolve the EDR and fetch the payload from the data plane
+- Single connector: set EDC_MANAGEMENT_URL. All tools target that endpoint.
+- Multi-connector (Dataspace Connector on AWS): set EDC_MULTI_CONNECTOR=true.
+  Connector IDs and the Management and DSP base URLs are discovered from
+  CloudFormation; EDC_MANAGEMENT_URL overrides the Management URL if set.
+  Every tool then requires connector_id.
 """
 
 import json
@@ -36,13 +22,8 @@ import httpx
 import boto3
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
-# Configuration
-# EDC_MANAGEMENT_URL is an explicit override. In single-connector mode it is the
-# endpoint (falling back to localhost). In multi-connector mode it is optional:
-# when unset, the Management and DSP endpoints are discovered from the shared
-# infrastructure stack's CloudFormation outputs.
 _ENV_MANAGEMENT_URL = os.getenv("EDC_MANAGEMENT_URL")
 _DEFAULT_MANAGEMENT_URL = "http://localhost:8080/management"
 EDC_API_KEY = os.getenv("EDC_API_KEY", "")
@@ -91,11 +72,6 @@ _RESOURCE_PATH: dict[str, str] = {
     "contract_agreements": "contractagreements",
     "transfer_processes": "transferprocesses",
 }
-# Only these resource types support DELETE via the Management API. Negotiations,
-# agreements, and transfer processes are not deletable (transfers end via
-# manage_transfer(action="terminate")).
-_DELETABLE = {"assets", "policy_definitions", "contract_definitions"}
-
 # EDC TransferProcessStates integer code for STARTED. The store persists and
 # filters transfer `state` as this integer (not the "STARTED" string label), so
 # server-side state filters must use the code. Stable across EDC versions.
@@ -213,9 +189,6 @@ def sign_request(method: str, url: str, headers: dict[str, str], body: bytes = N
     # Fetch fresh credentials each call so temporary-credential expiry is handled.
     credentials = _aws_session.get_credentials()
     frozen_credentials = credentials.get_frozen_credentials()
-
-    if body and "Content-Type" not in headers:
-        headers["Content-Type"] = "application/json"
 
     aws_request = AWSRequest(method=method, url=url, data=body, headers=headers)
     SigV4Auth(frozen_credentials, "execute-api", AWS_REGION).add_auth(aws_request)
@@ -454,11 +427,10 @@ async def query_resources(
 
     Returns: an array of resource objects for the requested type.
     """
-    path = _RESOURCE_PATH.get(resource_type)
-    if not path:
-        return {"error": True, "message": f"Unknown resource_type '{resource_type}'."}
     spec = _build_query_spec(offset, limit, filter_expression, sort_field, sort_order)
-    return await _api_request("POST", f"/v3/{path}/request", spec, connector_id=connector_id)
+    return await _api_request(
+        "POST", f"/v3/{_RESOURCE_PATH[resource_type]}/request", spec, connector_id=connector_id
+    )
 
 
 @mcp.tool()
@@ -492,10 +464,9 @@ async def get_resource(
         return await _api_request(
             "GET", f"/v3/edrs/{resource_id}/dataaddress", connector_id=connector_id
         )
-    path = _RESOURCE_PATH.get(resource_type)
-    if not path:
-        return {"error": True, "message": f"Unknown resource_type '{resource_type}'."}
-    return await _api_request("GET", f"/v3/{path}/{resource_id}", connector_id=connector_id)
+    return await _api_request(
+        "GET", f"/v3/{_RESOURCE_PATH[resource_type]}/{resource_id}", connector_id=connector_id
+    )
 
 
 @mcp.tool()
@@ -518,15 +489,6 @@ async def delete_resource(
     Returns: {success, resource_type, resource_id, status} on success, or a
     structured error with a hint.
     """
-    if resource_type not in _DELETABLE:
-        return {
-            "error": True,
-            "message": (
-                f"'{resource_type}' cannot be deleted via the Management API. "
-                "Deletable: assets, policy_definitions, contract_definitions. "
-                "End a transfer with manage_transfer(action='terminate')."
-            ),
-        }
     path = _RESOURCE_PATH[resource_type]
     resp = await _api_request("DELETE", f"/v3/{path}/{resource_id}", connector_id=connector_id)
     if isinstance(resp, dict) and resp.get("error"):

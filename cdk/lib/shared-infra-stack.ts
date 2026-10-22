@@ -30,12 +30,14 @@ import { VpcLink } from "aws-cdk-lib/aws-apigatewayv2";
 
 import { DeploymentYaml, toPrincipals } from "./config/config";
 import {
-  CONTROL_PLANE_PORT_MAPPING_DEFAULT,
-  DATA_PLANE_PORT_MAPPING_DEFAULT,
+  CONTROL_PLANE_PORTS as cpPorts,
+  DATA_PLANE_PORTS as dpPorts,
 } from "./config/port-mappings";
 import { EdcApi } from "./constructs/edc-api";
 import { EdcSecretCleanup } from "./constructs/edc-secret-cleanup";
+import { EdcTokenKeyPairProvider } from "./constructs/edc-token-key-pair";
 import { PortalConnectorProvider } from "./constructs/portal-connector";
+import { DtrOfferProvider } from "./constructs/dtr-offer";
 import { BASYX_PORT } from "./basyx/names";
 
 export interface SharedInfraStackProps extends StackProps {
@@ -54,6 +56,8 @@ export class SharedInfraStack extends Stack {
   readonly dspUrl: string;
   readonly managementUrl: string;
   readonly portalConnectorServiceToken: string;
+  readonly dtrOfferServiceToken: string;
+  readonly tokenKeyPairServiceToken: string;
   readonly ecsCluster: ICluster;
   readonly listenerArns: { [port: number]: string };
   readonly vpc: IVpc;
@@ -63,8 +67,6 @@ export class SharedInfraStack extends Stack {
     super(scope, id, props);
 
     const config = props.config;
-    const cpPorts = CONTROL_PLANE_PORT_MAPPING_DEFAULT;
-    const dpPorts = DATA_PLANE_PORT_MAPPING_DEFAULT;
 
     this.vpc = new Vpc(this, "Vpc", {
       ipAddresses: IpAddresses.cidr(config.vpcIpAddresses),
@@ -128,6 +130,7 @@ export class SharedInfraStack extends Stack {
       cpPorts.default,
       cpPorts.management,
       cpPorts.protocol,
+      dpPorts.default,
       dpPorts.public,
     ]) {
       albSg.addIngressRule(albSg, Port.tcp(port), "API Gateway VPC link");
@@ -170,38 +173,37 @@ export class SharedInfraStack extends Stack {
     });
     this.vpcLinkId = vpcLink.vpcLinkId;
 
-    let certificate;
-    let hostedZone;
-    if (config.domainName && config.hostedZoneId && config.certificateArn) {
-      certificate = Certificate.fromCertificateArn(
-        this,
-        "Certificate",
-        config.certificateArn,
-      );
-      hostedZone = HostedZone.fromHostedZoneAttributes(this, "HostedZone", {
-        hostedZoneId: config.hostedZoneId,
-        zoneName: config.domainName,
-      });
-    }
-
     const api = new EdcApi(this, "EdcApi", {
       albArn: this.albArn,
-      certificate,
-      controlPlanePortMapping: cpPorts,
-      dataPlanePortMapping: dpPorts,
-      hostedZone,
       loadBalancerAddress: this.albDnsName,
+      vpcLinkId: this.vpcLinkId,
+      domain: config.domainName
+        ? {
+            certificate: Certificate.fromCertificateArn(
+              this,
+              "Certificate",
+              config.certificateArn!,
+            ),
+            hostedZone: HostedZone.fromHostedZoneAttributes(
+              this,
+              "HostedZone",
+              {
+                hostedZoneId: config.hostedZoneId!,
+                zoneName: config.domainName,
+              },
+            ),
+          }
+        : undefined,
       managementApiPrincipals: toPrincipals(config.managementApiPrincipals),
       observabilityApiPrincipals: toPrincipals(
         config.observabilityApiPrincipals,
       ),
       profile: config.profile,
-      vpcLinkId: this.vpcLinkId,
+      dataTrace: config.logLevel === "DEBUG" || config.logLevel === "TRACE",
     });
-
-    this.dspUrl = api.outputs.dspUrl;
-    this.dataPlaneUrl = api.outputs.dataPlaneUrl;
-    this.managementUrl = api.outputs.managementUrl;
+    this.dspUrl = api.dspUrl;
+    this.dataPlaneUrl = api.dataPlaneUrl;
+    this.managementUrl = api.managementUrl;
 
     new EdcSecretCleanup(this, "EdcSecretCleanup");
 
@@ -210,6 +212,15 @@ export class SharedInfraStack extends Stack {
       "PortalConnectorProvider",
       props.deploymentName,
     ).serviceToken;
+    this.tokenKeyPairServiceToken = new EdcTokenKeyPairProvider(
+      this,
+      "EdcTokenKeyPairProvider",
+      props.deploymentName,
+    ).serviceToken;
+    this.dtrOfferServiceToken = new DtrOfferProvider(this, "DtrOfferProvider", {
+      vpc: this.vpc,
+      albSecurityGroup: albSg,
+    }).serviceToken;
 
     new CfnOutput(this, "VpcId", { value: this.vpc.vpcId });
     new CfnOutput(this, "ClusterArn", { value: this.ecsCluster.clusterArn });

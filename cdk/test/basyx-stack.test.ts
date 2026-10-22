@@ -18,12 +18,14 @@ function synth(stateRemovalPolicy: StateRemovalPolicy = "RETAIN"): Template {
   const vpc = new Vpc(infra, "Vpc", { maxAzs: 2 });
   const stack = new BasyxStack(app, "BaSyx", {
     env,
-    bpnl: "BPNL00000007J65N",
-    entry: { services: ["dtr", "submodelRepository"] },
-    dtrConnectorId: "dtr1",
+    bpnl: "BPNL00000000DEMO",
+    entry: {
+      services: ["dtr", "submodelRepository"],
+      dtrConnector: "dtr1",
+      profile: "development",
+      stateRemovalPolicy,
+    },
     deploymentName: "DataspaceConnector",
-    profile: "development",
-    stateRemovalPolicy,
     vpc,
     cluster: new Cluster(infra, "Cluster", { vpc }),
     alb: {
@@ -32,6 +34,8 @@ function synth(stateRemovalPolicy: StateRemovalPolicy = "RETAIN"): Template {
       managementListenerArn: "arn:listener/8182",
       readListenerArn: "arn:listener/5004",
     },
+    dtrOfferServiceToken:
+      "arn:aws:lambda:eu-central-1:111111111111:function:dtr-offer",
   });
   return Template.fromStack(stack);
 }
@@ -80,8 +84,8 @@ test("each service is routed under its context path on both listeners", () => {
       .map((r) => r.Conditions[0].PathPatternConfig.Values[0])
       .sort();
   const expected = [
-    "/basyx/BPNL00000007J65N/dtr/api/v3/*",
-    "/basyx/BPNL00000007J65N/smrepo/*",
+    "/basyx/BPNL00000000DEMO/dtr/api/v3/*",
+    "/basyx/BPNL00000000DEMO/smrepo/*",
   ];
   expect(paths("arn:listener/8182")).toEqual(expected);
   expect(paths("arn:listener/5004")).toEqual(expected);
@@ -133,12 +137,14 @@ test("a deploymentName that breaks the Cognito prefix rules fails synth", () => 
     () =>
       new BasyxStack(app, "BaSyx", {
         env,
-        bpnl: "BPNL00000007J65N",
-        entry: { services: ["dtr"] },
-        dtrConnectorId: "dtr1",
+        bpnl: "BPNL00000000DEMO",
+        entry: {
+          services: ["dtr"],
+          dtrConnector: "dtr1",
+          profile: "development",
+          stateRemovalPolicy: "RETAIN",
+        },
         deploymentName: "AmazonConnector",
-        profile: "development",
-        stateRemovalPolicy: "RETAIN",
         vpc,
         cluster: new Cluster(infra, "Cluster", { vpc }),
         alb: {
@@ -147,6 +153,8 @@ test("a deploymentName that breaks the Cognito prefix rules fails synth", () => 
           managementListenerArn: "arn:listener/8182",
           readListenerArn: "arn:listener/5004",
         },
+        dtrOfferServiceToken:
+          "arn:aws:lambda:eu-central-1:111111111111:function:dtr-offer",
       }),
   ).toThrow('contains the reserved word "amazon"');
 });

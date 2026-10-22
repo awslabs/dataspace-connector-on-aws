@@ -4,7 +4,7 @@ This steering file guides the agent through deeply understanding a specific Cate
 
 The connector must already be deployed and MCP tools connected (see the **deploy-connector** steering file).
 
-**Implementation context:** This power is part of an AWS project to help accelerate Catena-X use case implementation. The deployed connector exposes 4 API Gateway endpoints (Management API, DSP API, Data Plane API, Observability API) and an S3 bucket for data that is shared or received over Catena-X. Any use-case application built on top of this connector integrates through these interfaces, it does not access the connector's internal infrastructure directly. When the compliance brief identifies implementation needs (backend APIs, data storage, event processing, document handling, etc.), the agent should propose AWS services that best fit those needs.
+**Implementation context:** This power is part of an AWS project to help accelerate Catena-X use case implementation. The deployed connector exposes 4 API Gateway endpoints (Management API, DSP API, Data Plane API, Observability API), an S3 bucket for data that is shared or received over Catena-X, and optionally an Eclipse BaSyx Digital Twin Registry and Submodel Repository. Any use-case application built on top of this connector integrates through these interfaces, it does not access the connector's internal infrastructure directly. When the compliance brief identifies implementation needs (backend APIs, data storage, event processing, document handling, etc.), the agent should propose AWS services that best fit those needs.
 
 **Why this matters:** Catena-X values compliance. Any implementation MUST 100% conform with the KIT documentation, the applicable Catena-X standards, and the semantic data models. Normative statements using RFC 2119 keywords (MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RECOMMENDED, MAY, OPTIONAL) define hard compliance boundaries, violating a MUST or MUST NOT renders an implementation unsuitable for production use in Catena-X.
 
@@ -540,6 +540,7 @@ The deployed Catena-X connector provides the following integration points:
 
 - **4 API Gateway endpoints:** Management API, DSP API, Data Plane API, Observability API
 - **S3 bucket:** For data shared outbound to and received inbound from other Catena-X participants
+- **Optional Eclipse BaSyx services** (`basyx` in `deployment.yaml`): a Digital Twin Registry, offered as a catalog asset, and a Submodel Repository, written through the Management API (see `docs/digital-twins-with-basyx.md`)
 
 Propose an AWS-based architecture table mapping use-case components to AWS services with rationale. Include an integration pattern description showing how the application connects to the connector.
 

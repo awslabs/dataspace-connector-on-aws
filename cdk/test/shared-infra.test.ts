@@ -44,10 +44,34 @@ describe("SharedInfra ALB security group", () => {
   });
 
   test("admits the VPC link on the API Gateway ports only", () => {
-    expect(portsFrom(albSgId)).toEqual([8181, 8182, 8185, 8282]);
+    expect(portsFrom(albSgId)).toEqual([8181, 8182, 8185, 8282, 9181]);
   });
 
   test("admits EDC tasks on the control ports and the BaSyx read port only", () => {
     expect(portsFrom(taskSgId)).toEqual([5004, 9191, 9192]);
+  });
+});
+
+describe("SharedInfra API stages", () => {
+  const methodSettings = (logLevel?: "INFO" | "DEBUG") => {
+    const { deployment } = loadDeploymentConfig(CONFIG_PATH);
+    const stack = new SharedInfraStack(new App(), "SharedInfra", {
+      config: { ...deployment, logLevel },
+      deploymentName: "DataspaceConnector",
+    });
+    return Object.values(
+      Template.fromStack(stack).findResources("AWS::ApiGateway::Stage"),
+    ).map((r) => r.Properties.MethodSettings[0]);
+  };
+
+  test("trace request data only at DEBUG or TRACE, with no throttling override", () => {
+    for (const s of methodSettings("INFO")) {
+      expect(s.DataTraceEnabled).toBe(false);
+      expect(s.ThrottlingBurstLimit).toBeUndefined();
+      expect(s.ThrottlingRateLimit).toBeUndefined();
+    }
+    for (const s of methodSettings("DEBUG")) {
+      expect(s.DataTraceEnabled).toBe(true);
+    }
   });
 });

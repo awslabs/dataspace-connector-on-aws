@@ -39,7 +39,6 @@ export type LogLevel = (typeof LOG_LEVELS)[number];
 /** What happens to stored state (EDC DynamoDB/S3, BaSyx Aurora) when its stack is deleted. */
 export const STATE_REMOVAL_POLICIES = ["DESTROY", "RETAIN"] as const;
 export type StateRemovalPolicy = (typeof STATE_REMOVAL_POLICIES)[number];
-export const DEFAULT_STATE_REMOVAL_POLICY: StateRemovalPolicy = "RETAIN";
 
 export const BASYX_SERVICES = ["dtr", "submodelRepository"] as const;
 export type BasyxService = (typeof BASYX_SERVICES)[number];
@@ -49,7 +48,8 @@ export type BasyxService = (typeof BASYX_SERVICES)[number];
 export interface PipelineYaml {
   readonly appRepo: string;
   readonly appVersion: string;
-  readonly configSource: "codecommit" | "github";
+  /** Default "codecommit". */
+  readonly configSource?: "codecommit" | "github";
   /** External repo (owner/name) for configSource=github. For codecommit the repo is derived as `${deploymentName}-config`. */
   readonly configRepoName?: string;
   readonly connectionArn?: string;
@@ -67,19 +67,22 @@ export interface PortalConfig {
 }
 
 export interface DeploymentYaml {
+  /** Shared infrastructure and BaSyx profile. Default "development". */
   readonly profile: DeploymentProfile;
+  /** VPC CIDR. Default "10.0.0.0/20". */
   readonly vpcIpAddresses: string;
+  /** Default false. */
   readonly containerInsights: boolean;
-  readonly managementApiPrincipals: string[];
-  readonly observabilityApiPrincipals: string[];
+  readonly managementApiPrincipals?: string[];
+  readonly observabilityApiPrincipals?: string[];
   readonly certificateArn?: string;
   readonly domainName?: string;
   readonly hostedZoneId?: string;
   /** EDC log level for all connectors; a connector may override it. Unset keeps the Tractus-X default. */
   readonly logLevel?: LogLevel;
   readonly portal: PortalConfig;
-  /** Default removal policy for stored state; connectors and BaSyx entries may override it. Default RETAIN. */
-  readonly stateRemovalPolicy?: StateRemovalPolicy;
+  /** Removal policy for stored state; connectors and BaSyx entries may override it. Default RETAIN. */
+  readonly stateRemovalPolicy: StateRemovalPolicy;
   /** Eclipse BaSyx (Digital Twin Registry + Submodel Repository) per BPNL, keyed by BPNL. */
   readonly basyx?: Record<string, BasyxEntry>;
 }
@@ -88,49 +91,35 @@ export interface DeploymentYaml {
 export interface BasyxEntry {
   readonly services: BasyxService[];
   /** Connector that offers the DTR asset. Default: the BPNL's first connector (file name order). */
-  readonly dtrConnector?: string;
-  /** Overrides the deployment.yaml profile for this BaSyx stack. */
-  readonly profile?: DeploymentProfile;
-  /** Overrides the deployment.yaml stateRemovalPolicy for this BaSyx database. */
-  readonly stateRemovalPolicy?: StateRemovalPolicy;
+  readonly dtrConnector: string;
+  /** Default: the deployment.yaml profile. */
+  readonly profile: DeploymentProfile;
+  /** Default: the deployment.yaml stateRemovalPolicy. */
+  readonly stateRemovalPolicy: StateRemovalPolicy;
 }
 
 // ─── connectors/connector-*.yaml ──────────────────────────────────────────────
-
-export interface EdcIam {
-  readonly trustedIssuer: string;
-  readonly stsOauthTokenUrl: string;
-  readonly stsOauthClientId: string;
-  readonly stsDimUrl: string;
-  readonly participantId: string;
-  readonly dcpId: string;
-  readonly didResolver: string;
-}
 
 export interface ConnectorYaml {
   readonly connectorId: string;
   /** The connector's BPNL, overriding deployment.yaml portal.bpnl. */
   readonly bpnl?: string;
-  readonly profile?: DeploymentProfile;
+  /** Default "production", independent of the deployment.yaml profile. */
+  readonly profile: DeploymentProfile;
+  /** Fargate task sizes. Defaults 256 / 1024 / 256 / 512. */
   readonly controlPlaneCpu: number;
   readonly controlPlaneMemoryLimitMiB: number;
   readonly dataPlaneCpu: number;
   readonly dataPlaneMemoryLimitMiB: number;
-  /** Iteration interval (ms) for the negotiation, transfer, and data-flow state machines. Default "10000". */
-  readonly interactiveStateMachineIterationMillis?: string;
-  /** Iteration interval (ms) for the policy monitor and data-plane selector state machines. Default "60000". */
-  readonly backgroundStateMachineIterationMillis?: string;
-  /**
-   * Data-plane flow-lease heartbeat interval (ms) for in-flight (STARTED) PULL flows. Each open flow
-   * re-stamps its ownership this often (a DynamoDB write), and after value × 5 an unrefreshed flow is
-   * considered abandoned so another data-plane runtime may take it over. Lower = faster multi-runtime
-   * failover but higher DynamoDB write cost; raise it to cut cost on single-runtime deployments. Set
-   * independently of the poll intervals. Default "10000" (abandon window 50s); EDC's own default is 500ms.
-   */
-  readonly dataPlaneFlowLeaseMillis?: string;
-  /** Overrides the deployment.yaml stateRemovalPolicy for this connector's DynamoDB table and S3 bucket. */
-  readonly stateRemovalPolicy?: StateRemovalPolicy;
-  /** EDC log level for this connector, overriding the deployment.yaml logLevel. */
+  /** Negotiation, transfer and data-flow state machine interval (ms). Default 10000. */
+  readonly interactiveStateMachineIterationMillis: number;
+  /** Policy monitor and data-plane selector state machine interval (ms). Default 60000. */
+  readonly backgroundStateMachineIterationMillis: number;
+  /** Heartbeat (ms) of in-flight PULL flows; one DynamoDB write each. Default 10000. */
+  readonly dataPlaneFlowLeaseMillis: number;
+  /** Default: the deployment.yaml stateRemovalPolicy. */
+  readonly stateRemovalPolicy: StateRemovalPolicy;
+  /** Default: the deployment.yaml logLevel. */
   readonly logLevel?: LogLevel;
 }
 
@@ -139,25 +128,6 @@ export interface DeploymentConfig {
   readonly deployment: DeploymentYaml;
   readonly connectors: ConnectorYaml[];
 }
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-/** Maps friendly edcIam fields to the EDC container environment variable names. */
-export const EDC_IAM_ENVIRONMENT_VARIABLE_KEYS = {
-  trustedIssuer: "edc.iam.trusted-issuer.issuer-1.id",
-  stsOauthTokenUrl: "edc.iam.sts.oauth.token.url",
-  stsOauthClientId: "edc.iam.sts.oauth.client.id",
-  stsDimUrl: "tx.edc.iam.sts.dim.url",
-  participantId: "tractusx.edc.participant.bpn",
-  dcpId: "edc.iam.issuer.id",
-  didResolver: "tx.edc.iam.iatp.bdrs.server.url",
-} as const satisfies Record<keyof EdcIam, string>;
-
-export const EDC_SECRETS_MANAGER_ALIASES = {
-  DCP_STS_OAUTH_CLIENT_SECRET_ALIAS: "edc.iam.sts.oauth.client.secret",
-  TOKEN_SIGNER_PRIVATE_KEY: "edc.transfer.proxy.token.signer.privatekey",
-  TOKEN_VERIFIER_PUBLIC_KEY: "edc.transfer.proxy.token.verifier.publickey",
-};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -191,15 +161,6 @@ export function connectorPriority(connectorId: string): number {
   return (Math.abs(hash) % 49999) + 1;
 }
 
-/** Converts a connector's resolved edcIam into EDC container environment variables. */
-export function toEdcIamEnvVars(edcIam: EdcIam): Record<string, string> {
-  return Object.fromEntries(
-    (Object.keys(EDC_IAM_ENVIRONMENT_VARIABLE_KEYS) as (keyof EdcIam)[]).map(
-      (key) => [EDC_IAM_ENVIRONMENT_VARIABLE_KEYS[key], edcIam[key]],
-    ),
-  );
-}
-
 /** A connector's BPNL: its own, else the deployment default. The loader guarantees one. */
 export function connectorBpnl(
   deployment: DeploymentYaml,
@@ -209,23 +170,25 @@ export function connectorBpnl(
 }
 
 /**
- * A connector's EDC identity. Everything but the technical user's client id and
- * token URL follows from the portal environment and the BPNL.
+ * A connector's EDC identity settings. Everything but the technical user's
+ * client id and token URL follows from the portal environment and the BPNL.
  */
-export function deriveEdcIam(
+export function edcIdentityEnvironment(
   environment: PortalEnvironment,
   bpnl: string,
   technicalUser: { clientId: string; stsOauthTokenUrl: string },
-): EdcIam {
+): Record<string, string> {
   const settings: PortalEnvironmentSettings = PORTAL_ENVIRONMENTS[environment];
+  const did = companyDid(environment, bpnl);
   return {
-    trustedIssuer: settings.trustedIssuer,
-    stsOauthTokenUrl: technicalUser.stsOauthTokenUrl,
-    stsOauthClientId: technicalUser.clientId,
-    stsDimUrl: settings.stsDimUrl!,
-    participantId: bpnl,
-    dcpId: companyDid(environment, bpnl),
-    didResolver: settings.didResolver,
+    "edc.iam.trusted-issuer.issuer-1.id": settings.trustedIssuer,
+    "edc.iam.sts.oauth.token.url": technicalUser.stsOauthTokenUrl,
+    "edc.iam.sts.oauth.client.id": technicalUser.clientId,
+    "tx.edc.iam.sts.dim.url": settings.stsDimUrl!,
+    "tractusx.edc.participant.bpn": bpnl,
+    "edc.iam.issuer.id": did,
+    "edc.participant.id": did,
+    "tx.edc.iam.iatp.bdrs.server.url": settings.didResolver,
   };
 }
 
@@ -379,38 +342,13 @@ function rejectUnknownKeys(
 
 // ─── Derived values ───────────────────────────────────────────────────────────
 
-/** Resolves a removal policy: the override, else the deployment value, else RETAIN. */
-export function resolveStateRemovalPolicy(
-  deployment: DeploymentYaml,
-  override?: StateRemovalPolicy,
-): StateRemovalPolicy {
-  return (
-    override ?? deployment.stateRemovalPolicy ?? DEFAULT_STATE_REMOVAL_POLICY
-  );
-}
-
-/** A BaSyx entry with its resolved DTR connector. */
-export interface ResolvedBasyx {
-  readonly bpnl: string;
-  readonly entry: BasyxEntry;
-  readonly dtrConnectorId: string;
-}
-
-/**
- * BaSyx entries, sorted by BPNL. dtrConnectorId defaults to the BPNL's
- * first connector in file name order; validateBasyx guarantees one exists.
- */
-export function basyxEntries(config: DeploymentConfig): ResolvedBasyx[] {
-  const { deployment, connectors } = config;
-  return Object.entries(deployment.basyx ?? {})
+/** BaSyx entries with their BPNL, sorted by BPNL. */
+export function basyxEntries(
+  config: DeploymentConfig,
+): (BasyxEntry & { bpnl: string })[] {
+  return Object.entries(config.deployment.basyx ?? {})
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([bpnl, entry]) => {
-      const dtrConnectorId =
-        entry.dtrConnector ??
-        connectors.find((c) => connectorBpnl(deployment, c) === bpnl)!
-          .connectorId;
-      return { bpnl, entry, dtrConnectorId };
-    });
+    .map(([bpnl, entry]) => ({ ...entry, bpnl }));
 }
 
 /** CloudFormation stack name of a BPNL's BaSyx stack. */
@@ -430,10 +368,17 @@ export function loadDeploymentConfig(configPath: string): DeploymentConfig {
     throw new Error(`deployment.yaml not found at ${deploymentPath}`);
   }
 
-  const deployment = yaml.load(
+  const rawDeployment = yaml.load(
     readFileSync(deploymentPath, "utf-8"),
-  ) as DeploymentYaml;
-  rejectUnknownKeys(deployment, DEPLOYMENT_KEY_SPEC, "deployment.yaml");
+  ) as Partial<DeploymentYaml>;
+  rejectUnknownKeys(rawDeployment, DEPLOYMENT_KEY_SPEC, "deployment.yaml");
+  const deployment: DeploymentYaml = {
+    profile: "development",
+    vpcIpAddresses: "10.0.0.0/20",
+    containerInsights: false,
+    stateRemovalPolicy: "RETAIN",
+    ...rawDeployment,
+  } as DeploymentYaml;
   validateDeployment(deployment, deploymentPath);
 
   const connectorsDir = join(configPath, "connectors");
@@ -443,17 +388,24 @@ export function loadDeploymentConfig(configPath: string): DeploymentConfig {
         .sort()
     : [];
 
-  if (files.length === 0) {
-    throw new Error(
-      `No connector YAML files found in ${connectorsDir}. Add at least one connector-*.yaml file.`,
-    );
-  }
-
   const connectors = files.map((file) => {
-    const connector = yaml.load(
+    const raw = yaml.load(
       readFileSync(join(connectorsDir, file), "utf-8"),
-    ) as ConnectorYaml;
-    rejectUnknownKeys(connector, CONNECTOR_KEY_SPEC, `connectors/${file}`);
+    ) as Partial<ConnectorYaml>;
+    rejectUnknownKeys(raw, CONNECTOR_KEY_SPEC, `connectors/${file}`);
+    const connector = {
+      profile: "production",
+      controlPlaneCpu: 256,
+      controlPlaneMemoryLimitMiB: 1024,
+      dataPlaneCpu: 256,
+      dataPlaneMemoryLimitMiB: 512,
+      interactiveStateMachineIterationMillis: 10000,
+      backgroundStateMachineIterationMillis: 60000,
+      dataPlaneFlowLeaseMillis: 10000,
+      stateRemovalPolicy: deployment.stateRemovalPolicy,
+      logLevel: deployment.logLevel,
+      ...raw,
+    } as ConnectorYaml;
     validateConnector(connector, file);
     if (connector.bpnl !== undefined) {
       validateBpnl(connector.bpnl, `connectors/${file}`, "bpnl");
@@ -471,8 +423,24 @@ export function loadDeploymentConfig(configPath: string): DeploymentConfig {
   });
 
   validateBasyx(deployment, connectors);
+  const basyx = Object.fromEntries(
+    Object.entries(deployment.basyx ?? {}).map(([bpnl, entry]) => [
+      bpnl,
+      {
+        dtrConnector: connectors.find(
+          (c) => connectorBpnl(deployment, c) === bpnl,
+        )!.connectorId,
+        profile: deployment.profile,
+        stateRemovalPolicy: deployment.stateRemovalPolicy,
+        ...(entry as Partial<BasyxEntry>),
+      } as BasyxEntry,
+    ]),
+  );
 
-  return { deployment, connectors };
+  return {
+    deployment: { ...deployment, ...(deployment.basyx && { basyx }) },
+    connectors,
+  };
 }
 
 /** Loads pipeline.yaml from configPath and rejects unknown keys. */
@@ -484,27 +452,33 @@ export function loadPipelineConfig(configPath: string): PipelineYaml {
         `Provide --context config-path=<path>.`,
     );
   }
-  const pipeline = yaml.load(readFileSync(pipelinePath, "utf-8"));
+  const pipeline = yaml.load(
+    readFileSync(pipelinePath, "utf-8"),
+  ) as PipelineYaml;
   rejectUnknownKeys(pipeline, PIPELINE_KEY_SPEC, "pipeline.yaml");
-  return pipeline as PipelineYaml;
+  if (
+    pipeline.configSource === "github" &&
+    (!pipeline.configRepoName || !pipeline.connectionArn)
+  ) {
+    throw new Error(
+      "pipeline.yaml: configSource github requires configRepoName and connectionArn",
+    );
+  }
+  return pipeline;
 }
 
 function validateDeployment(data: DeploymentYaml, filePath: string): void {
-  const required: (keyof DeploymentYaml)[] = [
-    "profile",
-    "vpcIpAddresses",
-    "containerInsights",
-    "portal",
-  ];
-  const missing = required.filter(
-    (key) => data[key] === undefined || data[key] === null,
-  );
-  if (missing.length > 0) {
-    throw new Error(
-      `${filePath}: missing required fields: ${missing.join(", ")}`,
-    );
+  if (!isPlainObject(data.portal)) {
+    throw new Error(`${filePath}: missing required field: portal`);
   }
   validateProfile(data.profile, filePath, "profile");
+  const domainKeys = ["certificateArn", "domainName", "hostedZoneId"] as const;
+  const setDomainKeys = domainKeys.filter((key) => data[key] !== undefined);
+  if (setDomainKeys.length > 0 && setDomainKeys.length < domainKeys.length) {
+    throw new Error(
+      `${filePath}: a custom domain needs all of ${domainKeys.join(", ")}`,
+    );
+  }
   const environment: unknown = data.portal.environment;
   if (!Object.keys(PORTAL_ENVIRONMENTS).includes(String(environment))) {
     throw new Error(
@@ -531,13 +505,7 @@ function validateDeployment(data: DeploymentYaml, filePath: string): void {
 }
 
 function validateConnector(data: ConnectorYaml, fileName: string): void {
-  const required: (keyof ConnectorYaml)[] = [
-    "connectorId",
-    "controlPlaneCpu",
-    "controlPlaneMemoryLimitMiB",
-    "dataPlaneCpu",
-    "dataPlaneMemoryLimitMiB",
-  ];
+  const required: (keyof ConnectorYaml)[] = ["connectorId"];
   const missing = required.filter(
     (key) => data[key] === undefined || data[key] === null,
   );
@@ -547,9 +515,7 @@ function validateConnector(data: ConnectorYaml, fileName: string): void {
     );
   }
   validateConnectorId(data.connectorId);
-  if (data.profile !== undefined) {
-    validateProfile(data.profile, `connectors/${fileName}`, "profile");
-  }
+  validateProfile(data.profile, `connectors/${fileName}`, "profile");
   validateLogLevel(data.logLevel, fileName);
 }
 

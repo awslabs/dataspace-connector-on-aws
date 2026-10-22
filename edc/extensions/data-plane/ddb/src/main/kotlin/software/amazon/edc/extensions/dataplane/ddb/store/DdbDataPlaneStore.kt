@@ -16,7 +16,7 @@ import software.amazon.edc.extensions.common.ddb.types.Lease
 import software.amazon.edc.extensions.common.ddb.utility.IterationCache
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
-import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.common.ddb.utility.toPredicate
 import software.amazon.edc.extensions.dataplane.ddb.types.DataFlow
 import software.amazon.edc.extensions.dataplane.ddb.types.toDdbDataFlow
@@ -49,7 +49,7 @@ class DdbDataPlaneStore(
         val stateValues = criteria.extractStateValues()
         val indexed =
             stateCache.getOrLoad {
-                stateIndex.query(queryRequestFromId(EntityType.DATA_FLOW)).flatMap { it.items() }
+                stateIndex.query(queryRequestFromPk(EntityType.DATA_FLOW)).flatMap { it.items() }
             }
         val items =
             if (stateValues != null) {

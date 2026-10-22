@@ -22,7 +22,6 @@ To participate in secure, sovereign data sharing through the Catena-X data space
 ### Prerequisites
 
 * Node.js 24+
-* AWS CDK CLI (`npm install -g aws-cdk`)
 * AWS CLI configured with credentials for your target account
 * A [Cofinity-X Portal](https://portal.beta.cofinity-x.com/) account for your Catena-X–onboarded organization
 
@@ -31,7 +30,7 @@ To participate in secure, sovereign data sharing through the Catena-X data space
 Deployment is fully GitOps-driven via AWS CDK Pipelines. You run `./deploy.sh` once to create the pipeline and a configuration repository, then manage your entire connector fleet by editing YAML files in that repo:
 
 * **Add a connector**: add a `connector-<id>.yaml` file; the pipeline creates its technical user in the Cofinity-X Portal, registers it for discovery, and provisions its infrastructure.
-* **Remove a connector**: delete its YAML file; the pipeline tears down its stack, which deletes its portal registration and technical user.
+* **Remove a connector**: delete its YAML file; the pipeline tears down its stack, which deletes its portal registration and technical user. With `stateRemovalPolicy: RETAIN` (the default) its DynamoDB table and S3 bucket stay in your account.
 * **Upgrade the connector software**: bump `appVersion` in `pipeline.yaml`; the pipeline rebuilds and redeploys all connectors.
 
 ### Deploy the Pipeline
@@ -88,65 +87,54 @@ your-config-repo/
     └── connector-dpp.yaml
 ```
 
+The templates in [`cdk/config-templates/`](cdk/config-templates/) list every key: required keys with an example value, optional keys commented out with their default.
+
 ### `pipeline.yaml`
 
-```yaml
-appRepo: awslabs/dataspace-connector-on-aws   # App source (public GitHub)
-appVersion: main                              # Git tag, branch, or commit hash
-configSource: codecommit                      # "codecommit" (auto-created) or "github"
-deploymentName: DataspaceConnector            # Namespaces all resources (default "DataspaceConnector")
-# configRepoName: my-org/config-repo          # Required only for configSource: github
-# connectionArn: "arn:aws:codestar-connections:..."  # Required only for configSource: github
-requireApproval: false                        # Optional manual gate before deploy
-```
-
-`deploymentName` prefixes every resource this project creates (pipeline, stacks, configuration repository, and secrets), so you can run multiple independent deployments in the same AWS account and region.
+| Key | Required | Default | Description |
+|---|---|---|---|
+| `appRepo` | yes | | Public GitHub repository of the app (`owner/name`). |
+| `appVersion` | yes | | Git tag, branch, or commit hash to deploy. |
+| `configSource` | | `codecommit` | `codecommit` (created by `deploy.sh`) or `github`. |
+| `configRepoName` | for `github` | | Configuration repository (`owner/name`). |
+| `connectionArn` | for `github` | | AWS CodeConnections connection ARN for that repository. |
+| `deploymentName` | | `DataspaceConnector` | Prefixes every resource (pipeline, stacks, configuration repository, secrets), so independent deployments can share one account and region. Set it once, before the first deploy. |
+| `requireApproval` | | `false` | Adds a manual approval step before each deploy. |
 
 ### `deployment.yaml`
 
-Shared infrastructure plus Cofinity-X Portal integration. `portal.bpnl` is the organization (BPNL) of every connector; a connector file can set its own `bpnl` instead, to host connectors for more than one organization in one deployment. The pipeline derives each connector's EDC identity from the portal environment, the BPNL, and the connector's technical user. Only `beta` is supported until the production wallet service URL is confirmed.
+Shared infrastructure plus Cofinity-X Portal integration. The pipeline derives each connector's EDC identity from the portal environment, the connector's BPNL, and its technical user.
 
-```yaml
-profile: development                 # "development" (1 NAT, Fargate Spot) or "production" (2 NATs, On-Demand)
-vpcIpAddresses: "10.0.0.0/20"
-containerInsights: true
-managementApiPrincipals:
-  - "arn:aws:iam::<account-id>:role/<role-name>"
-observabilityApiPrincipals:
-  - "arn:aws:iam::<account-id>:role/<role-name>"
-# logLevel: DEBUG                   # Optional: TRACE, DEBUG, INFO, WARN, ERROR, OFF (unset = Tractus-X default)
-# stateRemovalPolicy: RETAIN        # Optional: RETAIN (default) or DESTROY; connectors can override
-
-# Optional custom domain (all three fields required together)
-# certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<id>"
-# domainName: "edc.example.com"
-# hostedZoneId: "Z0123456789ABCDEFGHIJ"
-
-portal:
-  environment: beta                  # "beta" or "production"
-  bpnl: "BPNL..."                    # Default BPNL of every connector
-```
-
-`stateRemovalPolicy` decides whether stored state (each connector's DynamoDB table and S3 bucket) is kept or deleted when its stack is deleted. It defaults to `RETAIN`, and a connector file can override it.
+| Key | Required | Default | Description |
+|---|---|---|---|
+| `portal.environment` | yes | | Cofinity-X Portal environment. Only `beta` is supported until the production wallet service URL is confirmed. |
+| `portal.bpnl` | unless every connector sets `bpnl` | | Default BPNL of every connector. |
+| `profile` | | `development` | Shared infrastructure and BaSyx: `development` (1 NAT gateway, Fargate Spot) or `production` (2 NAT gateways, On-Demand). See [Deployment Profiles](#deployment-profiles). |
+| `vpcIpAddresses` | | `10.0.0.0/20` | VPC CIDR. |
+| `containerInsights` | | `false` | Amazon CloudWatch Container Insights on the ECS cluster. |
+| `managementApiPrincipals` | | none | IAM principal ARNs allowed by the Management API's resource policy (IAM auth). |
+| `observabilityApiPrincipals` | | none | Same for the Observability API. |
+| `logLevel` | | Tractus-X default | EDC log level of all connectors: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR` or `OFF`. `DEBUG` and `TRACE` also turn on API Gateway data tracing, which logs full request and response bodies, including tokens, to CloudWatch. Don't use them in production. |
+| `stateRemovalPolicy` | | `RETAIN` | Whether stored state (each connector's DynamoDB table and S3 bucket, each BaSyx database) is kept (`RETAIN`) or deleted (`DESTROY`) with its stack. |
+| `certificateArn`, `domainName`, `hostedZoneId` | all or none | | Custom domain, see [Custom Domain](#custom-domain). |
+| `basyx` | | | Digital Twin Registry per BPNL, see [Digital Twin Registry](#digital-twin-registry-eclipse-basyx). |
 
 ### `connectors/connector-<id>.yaml`
 
 For each connector the pipeline creates a Cofinity-X Portal technical user (**Identity Wallet Management** role) named `<deploymentName>-<connectorId>`, stores its OAuth client secret in AWS Secrets Manager, and registers the connector for discovery, with no manual steps.
 
-```yaml
-connectorId: ccm
-# bpnl: "BPNL..."                    # Optional; overrides deployment.yaml portal.bpnl
-profile: production                  # Optional per-connector override
-controlPlaneCpu: 256
-controlPlaneMemoryLimitMiB: 1024
-dataPlaneCpu: 256
-dataPlaneMemoryLimitMiB: 512
-interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-flow
-backgroundStateMachineIterationMillis: "60000"  # policy monitor + data-plane selector
-# stateRemovalPolicy: DESTROY        # Optional; overrides deployment.yaml stateRemovalPolicy (default RETAIN)
-# logLevel: DEBUG                    # Optional; overrides deployment.yaml logLevel for this connector
-
-```
+| Key | Required | Default | Description |
+|---|---|---|---|
+| `connectorId` | yes | | Unique connector ID, 2-60 lowercase letters, digits and hyphens. `basyx` is reserved. |
+| `bpnl` | | `portal.bpnl` | The connector's BPNL, to host connectors of more than one organization in one deployment. |
+| `profile` | | `production` | `production` (On-Demand, 1-month logs) or `development` (Fargate Spot, 1-week logs), independent of the deployment `profile`. |
+| `controlPlaneCpu`, `controlPlaneMemoryLimitMiB` | | `256`, `1024` | Control plane Fargate task size. |
+| `dataPlaneCpu`, `dataPlaneMemoryLimitMiB` | | `256`, `512` | Data plane Fargate task size. |
+| `interactiveStateMachineIterationMillis` | | `10000` | Iteration interval of the negotiation, transfer and data-flow state machines. |
+| `backgroundStateMachineIterationMillis` | | `60000` | Iteration interval of the policy monitor and data-plane selector. |
+| `dataPlaneFlowLeaseMillis` | | `10000` | How often an open PULL flow renews its lease (one DynamoDB write). After 5 missed renewals another data plane may take the flow over. |
+| `stateRemovalPolicy` | | deployment value | Overrides `stateRemovalPolicy` for this connector. |
+| `logLevel` | | deployment value | Overrides `logLevel` for this connector. |
 
 ### Custom Domain
 
@@ -154,16 +142,14 @@ When all three optional fields (`certificateArn`, `domainName`, `hostedZoneId`) 
 
 ### Digital Twin Registry (Eclipse BaSyx)
 
-An optional `basyx` block in `deployment.yaml` deploys an [Eclipse BaSyx](https://github.com/eclipse-basyx/basyx-go-components) Digital Twin Registry (DTR), and optionally a Submodel Repository, for a BPNL:
+An optional `basyx` block in `deployment.yaml` deploys an [Eclipse BaSyx](https://github.com/eclipse-basyx/basyx-go-components) Digital Twin Registry (DTR), and optionally a Submodel Repository, for a BPNL. It is keyed by BPNL:
 
-```yaml
-basyx:
-  BPNL00000007J65N:
-    services: [dtr, submodelRepository] # dtr is required
-    dtrConnector: example               # Optional; defaults to the BPNL's first connector by file name
-    profile: production                 # Optional; overrides deployment.yaml profile for this BaSyx stack
-    stateRemovalPolicy: RETAIN          # Optional; overrides deployment.yaml stateRemovalPolicy
-```
+| Key | Required | Default | Description |
+|---|---|---|---|
+| `basyx.<BPNL>.services` | yes | | `[dtr]` or `[dtr, submodelRepository]`. |
+| `basyx.<BPNL>.dtrConnector` | | the BPNL's first connector by file name | Connector that offers the DTR in its catalog. |
+| `basyx.<BPNL>.profile` | | deployment `profile` | Overrides `profile` for this BaSyx stack. |
+| `basyx.<BPNL>.stateRemovalPolicy` | | deployment value | Overrides `stateRemovalPolicy` for this BaSyx database. |
 
 Each listed BPNL gets its own `<deploymentName>-BaSyx-<BPNL>` stack with an Aurora Serverless v2 PostgreSQL cluster, an Amazon Cognito user pool for machine-to-machine tokens, and one ECS service per BaSyx service. The services sit behind the shared internal load balancer under `/basyx/<BPNL>/dtr/api/v3` and `/basyx/<BPNL>/smrepo`. The pipeline offers the DTR as the catalog asset `dataspace-connector-dtr` on the `dtrConnector`, whose data plane reads it with a Cognito token that grants read access. You can add a `basyx` entry for a connector that is already running; the stack is created on the next pipeline run.
 
@@ -177,28 +163,13 @@ Things to know:
 - **Idle cost:** the cluster is configured to pause at 0 ACU, but the DTR runs a database maintenance job every minute, so expect it to stay at its 0.5 ACU minimum.
 - **Token rate:** each data plane task caches the Cognito token until shortly before it expires, so it requests about one token per hour.
 
-## Managing Connectors
-
-### Adding a Connector
-
-1. Add `connectors/connector-<id>.yaml`.
-2. Commit and push. The pipeline creates the connector's technical user, registers it in the portal, and provisions the connector.
-
-### Removing a Connector
-
-1. Delete `connectors/connector-<id>.yaml`.
-2. Commit and push. The pipeline destroys its stack, which deletes the portal registration together with the technical user.
-
-> [!NOTE]
-> If the connector's resolved `stateRemovalPolicy` is `RETAIN` (the default), its DynamoDB table and S3 bucket are retained (not deleted) for data preservation; delete them manually if no longer needed.
-
 ## Teardown
 
 To completely remove all deployed resources, follow these steps in order:
 
-**1. Remove all connector YAML files** from the config repo and push. This triggers the pipeline's cleanup step, which deregisters the connectors from the portal and destroys their stacks.
+**1. Remove the `basyx` block and all connector YAML files** from the config repo and push. The pipeline's cleanup step destroys the BaSyx and connector stacks, which deregisters the connectors from the portal.
 
-**2. Delete the shared infrastructure stack** (removes shared networking, the ALB, and Cofinity-X Portal user secrets):
+**2. Delete the shared infrastructure stack** (removes the network, the load balancer and the APIs):
 
 ```bash
 aws cloudformation delete-stack --stack-name DataspaceConnector-SharedInfra --region <region>
@@ -210,7 +181,7 @@ aws cloudformation delete-stack --stack-name DataspaceConnector-SharedInfra --re
 aws cloudformation delete-stack --stack-name DataspaceConnectorPipelineStack --region <region>
 ```
 
-Stack and repository names are prefixed by `deploymentName` (default `DataspaceConnector`); substitute your own if you set it.
+Stack and repository names are prefixed by `deploymentName` (default `DataspaceConnector`); substitute your own if you set it. Finally delete the portal admin secrets you created and any retained tables, buckets and Aurora clusters.
 
 ## Deployment Profiles
 
@@ -236,9 +207,9 @@ These figures reflect baseline (idle) cost. DynamoDB consumption, and therefore 
 
 * **Per-connector access control:** When deploying multiple connectors, you can restrict which IAM principals can access which connector's Management API. Supports single-account, cross-account, and organization-level trust patterns. See [Management API Access Patterns](docs/management-api-access-patterns.md).
 * **API Gateway payload limit:** 10 MB per request (REST API). Does not affect *Consumer Pull* scenarios or S3-backed data transfers.
+* **Exposed API surface:** The OpenAPI specs in `cdk/api/` expose every route Tractus-X serves on the management, protocol, public data-plane and health contexts, with request validation on parameters and bodies. For production, remove the routes your applications do not call. After an EDC upgrade, regenerate the specs with `scripts/regenerate-api-specs.py`. The internal control APIs between the planes, version details, and the data-plane management and consumer proxy contexts are not exposed. The federated catalog is not supported: its catalog context is not configured and Tractus-X ships it disabled.
 * **Open transfers accrue provider cost:** Pull transfers remain `STARTED` until explicitly terminated, and each open transfer keeps a provider-side data-plane flow active and consuming DynamoDB. Terminate transfers you no longer need via the Management API. See [Open Transfers and DynamoDB Cost](docs/open-transfers-and-dynamodb-cost.md).
 * **Fargate Spot availability:** In `development` profile, Spot capacity constraints may cause deployment delays during updates. Retry or use `production` profile for guaranteed placement.
-* **Connector ID constraints:** Must be 2–60 characters, lowercase alphanumeric + hyphens, cannot start/end with a hyphen. Used in ALB paths, DynamoDB table names, Secrets Manager prefixes, and CloudFormation stack names.
 
 ## Learn More
 
@@ -246,24 +217,6 @@ These figures reflect baseline (idle) cost. DynamoDB consumption, and therefore 
 * [Eclipse Dataspace Components on AWS: Data sharing fundamentals](https://aws.amazon.com/blogs/architecture/eclipse-dataspace-components-on-aws-data-sharing-fundamentals/) (3-part blog series)
 * [AWS-specific service integrations for EDC](https://github.com/eclipse-edc/Technology-Aws)
 * [Aspect Models for Eclipse Tractus-X Semantic Layer (SLDT)](https://github.com/eclipse-tractusx/sldt-semantic-models/)
-
-## EDC Extensions and Service Options
-
-The EDC connector consists of two main components: a **Control Plane** that manages data sharing agreements and policies, and a **Data Plane** that handles the actual data transfer. This deployment uses AWS serverless services to minimize operational overhead while maintaining full EDC functionality.
-
-### Control Plane
-
-| Capability | This Deployment | Alternatives |
-|-----------|----------------|--------------|
-| Secrets Management | [AWS Secrets Manager](https://aws.amazon.com/secrets-manager/) | Vault (self-managed) |
-| Database | [Amazon DynamoDB](https://aws.amazon.com/dynamodb/) | [Amazon Aurora PostgreSQL](https://aws.amazon.com/rds/aurora/), PostgreSQL (self-managed) |
-
-### Data Plane
-
-| Capability | This Deployment | Alternatives |
-|-----------|----------------|--------------|
-| Secrets Management | AWS Secrets Manager | Vault (self-managed) |
-| Data Transfer | [Amazon S3](https://aws.amazon.com/s3/), HTTP/HTTPS | DynamoDB, custom backends |
 
 ## Backlog / Ideas 💡
 

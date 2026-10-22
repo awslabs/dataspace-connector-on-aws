@@ -3,20 +3,17 @@
 
 import { CfnOutput, RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
 import { Construct } from "constructs";
-
 import {
   ApplicationProtocol,
   ApplicationTargetGroup,
   CfnListenerRule,
   TargetType,
 } from "aws-cdk-lib/aws-elasticloadbalancingv2";
-
 import {
   BlockPublicAccess,
   Bucket,
   BucketEncryption,
 } from "aws-cdk-lib/aws-s3";
-
 import { ContainerImage } from "aws-cdk-lib/aws-ecs";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
@@ -24,28 +21,21 @@ import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import {
   ConnectorYaml,
   DeploymentYaml,
-  EDC_SECRETS_MANAGER_ALIASES,
   connectorBpnl,
   deriveAdminSecretName,
   deriveConnectorTableName,
-  deriveEdcIam,
   deriveSecretPrefix,
-  resolveStateRemovalPolicy,
-  toEdcIamEnvVars,
+  edcIdentityEnvironment,
   toRemovalPolicy,
 } from "./config/config";
-
 import {
-  CONTROL_PLANE_PORT_MAPPING_DEFAULT,
-  DATA_PLANE_PORT_MAPPING_DEFAULT,
+  CONTROL_PLANE_PORTS as cpPorts,
+  DATA_PLANE_PORTS as dpPorts,
 } from "./config/port-mappings";
-
-import { EdcControlPlane } from "./constructs/edc-control-plane";
-import { EdcDataPlane } from "./constructs/edc-data-plane";
 import { EdcDdb } from "./constructs/edc-ddb";
+import { EdcRuntime } from "./constructs/edc-runtime";
 import { EdcTokenKeyPair } from "./constructs/edc-token-key-pair";
 import { PortalConnector } from "./constructs/portal-connector";
-
 import { SharedInfraStack } from "./shared-infra-stack";
 
 export interface ConnectorStackProps extends StackProps {
@@ -56,20 +46,24 @@ export interface ConnectorStackProps extends StackProps {
   readonly deploymentName: string;
 }
 
+/** EDC vault aliases, under the connector's secret prefix. */
+const OAUTH_CLIENT_SECRET = "edc.iam.sts.oauth.client.secret";
+const TOKEN_SIGNER_PRIVATE_KEY = "edc.transfer.proxy.token.signer.privatekey";
+const TOKEN_VERIFIER_PUBLIC_KEY = "edc.transfer.proxy.token.verifier.publickey";
+
 export class ConnectorStack extends Stack {
   constructor(scope: Construct, id: string, props: ConnectorStackProps) {
     super(scope, id, props);
 
     const { connector, deployment, sharedInfra: infra, deploymentName } = props;
     const connectorId = connector.connectorId;
-    const profile = connector.profile ?? deployment.profile;
-    const logLevel = connector.logLevel ?? deployment.logLevel;
-    const removalPolicy = toRemovalPolicy(
-      resolveStateRemovalPolicy(deployment, connector.stateRemovalPolicy),
-    );
-
-    const cpPorts = CONTROL_PLANE_PORT_MAPPING_DEFAULT;
-    const dpPorts = DATA_PLANE_PORT_MAPPING_DEFAULT;
+    const profile = connector.profile;
+    const logLevel = connector.logLevel;
+    const interactiveMillis = `${connector.interactiveStateMachineIterationMillis}`;
+    const backgroundMillis = `${connector.backgroundStateMachineIterationMillis}`;
+    const removalPolicy = toRemovalPolicy(connector.stateRemovalPolicy);
+    const secretPrefix = deriveSecretPrefix(deploymentName, connectorId);
+    const dspUrl = `${infra.dspUrl}${connectorId}`;
 
     const ddb = new EdcDdb(this, "EdcDdb", {
       removalPolicy,
@@ -84,9 +78,8 @@ export class ConnectorStack extends Stack {
       removalPolicy,
     });
 
-    const secretPrefix = deriveSecretPrefix(deploymentName, connectorId);
     const oauthSecret = new Secret(this, "EdcOauthClientSecret", {
-      secretName: `${secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`,
+      secretName: `${secretPrefix}${OAUTH_CLIENT_SECRET}`,
       description: `EDC OAuth client secret for connector ${connectorId}`,
     });
 
@@ -98,53 +91,46 @@ export class ConnectorStack extends Stack {
         Environment: deployment.portal.environment,
         Bpnl: bpnl,
         ConnectorName: connectorId,
-        ConnectorUrl: `${infra.dspUrl}${connectorId}`,
+        ConnectorUrl: dspUrl,
         TechnicalUserName: `${deploymentName}-${connectorId}`,
         AdminSecretName: deriveAdminSecretName(deploymentName, bpnl),
         OauthSecretName: oauthSecret.secretName,
       },
     });
     portal.node.addDependency(oauthSecret);
-    const edcIamEnvVars = toEdcIamEnvVars(
-      deriveEdcIam(deployment.portal.environment, bpnl, portal),
-    );
 
     new EdcTokenKeyPair(this, "EdcTokenKeyPair", {
-      privateKeySecretName: `${secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_SIGNER_PRIVATE_KEY}`,
-      publicKeySecretName: `${secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_VERIFIER_PUBLIC_KEY}`,
+      serviceToken: infra.tokenKeyPairServiceToken,
+      privateKeySecretName: `${secretPrefix}${TOKEN_SIGNER_PRIVATE_KEY}`,
+      publicKeySecretName: `${secretPrefix}${TOKEN_VERIFIER_PUBLIC_KEY}`,
     });
 
-    const portConfigs: { name: string; port: number; healthPort: number }[] = [
-      { name: "CpDefault", port: cpPorts.default, healthPort: cpPorts.default },
-      {
-        name: "CpManagement",
-        port: cpPorts.management,
-        healthPort: cpPorts.default,
-      },
-      {
-        name: "CpProtocol",
-        port: cpPorts.protocol,
-        healthPort: cpPorts.default,
-      },
-      { name: "CpControl", port: cpPorts.control, healthPort: cpPorts.default },
-      { name: "DpDefault", port: dpPorts.default, healthPort: dpPorts.default },
-      { name: "DpPublic", port: dpPorts.public, healthPort: dpPorts.default },
-      { name: "DpControl", port: dpPorts.control, healthPort: dpPorts.default },
-    ];
-
-    const targetGroups: { [port: number]: ApplicationTargetGroup } = {};
-
-    for (const pc of portConfigs) {
-      const tg = new ApplicationTargetGroup(this, `${pc.name}TargetGroup`, {
-        port: pc.port,
+    // One target group and listener rule per port; the ALB strips the connector path.
+    const targetGroups: Record<number, ApplicationTargetGroup> = {};
+    const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
+    const targets = [
+      ...Object.entries(cpPorts).map(([n, p]) => [
+        `Cp${capitalize(n)}`,
+        p,
+        cpPorts.default,
+      ]),
+      ...Object.entries(dpPorts).map(([n, p]) => [
+        `Dp${capitalize(n)}`,
+        p,
+        dpPorts.default,
+      ]),
+    ] as [string, number, number][];
+    for (const [id, port, healthPort] of targets) {
+      const tg = new ApplicationTargetGroup(this, `${id}TargetGroup`, {
+        port,
         protocol: ApplicationProtocol.HTTP,
         targetType: TargetType.IP,
         vpc: infra.vpc,
-        healthCheck: { path: "/api/check/health", port: `${pc.healthPort}` },
+        healthCheck: { path: "/api/check/health", port: `${healthPort}` },
       });
-      targetGroups[pc.port] = tg;
+      targetGroups[port] = tg;
 
-      new CfnListenerRule(this, `${pc.name}ListenerRule`, {
+      new CfnListenerRule(this, `${id}ListenerRule`, {
         actions: [{ type: "forward", targetGroupArn: tg.targetGroupArn }],
         conditions: [
           {
@@ -152,7 +138,7 @@ export class ConnectorStack extends Stack {
             pathPatternConfig: { values: [`/${connectorId}/*`] },
           },
         ],
-        listenerArn: infra.listenerArns[pc.port],
+        listenerArn: infra.listenerArns[port],
         priority: props.priority,
         transforms: [
           {
@@ -165,14 +151,15 @@ export class ConnectorStack extends Stack {
       });
     }
 
-    const logsArn = `arn:aws:logs:${this.region}:${this.account}`;
-    const secretArn = `arn:aws:secretsmanager:${this.region}:${this.account}:secret`;
-
-    const policyStatements = [
+    const arn = (service: string) =>
+      `arn:aws:${service}:${this.region}:${this.account}`;
+    const taskRolePolicyStatements = [
       new PolicyStatement({
         actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
         effect: Effect.ALLOW,
-        resources: [`${logsArn}:log-group:${deploymentName}-${connectorId}*:*`],
+        resources: [
+          `${arn("logs")}:log-group:${deploymentName}-${connectorId}*:*`,
+        ],
       }),
       new PolicyStatement({
         actions: [
@@ -182,10 +169,11 @@ export class ConnectorStack extends Stack {
           "secretsmanager:UpdateSecret",
         ],
         effect: Effect.ALLOW,
+        // The connector's own secrets, and the EDRs and refresh tokens EDC stores.
         resources: [
-          `${secretArn}:${secretPrefix}*`,
-          `${secretArn}:edr--*`,
-          `${secretArn}:????????-????-????-????-????????????-*`,
+          `${arn("secretsmanager")}:secret:${secretPrefix}*`,
+          `${arn("secretsmanager")}:secret:edr--*`,
+          `${arn("secretsmanager")}:secret:????????-????-????-????-????????????-*`,
         ],
       }),
       new PolicyStatement({
@@ -198,7 +186,7 @@ export class ConnectorStack extends Stack {
           "s3:ListMultipartUploadParts",
         ],
         effect: Effect.ALLOW,
-        resources: [s3Bucket.bucketArn, s3Bucket.bucketArn + "/*"],
+        resources: [s3Bucket.bucketArn, `${s3Bucket.bucketArn}/*`],
       }),
       new PolicyStatement({
         actions: [
@@ -213,56 +201,74 @@ export class ConnectorStack extends Stack {
           "dynamodb:UpdateItem",
         ],
         effect: Effect.ALLOW,
-        resources: [ddb.table.tableArn, ddb.table.tableArn + "/index/*"],
+        resources: [ddb.table.tableArn, `${ddb.table.tableArn}/index/*`],
       }),
     ];
 
-    const albOutputs = {
-      dnsName: infra.albDnsName,
-      securityGroupId: infra.albSecurityGroupId,
+    const alb = infra.albDnsName;
+    const environment = {
+      ...edcIdentityEnvironment(deployment.portal.environment, bpnl, portal),
+      // Points the S3 extension's static-credential probe at the connector's own
+      // (nonexistent) secrets, so it resolves not-found and uses the task role.
+      "edc.aws.access.key": `${secretPrefix}edc.aws.access.key`,
+      "edc.aws.secret.access.key": `${secretPrefix}edc.aws.secret.access.key`,
+      "edc.ddb.table.name": ddb.table.tableName,
+      "edc.hostname": alb,
+      "edc.iam.did.web.use.https": "true",
+      "edc.iam.sts.oauth.client.secret.alias": `${secretPrefix}${OAUTH_CLIENT_SECRET}`,
+      "edc.runtime.id": connectorId,
+      "edc.transfer.proxy.token.signer.privatekey.alias": `${secretPrefix}${TOKEN_SIGNER_PRIVATE_KEY}`,
+      "edc.transfer.proxy.token.verifier.publickey.alias": `${secretPrefix}${TOKEN_VERIFIER_PUBLIC_KEY}`,
+      "edc.vault.aws.region": this.region,
+      ...(logLevel && { EDC_LOG_LEVEL: logLevel }),
+    };
+    const common = {
+      cluster: infra.ecsCluster,
+      vpc: infra.vpc,
+      profile,
+      taskRolePolicyStatements,
+      albSecurityGroupId: infra.albSecurityGroupId,
       taskSecurityGroupId: infra.edcTaskSecurityGroupId,
       targetGroups,
     };
 
-    const controlPlane = new EdcControlPlane(this, "ControlPlane", {
-      albOutputs,
-      cluster: infra.ecsCluster,
-      connectorId,
-      cpu: connector.controlPlaneCpu,
-      ddbTableName: ddb.table.tableName,
-      dspCallbackAddress: `${infra.dspUrl}${connectorId}`,
-      edcIamEnvVars,
+    const controlPlane = new EdcRuntime(this, "ControlPlane", {
+      ...common,
       image: ContainerImage.fromDockerImageAsset(infra.controlPlaneImage),
-      logLevel,
+      cpu: connector.controlPlaneCpu,
       memoryLimitMiB: connector.controlPlaneMemoryLimitMiB,
-      secretPrefix,
-      interactiveStateMachineIterationMillis:
-        connector.interactiveStateMachineIterationMillis ?? "10000",
-      backgroundStateMachineIterationMillis:
-        connector.backgroundStateMachineIterationMillis ?? "60000",
-      profile,
-      taskRolePolicyStatements: policyStatements,
-      vpc: infra.vpc,
+      ports: cpPorts,
+      environment: {
+        ...environment,
+        "edc.dsp.callback.address": dspUrl,
+        "edc.negotiation.consumer.state-machine.iteration-wait-millis":
+          interactiveMillis,
+        "edc.negotiation.provider.state-machine.iteration-wait-millis":
+          interactiveMillis,
+        "edc.transfer.state-machine.iteration-wait-millis": interactiveMillis,
+        "edc.policy.monitor.state-machine.iteration-wait-millis":
+          backgroundMillis,
+        "edc.data.plane.selector.state-machine.iteration-wait-millis":
+          backgroundMillis,
+      },
     });
 
-    const dataPlane = new EdcDataPlane(this, "DataPlane", {
-      albOutputs,
-      apiPublicUrl: `${infra.dataPlaneUrl}${connectorId}/`,
-      cluster: infra.ecsCluster,
-      connectorId,
-      cpu: connector.dataPlaneCpu,
-      ddbTableName: ddb.table.tableName,
-      edcIamEnvVars,
+    const dataPlanePublicUrl = `${infra.dataPlaneUrl}${connectorId}/`;
+    const dataPlane = new EdcRuntime(this, "DataPlane", {
+      ...common,
       image: ContainerImage.fromDockerImageAsset(infra.dataPlaneImage),
-      logLevel,
+      cpu: connector.dataPlaneCpu,
       memoryLimitMiB: connector.dataPlaneMemoryLimitMiB,
-      profile,
-      secretPrefix,
-      dataPlaneStateMachineIterationMillis:
-        connector.interactiveStateMachineIterationMillis ?? "10000",
-      dataPlaneFlowLeaseMillis: connector.dataPlaneFlowLeaseMillis ?? "10000",
-      taskRolePolicyStatements: policyStatements,
-      vpc: infra.vpc,
+      ports: dpPorts,
+      environment: {
+        ...environment,
+        "edc.control.endpoint": `http://${alb}:${dpPorts.control}/${connectorId}/api/control`,
+        "edc.dataplane.api.public.baseurl": dataPlanePublicUrl,
+        "edc.dataplane.state-machine.iteration-wait-millis": interactiveMillis,
+        "edc.dataplane.state-machine.flow.lease.time": `${connector.dataPlaneFlowLeaseMillis}`,
+        "edc.dpf.selector.url": `http://${alb}:${cpPorts.control}/${connectorId}/api/control/v1/dataplanes`,
+        "tx.edc.dataplane.token.refresh.endpoint": `${dataPlanePublicUrl}token`,
+      },
     });
     dataPlane.node.addDependency(controlPlane);
 

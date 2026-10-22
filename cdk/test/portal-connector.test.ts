@@ -13,11 +13,11 @@ import {
 const CONNECTOR_ID = "11111111-2222-3333-4444-555555555555";
 const props: PortalConnectorProperties = {
   Environment: "beta",
-  Bpnl: "BPNL00000007J65N",
+  Bpnl: "BPNL00000000DEMO",
   ConnectorName: "alpha",
   ConnectorUrl: "https://dsp/alpha",
   TechnicalUserName: "dep-alpha",
-  AdminSecretName: "dep/portal-admin/BPNL00000007J65N",
+  AdminSecretName: "dep/portal-admin/BPNL00000000DEMO",
   OauthSecretName: "dep/alpha/edc.iam.sts.oauth.client.secret",
 };
 
@@ -85,7 +85,7 @@ describe("onEvent", () => {
       "tu-1",
     );
     expect(fetchDid).toHaveBeenCalledWith(
-      "https://portal-backend.beta.cofinity-x.com/api/administration/staticdata/did/BPNL00000007J65N/did.json",
+      "https://portal-backend.beta.cofinity-x.com/api/administration/staticdata/did/BPNL00000000DEMO/did.json",
     );
     expect(result).toEqual({
       PhysicalResourceId: CONNECTOR_ID,

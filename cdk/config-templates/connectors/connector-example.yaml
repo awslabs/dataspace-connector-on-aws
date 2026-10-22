@@ -1,16 +1,14 @@
-# Connector configuration for Dataspace Connector on AWS
-# See: https://github.com/awslabs/dataspace-connector-on-aws
+# Reference: https://github.com/awslabs/dataspace-connector-on-aws#connectorsconnector-idyaml
 
 connectorId: example
-# bpnl: "BPNL000000000000" # Optional override of the deployment.yaml portal.bpnl
-profile: production # Optional override (defaults to deployment.yaml profile)
-controlPlaneCpu: 256
-controlPlaneMemoryLimitMiB: 1024
-dataPlaneCpu: 256
-dataPlaneMemoryLimitMiB: 512
-# State machine iteration intervals in milliseconds (both optional; defaults shown).
-interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-flow
-backgroundStateMachineIterationMillis: "60000" # policy monitor + data-plane selector
-# stateRemovalPolicy: DESTROY # Optional override of the deployment.yaml stateRemovalPolicy
-# logLevel: DEBUG # Optional override of the deployment.yaml logLevel
-
+# bpnl: "BPNL000000000000"
+# profile: production
+# controlPlaneCpu: 256
+# controlPlaneMemoryLimitMiB: 1024
+# dataPlaneCpu: 256
+# dataPlaneMemoryLimitMiB: 512
+# interactiveStateMachineIterationMillis: 10000
+# backgroundStateMachineIterationMillis: 60000
+# dataPlaneFlowLeaseMillis: 10000
+# stateRemovalPolicy: RETAIN
+# logLevel: DEBUG

@@ -7,6 +7,7 @@ import { join } from "path";
 
 import { BasyxStack } from "../lib/basyx/basyx-stack";
 import {
+  BasyxEntry,
   basyxStackName,
   DeploymentConfig,
   loadDeploymentConfig,
@@ -14,9 +15,17 @@ import {
 import { ConnectorStack } from "../lib/connector-stack";
 import { DeploymentStage } from "../lib/deployment-stage";
 
-const BPNL = "BPNL00000007J65N";
+const BPNL = "BPNL00000000DEMO";
 const CONFIG_PATH = join(__dirname, "..", "config-templates");
 const env = { account: "111111111111", region: "eu-central-1" };
+
+const entry = (e: Partial<BasyxEntry> = {}): BasyxEntry => ({
+  services: ["dtr"],
+  dtrConnector: "example",
+  profile: "development",
+  stateRemovalPolicy: "RETAIN",
+  ...e,
+});
 
 function config(basyx: boolean): DeploymentConfig {
   const loaded = loadDeploymentConfig(CONFIG_PATH);
@@ -25,7 +34,7 @@ function config(basyx: boolean): DeploymentConfig {
     deployment: {
       ...loaded.deployment,
       portal: { ...loaded.deployment.portal, bpnl: BPNL },
-      ...(basyx ? { basyx: { [BPNL]: { services: ["dtr"] } } } : {}),
+      ...(basyx ? { basyx: { [BPNL]: entry() } } : {}),
     },
   };
 }
@@ -52,18 +61,21 @@ describe("DeploymentStage BaSyx wiring", () => {
     expect(basyxStacks(stage(false))).toHaveLength(0);
   });
 
-  test("basyx entry: one BaSyx stack, depending on SharedInfra only", () => {
+  test("basyx entry: one BaSyx stack, depending on SharedInfra and its DTR connector", () => {
     const s = stage(true);
     const [basyx] = basyxStacks(s);
     expect(basyx.stackName).toBe(basyxStackName("DataspaceConnector", BPNL));
     // Dependencies come from cross-stack references, which resolve at synth.
     s.synth();
-    expect(basyx.dependencies.map((d) => d.node.id)).toEqual(["SharedInfra"]);
+    expect(basyx.dependencies.map((d) => d.node.id).sort()).toEqual([
+      "Connector-example",
+      "SharedInfra",
+    ]);
   });
 
   test("basyx profile overrides the deployment profile", () => {
     const base = config(false);
-    const backupRetention = (profile?: "production") => {
+    const backupRetention = (profile: "development" | "production") => {
       const host = new Stack(new App(), "Host", { env });
       const s = new DeploymentStage(host, "DataspaceConnector", {
         config: {
@@ -71,7 +83,7 @@ describe("DeploymentStage BaSyx wiring", () => {
           deployment: {
             ...base.deployment,
             profile: "development",
-            basyx: { [BPNL]: { services: ["dtr"], profile } },
+            basyx: { [BPNL]: entry({ profile }) },
           },
         },
         deploymentName: "DataspaceConnector",
@@ -84,7 +96,7 @@ describe("DeploymentStage BaSyx wiring", () => {
       );
       return cluster.Properties.BackupRetentionPeriod;
     };
-    expect(backupRetention()).toBe(1);
+    expect(backupRetention("development")).toBe(1);
     expect(backupRetention("production")).toBe(7);
   });
 
@@ -103,8 +115,11 @@ describe("DeploymentStage BaSyx wiring", () => {
         deployment: {
           ...base.deployment,
           basyx: {
-            [BPNL]: { services: ["dtr", "submodelRepository"] },
-            [OTHER]: { services: ["dtr", "submodelRepository"] },
+            [BPNL]: entry({ services: ["dtr", "submodelRepository"] }),
+            [OTHER]: entry({
+              services: ["dtr", "submodelRepository"],
+              dtrConnector: "second",
+            }),
           },
         },
       },

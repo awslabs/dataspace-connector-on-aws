@@ -13,13 +13,12 @@ import {
   CodeBuildStep,
   CodePipeline,
   CodePipelineSource,
-  FileSet,
-  IFileSetProducer,
   ManualApprovalStep,
 } from "aws-cdk-lib/pipelines";
 
 import { DeploymentStage } from "./deployment-stage";
 import {
+  basyxEntries,
   basyxStackName,
   DeploymentConfig,
   PipelineYaml,
@@ -38,16 +37,6 @@ export class PipelineStack extends Stack {
 
     const config = props.pipelineConfig;
     const deploymentName = resolveDeploymentName(config);
-    const stageId = deploymentName;
-
-    if (
-      config.configSource === "github" &&
-      (!config.configRepoName || !config.connectionArn)
-    ) {
-      throw new Error(
-        "pipeline.yaml: github configSource requires configRepoName and connectionArn.",
-      );
-    }
 
     const configSource =
       config.configSource === "github"
@@ -55,9 +44,15 @@ export class PipelineStack extends Stack {
             connectionArn: config.connectionArn!,
           })
         : CodePipelineSource.codeCommit(
-            // CodeCommit repo name is derived from deploymentName so instances
-            // never collide; the pipeline creates and seeds it.
-            this.getOrCreateConfigRepo(`${deploymentName}-config`),
+            new Repository(this, "ConfigRepo", {
+              repositoryName: `${deploymentName}-config`,
+              description:
+                "Configuration repository for Dataspace Connector on AWS deployments",
+              code: Code.fromDirectory(
+                resolve(__dirname, "../config-templates"),
+                "main",
+              ),
+            }),
             "main",
           );
 
@@ -77,8 +72,6 @@ export class PipelineStack extends Stack {
       primaryOutputDirectory: "app/cdk/build/cdk.out",
     });
 
-    const cdkBundle = synth.addOutputDirectory("app/cdk");
-
     const pipeline = new CodePipeline(this, "Pipeline", {
       pipelineName: `${deploymentName}Pipeline`,
       pipelineType: PipelineType.V2,
@@ -94,23 +87,22 @@ export class PipelineStack extends Stack {
     });
 
     const stage = pipeline.addStage(
-      new DeploymentStage(this, stageId, {
+      new DeploymentStage(this, deploymentName, {
         config: props.deploymentConfig,
         deploymentName,
       }),
     );
 
-    const recover = this.recoverFailedStacksStep(deploymentName);
+    const cleanUp = this.cleanUpStacksStep(
+      deploymentName,
+      props.deploymentConfig,
+    );
     if (config.requireApproval) {
       const approve = new ManualApprovalStep("Approve");
-      recover.addStepDependency(approve);
+      cleanUp.addStepDependency(approve);
       stage.addPre(approve);
     }
-    stage.addPre(recover);
-
-    stage.addPost(
-      this.portalFinalizationStep(configSource, cdkBundle, deploymentName),
-    );
+    stage.addPre(cleanUp);
   }
 
   private stackArn(stackName: string): string {
@@ -118,18 +110,37 @@ export class PipelineStack extends Stack {
   }
 
   /**
-   * Deletes connector and BaSyx stacks left in ROLLBACK_COMPLETE by a failed
-   * first create. CloudFormation accepts no change set for such a stack, so
-   * without this every later run fails in Prepare. The stack holds no
-   * resources, and its rollback already removed the portal registration.
+   * Before the deploy, deletes the BaSyx and connector stacks whose config is
+   * gone, BaSyx first, and any left in ROLLBACK_COMPLETE by a failed first
+   * create, which accept no change set. CDK Pipelines never deletes a stack
+   * itself. A connector stack's delete removes its portal registration, a
+   * BaSyx stack's delete its DTR offer.
    */
-  private recoverFailedStacksStep(deploymentName: string): CodeBuildStep {
+  private cleanUpStacksStep(
+    deploymentName: string,
+    config: DeploymentConfig,
+  ): CodeBuildStep {
     const connectors = `${deploymentName}-Connector-`;
     const basyx = basyxStackName(deploymentName, "");
-    return new CodeBuildStep("RecoverFailedStacks", {
+    const keep = [
+      ...config.connectors.map((c) => `${connectors}${c.connectorId}`),
+      ...basyxEntries(config).map((b) =>
+        basyxStackName(deploymentName, b.bpnl),
+      ),
+    ];
+    return new CodeBuildStep("CleanUpStacks", {
       commands: [
-        `STACKS=$(aws cloudformation list-stacks --stack-status-filter ROLLBACK_COMPLETE --query "StackSummaries[?starts_with(StackName, '${connectors}') || starts_with(StackName, '${basyx}')].StackName" --output text)`,
-        `for s in $STACKS; do echo "Deleting $s (ROLLBACK_COMPLETE)"; aws cloudformation delete-stack --stack-name "$s"; aws cloudformation wait stack-delete-complete --stack-name "$s"; done`,
+        `KEEP=" ${keep.join(" ")} "`,
+        [
+          `for p in ${basyx} ${connectors}; do`,
+          `aws cloudformation list-stacks --query "StackSummaries[?StackStatus!='DELETE_COMPLETE' && starts_with(StackName, '$p')].[StackName,StackStatus]" --output text |`,
+          `while read -r s status; do`,
+          `case "$KEEP" in *" $s "*) [ "$status" = ROLLBACK_COMPLETE ] || continue;; esac;`,
+          `echo "Deleting $s ($status)";`,
+          `aws cloudformation delete-stack --stack-name "$s" && aws cloudformation wait stack-delete-complete --stack-name "$s" || exit 1;`,
+          `done || exit 1;`,
+          `done`,
+        ].join(" "),
       ],
       rolePolicyStatements: [
         new PolicyStatement({
@@ -150,73 +161,6 @@ export class PipelineStack extends Stack {
           ],
         }),
       ],
-    });
-  }
-
-  /**
-   * Post-deploy finalization: the BaSyx DTR offers, and deletion of connector
-   * and BaSyx stacks whose config is gone (a connector stack's delete removes
-   * its portal registration). Reuses the compiled CDK bundle from Synth.
-   */
-  private portalFinalizationStep(
-    configSource: IFileSetProducer,
-    cdkBundle: FileSet,
-    deploymentName: string,
-  ): CodeBuildStep {
-    const connectorStackArn = this.stackArn(`${deploymentName}-Connector-*`);
-    const basyxStackArn = this.stackArn(basyxStackName(deploymentName, "*"));
-    const sharedInfraStackArn = this.stackArn(`${deploymentName}-SharedInfra`);
-
-    return new CodeBuildStep("PortalFinalization", {
-      input: configSource,
-      additionalInputs: { "cdk-bundle": cdkBundle },
-      installCommands: ["n 24"],
-      commands: [
-        `node cdk-bundle/dist/portal/finalize.js --config-path=. --stack-prefix=${deploymentName}`,
-      ],
-      rolePolicyStatements: [
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          // Read-only on SharedInfra (API base URLs), connector and BaSyx stacks.
-          actions: ["cloudformation:DescribeStacks"],
-          resources: [sharedInfraStackArn, connectorStackArn, basyxStackArn],
-        }),
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          // Finds orphan stacks; the action has no resource-level permissions.
-          actions: ["cloudformation:ListStacks"],
-          resources: ["*"],
-        }),
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          // Orphan cleanup deletes connector and BaSyx stacks only, never SharedInfra.
-          actions: [
-            "cloudformation:DeleteStack",
-            "cloudformation:DescribeStackEvents",
-          ],
-          resources: [connectorStackArn, basyxStackArn],
-        }),
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          // DTR asset reconcile on the connectors' management API.
-          actions: ["execute-api:Invoke"],
-          resources: [
-            `arn:aws:execute-api:${this.region}:${this.account}:*/management/*`,
-          ],
-        }),
-      ],
-    });
-  }
-
-  private getOrCreateConfigRepo(repoName: string): Repository {
-    return new Repository(this, "ConfigRepo", {
-      repositoryName: repoName,
-      description:
-        "Configuration repository for Dataspace Connector on AWS deployments",
-      code: Code.fromDirectory(
-        resolve(__dirname, "../config-templates"),
-        "main",
-      ),
     });
   }
 }

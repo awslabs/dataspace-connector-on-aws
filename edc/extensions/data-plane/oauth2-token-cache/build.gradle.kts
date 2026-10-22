@@ -12,9 +12,4 @@ dependencies {
     implementation(libs.edc.spi.oauth2)
 
     testImplementation(libs.junit.jupiter)
-    testRuntimeOnly(libs.junit.platform.launcher)
-}
-
-tasks.withType<Test> {
-    useJUnitPlatform()
 }

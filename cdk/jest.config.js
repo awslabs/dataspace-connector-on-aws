@@ -9,6 +9,12 @@ module.exports = {
   roots: ["<rootDir>/test"],
   testMatch: ["**/*.test.ts"],
   transform: {
-    "^.+\\.tsx?$": ["ts-jest", { diagnostics: { ignoreCodes: [151002] } }],
+    "^.+\\.tsx?$": [
+      "ts-jest",
+      {
+        diagnostics: { ignoreCodes: [151002] },
+        tsconfig: "<rootDir>/test/tsconfig.json",
+      },
+    ],
   },
 };

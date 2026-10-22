@@ -10,9 +10,8 @@ import {
   deriveConnectorTableName,
   deriveSecretPrefix,
   connectorBpnl,
-  deriveEdcIam,
+  edcIdentityEnvironment,
   resolveDeploymentName,
-  toEdcIamEnvVars,
   toPrincipals,
   toRemovalPolicy,
   validateConnectorId,
@@ -25,7 +24,6 @@ import {
   basyxEntries,
   loadDeploymentConfig,
   loadPipelineConfig,
-  resolveStateRemovalPolicy,
 } from "../lib/config/config";
 import { RemovalPolicy } from "aws-cdk-lib";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
@@ -137,27 +135,32 @@ describe("connectorBpnl", () => {
   });
 });
 
-describe("deriveEdcIam", () => {
-  const iam = deriveEdcIam("beta", "BPNL00000000AAAA", {
+describe("edcIdentityEnvironment", () => {
+  const env = edcIdentityEnvironment("beta", "BPNL00000000AAAA", {
     clientId: "client-1",
     stsOauthTokenUrl: "https://auth.example/oauth/token",
   });
 
   test("derives the company DID from the BPNL", () => {
-    expect(iam.dcpId).toBe(
-      "did:web:portal-backend.beta.cofinity-x.com:api:administration:staticdata:did:BPNL00000000AAAA",
-    );
-    expect(iam.participantId).toBe("BPNL00000000AAAA");
+    const did =
+      "did:web:portal-backend.beta.cofinity-x.com:api:administration:staticdata:did:BPNL00000000AAAA";
+    expect(env["edc.participant.id"]).toBe(did);
+    expect(env["edc.iam.issuer.id"]).toBe(did);
+    expect(env["tractusx.edc.participant.bpn"]).toBe("BPNL00000000AAAA");
   });
 
   test("takes the environment constants and the technical user's values", () => {
-    expect(iam.trustedIssuer).toMatch(/:did:BPNLCOFINITYEZFA$/);
-    expect(iam.didResolver).toBe(
+    expect(env["edc.iam.trusted-issuer.issuer-1.id"]).toMatch(
+      /:did:BPNLCOFINITYEZFA$/,
+    );
+    expect(env["tx.edc.iam.iatp.bdrs.server.url"]).toBe(
       "https://bdrs.beta.cofinity-x.com/api/directory",
     );
-    expect(iam.stsDimUrl).toMatch(/^https:\/\//);
-    expect(iam.stsOauthClientId).toBe("client-1");
-    expect(iam.stsOauthTokenUrl).toBe("https://auth.example/oauth/token");
+    expect(env["tx.edc.iam.sts.dim.url"]).toMatch(/^https:\/\//);
+    expect(env["edc.iam.sts.oauth.client.id"]).toBe("client-1");
+    expect(env["edc.iam.sts.oauth.token.url"]).toBe(
+      "https://auth.example/oauth/token",
+    );
   });
 });
 
@@ -177,20 +180,6 @@ describe("connectorPriority", () => {
       expect(p).toBeGreaterThanOrEqual(1);
       expect(p).toBeLessThanOrEqual(49999);
     }
-  });
-});
-
-describe("toEdcIamEnvVars", () => {
-  test("maps identity fields to EDC container env var keys", () => {
-    const env = toEdcIamEnvVars(
-      deriveEdcIam("beta", "BPNL00000000AAAA", {
-        clientId: "client-1",
-        stsOauthTokenUrl: "https://token",
-      }),
-    );
-    expect(env["tractusx.edc.participant.bpn"]).toBe("BPNL00000000AAAA");
-    expect(env["edc.iam.sts.oauth.client.id"]).toBe("client-1");
-    expect(env["edc.iam.sts.oauth.token.url"]).toBe("https://token");
   });
 });
 
@@ -214,7 +203,7 @@ describe("toPrincipals", () => {
 
 // ─── Loader: unknown keys, stateRemovalPolicy, basyx ─────────────────────────
 
-const BPNL = "BPNL00000007J65N";
+const BPNL = "BPNL00000000DEMO";
 const OTHER_BPNL = "BPNL00000000BBBB";
 
 const baseDeployment = (): Record<string, unknown> => ({
@@ -270,6 +259,25 @@ const otherBpnlConnector = (id: string) => ({
 });
 
 const oneConnector = () => ({ a: baseConnector("aa") });
+
+describe("loader", () => {
+  test("accepts a deployment without connectors", () => {
+    expect(
+      loadDeploymentConfig(writeConfig(baseDeployment(), {})).connectors,
+    ).toEqual([]);
+  });
+
+  test("github configSource needs configRepoName and connectionArn", () => {
+    const dir = writeConfig(baseDeployment(), oneConnector(), {
+      appRepo: "x/y",
+      appVersion: "main",
+      configSource: "github",
+    });
+    expect(() => loadPipelineConfig(dir)).toThrow(
+      "pipeline.yaml: configSource github requires configRepoName and connectionArn",
+    );
+  });
+});
 
 describe("unknown config keys", () => {
   test("pipeline.yaml top-level key", () => {
@@ -487,27 +495,6 @@ describe("basyx validation", () => {
   });
 });
 
-describe("resolveStateRemovalPolicy", () => {
-  const d = baseDeployment() as unknown as DeploymentYaml;
-  test("defaults to RETAIN", () => {
-    expect(resolveStateRemovalPolicy(d)).toBe("RETAIN");
-  });
-  test("uses the deployment value", () => {
-    expect(
-      resolveStateRemovalPolicy({ ...d, stateRemovalPolicy: "DESTROY" }),
-    ).toBe("DESTROY");
-  });
-  test("connector or BaSyx override wins", () => {
-    expect(
-      resolveStateRemovalPolicy(
-        { ...d, stateRemovalPolicy: "DESTROY" },
-        "RETAIN",
-      ),
-    ).toBe("RETAIN");
-    expect(resolveStateRemovalPolicy(d, "DESTROY")).toBe("DESTROY");
-  });
-});
-
 describe("basyxEntries", () => {
   const config = (basyx: Record<string, unknown>): DeploymentConfig =>
     loadDeploymentConfig(
@@ -525,8 +512,10 @@ describe("basyxEntries", () => {
     expect(basyxEntries(config({ [BPNL]: { services: ["dtr"] } }))).toEqual([
       {
         bpnl: BPNL,
-        entry: { services: ["dtr"] },
-        dtrConnectorId: "bb",
+        services: ["dtr"],
+        dtrConnector: "bb",
+        profile: "development",
+        stateRemovalPolicy: "RETAIN",
       },
     ]);
   });
@@ -538,7 +527,7 @@ describe("basyxEntries", () => {
         [OTHER_BPNL]: { services: ["dtr"] },
       }),
     );
-    expect(result.map((r) => [r.bpnl, r.dtrConnectorId])).toEqual([
+    expect(result.map((r) => [r.bpnl, r.dtrConnector])).toEqual([
       [OTHER_BPNL, "oo"],
       [BPNL, "zz"],
     ]);

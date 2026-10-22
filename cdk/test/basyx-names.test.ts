@@ -11,7 +11,7 @@ import {
   validateCognitoDomainPrefix,
 } from "../lib/basyx/names";
 
-const BPNL = "BPNL00000007J65N";
+const BPNL = "BPNL00000000DEMO";
 
 describe("BaSyx names", () => {
   test("context paths, domain prefix, URLs and secret alias", () => {
@@ -23,9 +23,9 @@ describe("BaSyx names", () => {
       `http://alb.internal:5004/basyx/${BPNL}/dtr/api/v3`,
     );
     const prefix = cognitoDomainPrefix("DataspaceConnector", BPNL);
-    expect(prefix).toBe("dataspaceconnector-basyx-bpnl00000007j65n");
+    expect(prefix).toBe("dataspaceconnector-basyx-bpnl00000000demo");
     expect(cognitoTokenUrl(prefix, "eu-central-1")).toBe(
-      "https://dataspaceconnector-basyx-bpnl00000007j65n.auth.eu-central-1.amazoncognito.com/oauth2/token",
+      "https://dataspaceconnector-basyx-bpnl00000000demo.auth.eu-central-1.amazoncognito.com/oauth2/token",
     );
     expect(basyxClientSecretAlias("DataspaceConnector", "dtr1")).toBe(
       "DataspaceConnector/dtr1/basyx.dtr.oauth.client.secret",
@@ -44,7 +44,7 @@ describe("BaSyx names", () => {
       validateCognitoDomainPrefix("d".repeat(40), BPNL),
     ).not.toThrow();
     expect(() => validateCognitoDomainPrefix("d".repeat(41), BPNL)).toThrow(
-      `basyx.${BPNL}: Cognito domain prefix "${"d".repeat(41)}-basyx-bpnl00000007j65n" is 64 characters (max 63); use a deploymentName of at most 40 characters`,
+      `basyx.${BPNL}: Cognito domain prefix "${"d".repeat(41)}-basyx-bpnl00000000demo" is 64 characters (max 63); use a deploymentName of at most 40 characters`,
     );
   });
 
