@@ -2,31 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Post-deploy finalization script for Cofinity-X Portal integration.
+ * Post-deploy finalization, run as a CodeBuild step after the Deploy stage.
  *
- * Runs as a CodeBuild step after the Deploy stage. Reads the connector state
- * table and processes two phases:
+ *   BaSyx: per BPNL with a basyx entry or a BaSyx stack, create or update the
+ *   DTR offer on its dtrConnector, remove it from the BPNL's other connectors,
+ *   and delete the BaSyx stack once its entry is gone.
  *
- *   Phase A — Register deployed connectors
- *     For each IDENTITY_READY connector: write its OAuth secret to Secrets
- *     Manager, register it in the portal (making it discoverable), and advance
- *     its phase to REGISTERED.
- *
- *   Phase A2 — BaSyx
- *     Per BPNL with a basyx entry or a BaSyx stack: create or update
- *     the DTR offer on its dtrConnector, remove it from the BPNL's other
- *     connectors, and delete the BaSyx stack once its entry is gone.
- *
- *   Phase B — Orphan cleanup
- *     For each DDB row whose connectorId is not in the current config:
- *     deregister from the portal (by stored portalConnectorId, so manually-
- *     registered connectors are never touched), delete the CloudFormation
- *     stack, and remove the DDB row.
- *
- * Admin secrets are grouped by BPNL (orgKey). One PortalClient per tenant;
- * cleanup uses the stored orgKey to authenticate even after the YAML is gone.
- * Admin-secret deletion is CDK-owned (SharedInfra reconciles from the active
- * BPNL set), so finalize never deletes secrets.
+ *   Orphans: delete every connector stack of this deployment whose connector
+ *   file is gone. The stack's PortalConnector resource removes the portal
+ *   registration and the technical user.
  *
  * Usage: node dist/portal/finalize.js --config-path=<path> --stack-prefix=<prefix>
  */
@@ -44,122 +28,18 @@ import {
 } from "@aws-sdk/client-cloudformation";
 
 import {
-  ConnectorYaml,
-  DEFAULT_DEPLOYMENT_NAME,
   DeploymentConfig,
   DeploymentYaml,
-  EDC_SECRETS_MANAGER_ALIASES,
   basyxStackName,
-  deriveAdminSecretName,
-  deriveSecretPrefix,
   basyxEntries,
+  connectorBpnl,
   loadDeploymentConfig,
-  resolveConnectorIdentity,
 } from "../config/config";
-import { ConnectorRegistration, PortalClient, SecretsHelper } from "./client";
 import { BasyxOutputs, buildDtrDefinition, ensureDtr, removeDtr } from "./dtr";
 import { ManagementRequest, managementApi } from "./management-api";
-import { ConnectorState, nextState, StateStore } from "./state";
 
-const DSP_URL_OUTPUT_KEY = "DspApiUrl";
 const MANAGEMENT_URL_OUTPUT_KEY = "ManagementApiUrl";
-const STACK_DELETE_TIMEOUT_SECONDS = 600;
-
-interface RegisterDeps {
-  getClient: (orgKey: string) => Promise<PortalClient | null>;
-  registryByTenant: Map<string, Map<string, ConnectorRegistration>>;
-  store: Pick<StateStore, "save">;
-  secrets: Pick<SecretsHelper, "putConnectorSecret">;
-}
-
-/**
- * Phase A: register every deployed connector, isolating per-connector failures.
- * A connector already at the portal is self-healed (its id recorded, never
- * re-registered); a failure is logged, left at IDENTITY_READY, and does not
- * block the others. Returns the ids that failed so the caller can fail the step
- * after Phase B cleanup has run.
- */
-export async function registerReadyConnectors(
-  rows: ConnectorState[],
-  currentConnectors: ConnectorYaml[],
-  deploymentName: string,
-  dspBaseUrl: string | undefined,
-  deps: RegisterDeps,
-): Promise<string[]> {
-  const { getClient, registryByTenant, store, secrets } = deps;
-  const currentIds = new Set(currentConnectors.map((c) => c.connectorId));
-  const registrationFailures: string[] = [];
-
-  for (const row of rows) {
-    if (!currentIds.has(row.connectorId)) continue; // orphan — handled in Phase B
-    if (row.phase === "IDENTITY_PENDING") continue; // not deployed yet
-
-    const connector = currentConnectors.find(
-      (c) => c.connectorId === row.connectorId,
-    )!;
-    const client = await getClient(row.orgKey);
-    if (!client) continue;
-
-    const registry = registryByTenant.get(row.orgKey);
-    if (!registry) continue;
-
-    try {
-      const existing = registry.get(row.connectorId);
-      if (existing && row.phase === "REGISTERED") continue; // nothing to do
-      if (existing) {
-        // Registered on the portal but the row was not updated (previous crash).
-        const { state } = nextState(row, {
-          phase: "REGISTERED",
-          portalConnectorId: existing.id,
-        });
-        await store.save(state);
-        console.log(
-          `[portal/finalize] ${row.connectorId}: self-healed, recorded existing registration.`,
-        );
-        continue;
-      }
-
-      console.log(`[portal/finalize] ${row.connectorId}: finalizing...`);
-
-      // Write the OAuth secret before registering so the connector can
-      // authenticate the moment it becomes discoverable.
-      const techUser = await client.getTechUserDetails(
-        connector.serviceAccountId,
-      );
-      const oauthSecretId = `${deriveSecretPrefix(deploymentName, row.connectorId)}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`;
-      await secrets.putConnectorSecret(oauthSecretId, techUser.secret);
-      console.log(
-        `[portal/finalize] ${row.connectorId}: OAuth secret written.`,
-      );
-
-      if (!dspBaseUrl) {
-        console.warn(
-          `[portal/finalize] ${row.connectorId}: DSP URL unavailable, skipping registration (retries next run).`,
-        );
-        continue;
-      }
-
-      const reg = await client.registerConnector(
-        row.connectorId,
-        `${dspBaseUrl}${row.connectorId}`,
-        connector.serviceAccountId,
-      );
-      const { state } = nextState(row, {
-        phase: "REGISTERED",
-        portalConnectorId: reg.id,
-      });
-      await store.save(state);
-      console.log(`[portal/finalize] ${row.connectorId}: registered.`);
-    } catch (err) {
-      console.error(
-        `[portal/finalize] ${row.connectorId}: registration failed, left at IDENTITY_READY — ${(err as Error).message}`,
-      );
-      registrationFailures.push(row.connectorId);
-    }
-  }
-
-  return registrationFailures;
-}
+const STACK_DELETE_TIMEOUT_SECONDS = 1800;
 
 interface BasyxDeps {
   /** BPNLs that have a BaSyx stack that is not deleted. */
@@ -171,15 +51,14 @@ interface BasyxDeps {
 }
 
 /**
- * Phase A2: the DTR offer and orphan BaSyx stacks, per BPNL that has a
- * basyx entry or a BaSyx stack. On the dtrConnector the offer is
- * created or updated; on the BPNL's other deployed connectors it is removed;
- * a BaSyx stack whose entry is gone is deleted after its offer. Deployments
- * without BaSyx make no calls. Returns the BPNLs that failed.
+ * The DTR offer and orphan BaSyx stacks, per BPNL that has a basyx entry or a
+ * BaSyx stack. On the dtrConnector the offer is created or updated; on the
+ * BPNL's other connectors it is removed; a BaSyx stack whose entry is gone is
+ * deleted after its offer. Deployments without BaSyx make no calls. Returns
+ * the BPNLs that failed.
  */
 export async function reconcileBasyx(
   config: DeploymentConfig,
-  rows: ConnectorState[],
   deps: BasyxDeps,
 ): Promise<string[]> {
   const targets = new Map(
@@ -187,11 +66,6 @@ export async function reconcileBasyx(
   );
   const live = await deps.liveBasyxStacks();
   const bpnls = [...new Set([...targets.keys(), ...live])].sort();
-  const deployed = new Set(
-    rows
-      .filter((r) => r.phase !== "IDENTITY_PENDING")
-      .map((r) => r.connectorId),
-  );
   const failures: string[] = [];
 
   for (const bpnl of bpnls) {
@@ -199,7 +73,7 @@ export async function reconcileBasyx(
       console.log(`[portal/finalize] BaSyx ${bpnl}: ${msg}`);
     try {
       const target = targets.get(bpnl);
-      if (target && deployed.has(target)) {
+      if (target) {
         const outputs = await deps.readOutputs(bpnl);
         if (!outputs) {
           log(`stack outputs not found, DTR offer skipped this run.`);
@@ -214,9 +88,7 @@ export async function reconcileBasyx(
         .filter(
           (c) =>
             c.connectorId !== target &&
-            deployed.has(c.connectorId) &&
-            resolveConnectorIdentity(config.deployment, c).participantId ===
-              bpnl,
+            connectorBpnl(config.deployment, c) === bpnl,
         )
         .map((c) => c.connectorId);
       for (const connectorId of others) {
@@ -248,13 +120,6 @@ async function main(): Promise<void> {
   const configPath = requireArg("--config-path=");
   const stackPrefix = requireArg("--stack-prefix=");
 
-  const tableName = process.env.STATE_TABLE_NAME;
-  if (!tableName) {
-    throw new Error(
-      "[portal/finalize] STATE_TABLE_NAME environment variable is required.",
-    );
-  }
-
   const deploymentPath = join(configPath, "deployment.yaml");
   if (!existsSync(deploymentPath)) {
     console.log("[portal/finalize] No deployment.yaml found, skipping.");
@@ -263,90 +128,20 @@ async function main(): Promise<void> {
 
   // Already validated by synth in this pipeline run.
   const config = loadDeploymentConfig(configPath);
-  const { deployment } = config;
-  const { environment } = deployment.portal;
-  const deploymentName = process.env.DEPLOYMENT_NAME ?? DEFAULT_DEPLOYMENT_NAME;
   const region = process.env.AWS_REGION ?? "";
-
-  const currentConnectors = config.connectors;
-  const currentIds = new Set(currentConnectors.map((c) => c.connectorId));
-
-  const store = new StateStore(tableName);
   const cfn = new CloudFormationClient();
-  const secrets = new SecretsHelper();
-  const rows = await store.list();
 
-  // One authenticated PortalClient per tenant (BPNL). null means the admin
-  // secret is unavailable, so that tenant's connectors are skipped this run.
-  const clients = new Map<string, PortalClient | null>();
-  const getClient = async (orgKey: string): Promise<PortalClient | null> => {
-    if (clients.has(orgKey)) return clients.get(orgKey) ?? null;
-    let client: PortalClient | null = null;
-    try {
-      const creds = await secrets.getAdminCredentials(
-        deriveAdminSecretName(deploymentName, orgKey),
-      );
-      client = new PortalClient(environment, creds);
-      await client.authenticate();
-    } catch {
-      console.warn(
-        `[portal/finalize] Cannot load admin secret for BPNL ${orgKey}, skipping its connectors.`,
-      );
-    }
-    clients.set(orgKey, client);
-    return client;
-  };
-
-  const dspBaseUrl = await resolveApiBaseUrl(
-    cfn,
-    stackPrefix,
-    deployment,
-    "protocol",
-    DSP_URL_OUTPUT_KEY,
-  );
-
-  // ── Phase A: register IDENTITY_READY connectors ───────────────────────────
-
-  // One portal list call per tenant yields a name -> registration map, used to
-  // self-heal (registered on the portal but the row never recorded it) and to
-  // avoid duplicate registration.
-  const registryByTenant = new Map<
-    string,
-    Map<string, ConnectorRegistration>
-  >();
-  const uniqueOrgs = [...new Set(rows.map((r) => r.orgKey).filter(Boolean))];
-  for (const orgKey of uniqueOrgs) {
-    const client = await getClient(orgKey);
-    if (!client) continue;
-    try {
-      const list = await client.listConnectors();
-      registryByTenant.set(orgKey, new Map(list.map((c) => [c.name, c])));
-    } catch (err) {
-      console.error(
-        `[portal/finalize] Failed to list connectors for BPNL ${orgKey}: ${(err as Error).message}`,
-      );
-    }
-  }
-
-  const registrationFailures = await registerReadyConnectors(
-    rows,
-    currentConnectors,
-    deploymentName,
-    dspBaseUrl,
-    { getClient, registryByTenant, store, secrets },
-  );
-
-  // ── Phase A2: DTR offer and orphan BaSyx stacks ───────────────────────────
+  // ── BaSyx: DTR offers and orphan BaSyx stacks ─────────────────────────────
 
   const managementBaseUrl = await resolveApiBaseUrl(
     cfn,
     stackPrefix,
-    deployment,
+    config.deployment,
     "management",
     MANAGEMENT_URL_OUTPUT_KEY,
   );
-  const basyxFailures = await reconcileBasyx(config, rows, {
-    liveBasyxStacks: () => liveBasyxStacks(cfn, stackPrefix),
+  const failures = await reconcileBasyx(config, {
+    liveBasyxStacks: () => liveStacks(cfn, basyxStackName(stackPrefix, "")),
     readOutputs: (bpnl) => readBasyxOutputs(cfn, stackPrefix, bpnl),
     api: (connectorId) => {
       if (!managementBaseUrl) {
@@ -358,66 +153,32 @@ async function main(): Promise<void> {
       deleteStack(cfn, basyxStackName(stackPrefix, bpnl)),
   }).catch((err: Error) => {
     console.error(`[portal/finalize] BaSyx: failed — ${err.message}`);
-    return ["*"];
+    return ["BaSyx"];
   });
 
-  // ── Phase B: orphan cleanup ───────────────────────────────────────────────
+  // ── Orphan connector stacks ───────────────────────────────────────────────
 
-  for (const row of rows) {
-    if (currentIds.has(row.connectorId)) continue; // still declared
-
-    console.log(`[portal/finalize] ${row.connectorId}: orphan, cleaning up...`);
-
-    // Deregister by stored id (exact; never touches externally-registered
-    // connectors). A row without a portalConnectorId was never registered.
-    if (row.portalConnectorId) {
-      const client = await getClient(row.orgKey);
-      if (client) {
-        try {
-          await client.deregisterConnector(row.portalConnectorId);
-          console.log(`[portal/finalize] ${row.connectorId}: deregistered.`);
-        } catch (err) {
-          console.error(
-            `[portal/finalize] ${row.connectorId}: deregistration failed, skipping — ${(err as Error).message}`,
-          );
-          continue;
-        }
-      }
-    }
-
-    // Delete the stack by deterministic name. A connector that stayed PENDING
-    // never deployed a stack; treat "not found" as already clean.
-    const stackName = `${stackPrefix}-Connector-${row.connectorId}`;
+  const connectorPrefix = `${stackPrefix}-Connector-`;
+  const declared = new Set(config.connectors.map((c) => c.connectorId));
+  for (const connectorId of await liveStacks(cfn, connectorPrefix)) {
+    if (declared.has(connectorId)) continue;
+    console.log(`[portal/finalize] ${connectorId}: orphan, deleting stack...`);
     try {
-      await deleteStack(cfn, stackName);
-      console.log(`[portal/finalize] ${row.connectorId}: stack deleted.`);
+      await deleteStack(cfn, `${connectorPrefix}${connectorId}`);
+      console.log(`[portal/finalize] ${connectorId}: stack deleted.`);
     } catch (err) {
       console.error(
-        `[portal/finalize] ${row.connectorId}: stack deletion failed — ${(err as Error).message}`,
+        `[portal/finalize] ${connectorId}: stack deletion failed — ${(err as Error).message}`,
       );
-      continue;
+      failures.push(connectorId);
     }
-
-    await store.remove(row.connectorId);
-    console.log(`[portal/finalize] ${row.connectorId}: DDB row removed.`);
   }
 
-  const problems: string[] = [];
-  if (registrationFailures.length > 0) {
-    problems.push(
-      `${registrationFailures.length} connector(s) failed to register (${registrationFailures.join(", ")}); ` +
-        `their state remains IDENTITY_READY and will be retried on the next run`,
+  if (failures.length > 0) {
+    throw new Error(
+      `Finalization failed for ${failures.join(", ")}; retried on the next run.`,
     );
   }
-  if (basyxFailures.length > 0) {
-    problems.push(
-      `BaSyx reconcile failed for ${basyxFailures.join(", ")}; retried on the next run`,
-    );
-  }
-  if (problems.length > 0) {
-    throw new Error(`${problems.join(". ")}.`);
-  }
-
   console.log("[portal/finalize] Done.");
 }
 
@@ -500,27 +261,26 @@ async function readBasyxOutputs(
     : undefined;
 }
 
-/** BPNLs with a BaSyx stack of this deployment that is not deleted. */
-async function liveBasyxStacks(
+/** Name suffixes of the live (not deleted) stacks whose name starts with prefix. */
+async function liveStacks(
   cfn: CloudFormationClient,
-  stackPrefix: string,
+  prefix: string,
 ): Promise<Set<string>> {
-  const prefix = basyxStackName(stackPrefix, "");
   const StackStatusFilter = Object.values(StackStatus).filter(
     (s) => s !== StackStatus.DELETE_COMPLETE,
   );
-  const bpnls = new Set<string>();
+  const names = new Set<string>();
   for await (const page of paginateListStacks(
     { client: cfn },
     { StackStatusFilter },
   )) {
     for (const s of page.StackSummaries ?? []) {
       if (s.StackName?.startsWith(prefix)) {
-        bpnls.add(s.StackName.slice(prefix.length));
+        names.add(s.StackName.slice(prefix.length));
       }
     }
   }
-  return bpnls;
+  return names;
 }
 
 /** Deletes a stack and waits; a stack that does not exist counts as deleted. */

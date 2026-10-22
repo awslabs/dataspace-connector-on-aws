@@ -30,15 +30,20 @@ To participate in secure, sovereign data sharing through the Catena-X data space
 
 Deployment is fully GitOps-driven via AWS CDK Pipelines. You run `./deploy.sh` once to create the pipeline and a configuration repository, then manage your entire connector fleet by editing YAML files in that repo:
 
-* **Add a connector**: add a `connector-<id>.yaml` file; the pipeline provisions its infrastructure, reads its identity credentials from the Cofinity-X Portal, and registers it for discovery.
-* **Remove a connector**: delete its YAML file; the pipeline deregisters it from the portal and tears down its stack.
+* **Add a connector**: add a `connector-<id>.yaml` file; the pipeline creates its technical user in the Cofinity-X Portal, registers it for discovery, and provisions its infrastructure.
+* **Remove a connector**: delete its YAML file; the pipeline tears down its stack, which deletes its portal registration and technical user.
 * **Upgrade the connector software**: bump `appVersion` in `pipeline.yaml`; the pipeline rebuilds and redeploys all connectors.
 
 ### Deploy the Pipeline
 
-*Cofinity-X Portal* credentials are managed through AWS Secrets Manager: the first pipeline run creates an empty secret on AWS, you populate it, and the next run completes the deployment.
+**1. Create the portal admin technical user.** In the Cofinity-X Portal, create an internal technical user with the **Connector Management** role (see [Cofinity-X Portal Setup](docs/cofinity-x-portal-setup.md)). The pipeline uses it to create each connector's technical user and register the connector for discovery. Store its credentials in AWS Secrets Manager as `<deploymentName>/portal-admin/<BPNL>` (default `deploymentName`: `DataspaceConnector`):
 
-**1. Create the portal internal technical user.** In the Cofinity-X Portal, create a technical user with the **Offer Management** and **Dataspace Discovery** roles. The pipeline uses it to read per-connector credentials and register connectors for discovery. For a deployment that hosts connectors for more than one organization, you need one internal technical user per organization (BPNL).
+```bash
+aws secretsmanager create-secret --name DataspaceConnector/portal-admin/<BPNL> \
+  --secret-string '{"clientId":"<client-id>","clientSecret":"<client-secret>"}'
+```
+
+A deployment that hosts connectors for more than one organization needs one admin technical user and one secret per organization (BPNL).
 
 **2. Run the deploy script:**
 
@@ -59,15 +64,7 @@ cd DataspaceConnector-config
 git add -A && git commit -m "Initial configuration" && git push origin main
 ```
 
-The first pipeline run deploys the shared infrastructure and creates an empty Cofinity-X Portal secret named `<deploymentName>/portal-admin/<BPNL>` in AWS Secrets Manager for each organization (BPNL) in your config. Connectors stay pending until the secret holds valid credentials.
-
-**4. Populate the Cofinity-X Portal secret and re-run.** Set each `<deploymentName>/portal-admin/<BPNL>` secret to the respective Cofinity-X Portal internal technical user's credentials:
-
-```json
-{ "clientId": "<client-id>", "clientSecret": "<client-secret>" }
-```
-
-Then re-run the pipeline (release the change in the CodePipeline console, or push again). It reads each organization's and connector's credentials from the portal, provisions the connector, stores its OAuth client secret, and registers it for discovery. All subsequent changes flow through Git pushes to the config repository.
+The pipeline run deploys the shared infrastructure and every connector. The portal takes several minutes to create a connector's technical user, so a connector's first deploy takes correspondingly longer. All later changes flow through Git pushes to the config repository.
 
 ## AI-Assisted Connector Management
 
@@ -103,11 +100,11 @@ deploymentName: DataspaceConnector            # Namespaces all resources (defaul
 requireApproval: false                        # Optional manual gate before deploy
 ```
 
-`deploymentName` prefixes every resource this project creates (pipeline, stacks, configuration repository, state table, and secrets), so you can run multiple independent deployments in the same AWS account and region.
+`deploymentName` prefixes every resource this project creates (pipeline, stacks, configuration repository, and secrets), so you can run multiple independent deployments in the same AWS account and region.
 
 ### `deployment.yaml`
 
-Shared infrastructure plus Cofinity-X Portal integration. The `portal.identity` values are the deployment-wide defaults and come from the portal's "Configure Your Connector" dialog. See [Obtaining EDC Identity Credentials from the Cofinity-X Portal](docs/obtaining-edc-identity-credentials.md). To host connectors for more than one organization in a single deployment, a connector can override any identity field (see [`connectors/connector-<id>.yaml`](#connectorsconnector-idyaml)); each organization (BPNL) needs its own internal technical user and its own `<deploymentName>/portal-admin/<BPNL>` secret.
+Shared infrastructure plus Cofinity-X Portal integration. `portal.bpnl` is the organization (BPNL) of every connector; a connector file can set its own `bpnl` instead, to host connectors for more than one organization in one deployment. The pipeline derives each connector's EDC identity from the portal environment, the BPNL, and the connector's technical user. Only `beta` is supported until the production wallet service URL is confirmed.
 
 ```yaml
 profile: development                 # "development" (1 NAT, Fargate Spot) or "production" (2 NATs, On-Demand)
@@ -127,23 +124,18 @@ observabilityApiPrincipals:
 
 portal:
   environment: beta                  # "beta" or "production"
-  identity:
-    trustedIssuer: "did:web:..."
-    stsOauthTokenUrl: "https://..."
-    stsDimUrl: "https://..."
-    participantId: "BPNL..."
-    dcpId: "did:web:..."
-    didResolver: "https://..."
+  bpnl: "BPNL..."                    # Default BPNL of every connector
 ```
 
 `stateRemovalPolicy` decides whether stored state (each connector's DynamoDB table and S3 bucket) is kept or deleted when its stack is deleted. It defaults to `RETAIN`, and a connector file can override it.
 
 ### `connectors/connector-<id>.yaml`
 
-Each connector references a Cofinity-X Portal **external technical user** (**Identity Wallet Management** role) by its service account ID. The pipeline reads its OAuth credentials, populates the connector's EDC identity, stores the OAuth client secret in AWS Secrets Manager, and registers the connector for discovery, with no manual steps.
+For each connector the pipeline creates a Cofinity-X Portal technical user (**Identity Wallet Management** role) named `<deploymentName>-<connectorId>`, stores its OAuth client secret in AWS Secrets Manager, and registers the connector for discovery, with no manual steps.
 
 ```yaml
 connectorId: ccm
+# bpnl: "BPNL..."                    # Optional; overrides deployment.yaml portal.bpnl
 profile: production                  # Optional per-connector override
 controlPlaneCpu: 256
 controlPlaneMemoryLimitMiB: 1024
@@ -152,18 +144,8 @@ dataPlaneMemoryLimitMiB: 512
 interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-flow
 backgroundStateMachineIterationMillis: "60000"  # policy monitor + data-plane selector
 # stateRemovalPolicy: DESTROY        # Optional; overrides deployment.yaml stateRemovalPolicy (default RETAIN)
-serviceAccountId: "<external-technical-user-id>"
 # logLevel: DEBUG                    # Optional; overrides deployment.yaml logLevel for this connector
 
-# Optional per-connector identity override (multi-organization deployments):
-# portal:
-#   identity:
-#     participantId: "BPNL..."       # This connector's organization (BPNL)
-#     dcpId: "did:web:..."
-#     trustedIssuer: "did:web:..."
-#     stsOauthTokenUrl: "https://..."
-#     stsDimUrl: "https://..."
-#     didResolver: "https://..."
 ```
 
 ### Custom Domain
@@ -199,17 +181,16 @@ Things to know:
 
 ### Adding a Connector
 
-1. Create the per-connector external technical user in the Cofinity-X Portal (**Identity Wallet Management** role) and note its service account ID.
-2. Add `connectors/connector-<id>.yaml` referencing that ID.
-3. Commit and push. The pipeline provisions the connector, stores its OAuth client secret, and registers it in the portal.
+1. Add `connectors/connector-<id>.yaml`.
+2. Commit and push. The pipeline creates the connector's technical user, registers it in the portal, and provisions the connector.
 
 ### Removing a Connector
 
 1. Delete `connectors/connector-<id>.yaml`.
-2. Commit and push. The pipeline deregisters the connector from the portal and destroys its stack.
+2. Commit and push. The pipeline destroys its stack, which deletes the portal registration together with the technical user.
 
 > [!NOTE]
-> If the connector's resolved `stateRemovalPolicy` is `RETAIN` (the default), its DynamoDB table and S3 bucket are retained (not deleted) for data preservation; delete them manually if no longer needed. The manually-created portal technical user is also left in place.
+> If the connector's resolved `stateRemovalPolicy` is `RETAIN` (the default), its DynamoDB table and S3 bucket are retained (not deleted) for data preservation; delete them manually if no longer needed.
 
 ## Teardown
 

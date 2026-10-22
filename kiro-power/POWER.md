@@ -265,18 +265,18 @@ The MCP server refreshes AWS credentials on every request, so temporary credenti
 
 ## Configuration Reference
 
-### EDC Identity Settings (from Cofinity-X Portal)
+### EDC Identity Settings (derived)
 
-These values are the deployment-wide default, configured once in the `portal.identity` section of `deployment.yaml`; a connector may override any of them under its own `portal.identity` to host multiple organizations (BPNLs) in one deployment. The pipeline reads each connector's technical-user credentials from the portal (referenced by `serviceAccountId` in the connector YAML) and assembles the rest of the EDC identity automatically.
+The pipeline derives each connector's EDC identity; none of it is configured. The BPN comes from `bpnl` in the connector file, else `portal.bpnl` in `deployment.yaml`.
 
-| YAML Field (`portal.identity`) | EDC Property | Description |
-|------|------|-------------|
-| `trustedIssuer` | `edc.iam.trusted-issuer.issuer-1.id` | Trusted issuer DID (Cofinity-X) |
-| `stsOauthTokenUrl` | `edc.iam.sts.oauth.token.url` | OAuth token endpoint URL |
-| `stsDimUrl` | `tx.edc.iam.sts.dim.url` | DIM integration service URL |
-| `participantId` | `tractusx.edc.participant.bpn` | Your organization's BPN |
-| `dcpId` | `edc.iam.issuer.id` | Your organization's Decentralized Identifier (DID) |
-| `didResolver` | `tx.edc.iam.iatp.bdrs.server.url` | BDRS server URL for DID resolution |
+| EDC Property | Source |
+|------|-------------|
+| `tractusx.edc.participant.bpn` | The connector's BPN |
+| `edc.iam.issuer.id` | Company DID the portal hosts for the BPN |
+| `edc.iam.trusted-issuer.issuer-1.id` | Portal operator DID (per portal environment) |
+| `tx.edc.iam.iatp.bdrs.server.url` | BDRS URL (per portal environment) |
+| `tx.edc.iam.sts.dim.url` | Wallet (DIM) service URL (per portal environment) |
+| `edc.iam.sts.oauth.client.id`, `edc.iam.sts.oauth.token.url` | The connector's technical user |
 
 ### AWS Resource Settings
 

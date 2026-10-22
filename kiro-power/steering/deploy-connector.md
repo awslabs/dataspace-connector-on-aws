@@ -28,11 +28,9 @@ Ask the user which AWS region to deploy to (default `eu-central-1`). Store it; i
 
 ## Phase 3: Cofinity-X Portal Setup
 
-These steps are done by the user in the Cofinity-X Portal. See `docs/obtaining-edc-identity-credentials.md` for a screenshot walkthrough.
+This step is done by the user in the Cofinity-X Portal and AWS Secrets Manager. See `docs/cofinity-x-portal-setup.md`.
 
-1. **Admin technical user (once per organization).** Create a technical user with the **Offer Management** and **Dataspace Discovery** roles. The pipeline authenticates as this user to read per-connector credentials and register connectors. You add its Client ID and Secret to AWS Secrets Manager after the first deploy (Phase 5).
-2. **Per-connector technical user.** For each connector, create a technical user with the **Identity Wallet Management** role, wait for its status to become `ACTIVE`, and copy its **service account ID** (the `ID` field on the Technical User Details page).
-3. **Organization identity values.** From the portal's "Configure Your Connector" dialog, collect the values: trusted issuer, OAuth token URL, DIM URL, participant Business Partner Number (BPN), organization Decentralized Identifier (DID), and BPN/DID Resolution Service (BDRS) URL. These are the deployment-wide default; a connector may override any of them under its own `portal.identity` for multi-organization deployments.
+**Admin technical user (once per organization).** Create an internal technical user with only the **Connector Management** role, and store its Client ID and Secret as `{"clientId":"...","clientSecret":"..."}` in the Secrets Manager secret `DataspaceConnector/portal-admin/<BPNL>` before the first deploy. The pipeline authenticates as this user to create each connector's technical user and register the connector; nothing else is created in the portal by hand.
 
 ---
 
@@ -42,7 +40,7 @@ The pipeline seeds its configuration repository from `cdk/config-templates/` on 
 
 ### `cdk/config-templates/deployment.yaml`
 
-Set the profile, VPC CIDR, the IAM principal ARN(s) from Phase 1, and the `portal` section with the organization identity values from Phase 3:
+Set the profile, VPC CIDR, the IAM principal ARN(s) from Phase 1, and the `portal` section with the organization's BPNL:
 
 ```yaml
 profile: development
@@ -53,19 +51,13 @@ managementApiPrincipals:
 observabilityApiPrincipals:
   - "<user-provided-arn>"
 portal:
-  environment: beta          # "beta" or "production"
-  identity:
-    trustedIssuer: "<did:web:...>"
-    stsOauthTokenUrl: "<oauth-token-url>"
-    stsDimUrl: "<dim-url>"
-    participantId: "<BPNL...>"
-    dcpId: "<did:web:...>"
-    didResolver: "<bdrs-url>"
+  environment: beta          # only "beta" is supported yet
+  bpnl: "<BPNL...>"          # default BPNL of every connector
 ```
 
 ### `cdk/config-templates/connectors/connector-<id>.yaml`
 
-One file per connector. Reference the per-connector technical user by its service account ID. The pipeline reads that user's credentials and fills in the EDC identity, so no `edcIam` block is authored here.
+One file per connector. The pipeline creates the connector's technical user and derives its EDC identity, so no identity is authored here. Set `bpnl` only for a connector of a different organization than `portal.bpnl`.
 
 ```yaml
 connectorId: <user-chosen-id>
@@ -77,7 +69,6 @@ dataPlaneMemoryLimitMiB: 512
 interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-flow
 backgroundStateMachineIterationMillis: "60000"  # policy monitor + data-plane selector
 # stateRemovalPolicy: DESTROY  # Optional; default RETAIN keeps the connector's DynamoDB table and S3 bucket on deletion
-serviceAccountId: "<service-account-id-from-phase-3>"
 ```
 
 `connectorId` must be 2-60 characters, lowercase alphanumeric and hyphens, and cannot start or end with a hyphen. Replace the example template file (`connector-example.yaml`) with the real connector file(s).
@@ -97,11 +88,11 @@ export AWS_REGION=<chosen-region>
 `deploy.sh` installs dependencies, bootstraps the account, deploys `DataspaceConnectorPipelineStack`, and seeds the CodeCommit config repository (`DataspaceConnector-config`) from the templates.
 
 The pipeline then runs automatically:
-1. **Synth** reads each connector's client ID from the portal and assembles its EDC identity. A connector whose organization's admin secret is not yet populated stays pending.
-2. **Deploy** creates `DataspaceConnector-SharedInfra` and, once identities are available, a `DataspaceConnector-Connector-<connectorId>` stack per connector. The shared-infra deploy also creates an empty admin secret `DataspaceConnector/portal-admin/<BPNL>` for each organization in the config.
-3. **PortalFinalization** writes each connector's OAuth secret to Secrets Manager and registers it in the portal.
+1. **Synth** builds the EDC images and synthesizes the stacks.
+2. **Deploy** creates `DataspaceConnector-SharedInfra` and a `DataspaceConnector-Connector-<connectorId>` stack per connector. Each connector stack creates the connector's technical user in the portal, waits until the portal has provisioned it (several minutes on first deploy), stores its OAuth secret, and registers the connector for discovery.
+3. **PortalFinalization** publishes BaSyx DTR offers and deletes the stacks of removed connectors.
 
-Complete the admin credentials after the first run: set each `DataspaceConnector/portal-admin/<BPNL>` secret to `{"clientId":"...","clientSecret":"..."}`, then release the pipeline again (or push a config change). Connector OAuth client secrets are written automatically; only the admin secret is entered by hand. Monitor progress with `aws codepipeline get-pipeline-state --name DataspaceConnectorPipeline --region <region>`.
+Monitor progress with `aws codepipeline get-pipeline-state --name DataspaceConnectorPipeline --region <region>`.
 
 Ongoing changes (adding or removing connectors, upgrading `appVersion`) are made by pushing to the configuration repository, not by editing the templates again.
 

@@ -2,13 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { resolve } from "path";
-import {
-  CfnOutput,
-  IgnoreMode,
-  RemovalPolicy,
-  Stack,
-  StackProps,
-} from "aws-cdk-lib";
+import { CfnOutput, IgnoreMode, Stack, StackProps } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import { Certificate } from "aws-cdk-lib/aws-certificatemanager";
 import { HostedZone } from "aws-cdk-lib/aws-route53";
@@ -34,24 +28,18 @@ import { Cluster, ContainerInsights, ICluster } from "aws-cdk-lib/aws-ecs";
 import { DockerImageAsset, Platform } from "aws-cdk-lib/aws-ecr-assets";
 import { VpcLink } from "aws-cdk-lib/aws-apigatewayv2";
 
-import { Secret } from "aws-cdk-lib/aws-secretsmanager";
-
-import {
-  deriveAdminSecretName,
-  DeploymentYaml,
-  toPrincipals,
-} from "./config/config";
+import { DeploymentYaml, toPrincipals } from "./config/config";
 import {
   CONTROL_PLANE_PORT_MAPPING_DEFAULT,
   DATA_PLANE_PORT_MAPPING_DEFAULT,
 } from "./config/port-mappings";
 import { EdcApi } from "./constructs/edc-api";
 import { EdcSecretCleanup } from "./constructs/edc-secret-cleanup";
+import { PortalConnectorProvider } from "./constructs/portal-connector";
 import { BASYX_PORT } from "./basyx/names";
 
 export interface SharedInfraStackProps extends StackProps {
   readonly config: DeploymentYaml;
-  readonly adminBpnls: string[];
   readonly deploymentName: string;
 }
 
@@ -65,6 +53,7 @@ export class SharedInfraStack extends Stack {
   readonly dataPlaneUrl: string;
   readonly dspUrl: string;
   readonly managementUrl: string;
+  readonly portalConnectorServiceToken: string;
   readonly ecsCluster: ICluster;
   readonly listenerArns: { [port: number]: string };
   readonly vpc: IVpc;
@@ -216,17 +205,11 @@ export class SharedInfraStack extends Stack {
 
     new EdcSecretCleanup(this, "EdcSecretCleanup");
 
-    // Per-tenant portal admin secret placeholders (one per BPNL). Created empty
-    // for the operator to populate out-of-band; CDK owns their lifecycle and
-    // deletes one when its BPNL leaves the active set. The set is the union of
-    // config BPNLs and live DDB orgKeys, emitted by provision.
-    for (const bpnl of props.adminBpnls) {
-      new Secret(this, `PortalAdmin${bpnl}`, {
-        secretName: deriveAdminSecretName(props.deploymentName, bpnl),
-        description: `Cofinity-X portal admin credentials for BPNL ${bpnl} (JSON: clientId, clientSecret). Populate out-of-band.`,
-        removalPolicy: RemovalPolicy.DESTROY,
-      });
-    }
+    this.portalConnectorServiceToken = new PortalConnectorProvider(
+      this,
+      "PortalConnectorProvider",
+      props.deploymentName,
+    ).serviceToken;
 
     new CfnOutput(this, "VpcId", { value: this.vpc.vpcId });
     new CfnOutput(this, "ClusterArn", { value: this.ecsCluster.clusterArn });

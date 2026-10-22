@@ -11,7 +11,6 @@ import {
   resolveDeploymentName,
   validateDeploymentName,
 } from "./config/config";
-import { readActiveBpnls, readResolvedEdcIam } from "./portal/provision-output";
 
 const app = new App();
 
@@ -23,8 +22,6 @@ const configPath = app.node.tryGetContext("config-path")
 
 const pipelineConfig = loadPipelineConfig(configPath);
 const deploymentConfig = loadDeploymentConfig(configPath);
-const resolvedEdcIam = readResolvedEdcIam(configPath);
-const activeBpnls = readActiveBpnls(configPath);
 
 const deploymentName = resolveDeploymentName(pipelineConfig);
 validateDeploymentName(deploymentName);
@@ -32,8 +29,6 @@ validateDeploymentName(deploymentName);
 new PipelineStack(app, `${deploymentName}PipelineStack`, {
   pipelineConfig,
   deploymentConfig,
-  resolvedEdcIam,
-  activeBpnls,
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION,

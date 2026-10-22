@@ -24,9 +24,11 @@ import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import {
   ConnectorYaml,
   DeploymentYaml,
-  EdcIam,
   EDC_SECRETS_MANAGER_ALIASES,
+  connectorBpnl,
+  deriveAdminSecretName,
   deriveConnectorTableName,
+  deriveEdcIam,
   deriveSecretPrefix,
   resolveStateRemovalPolicy,
   toEdcIamEnvVars,
@@ -42,6 +44,7 @@ import { EdcControlPlane } from "./constructs/edc-control-plane";
 import { EdcDataPlane } from "./constructs/edc-data-plane";
 import { EdcDdb } from "./constructs/edc-ddb";
 import { EdcTokenKeyPair } from "./constructs/edc-token-key-pair";
+import { PortalConnector } from "./constructs/portal-connector";
 
 import { SharedInfraStack } from "./shared-infra-stack";
 
@@ -50,7 +53,6 @@ export interface ConnectorStackProps extends StackProps {
   readonly deployment: DeploymentYaml;
   readonly sharedInfra: SharedInfraStack;
   readonly priority: number;
-  readonly edcIam: EdcIam;
   readonly deploymentName: string;
 }
 
@@ -65,8 +67,6 @@ export class ConnectorStack extends Stack {
     const removalPolicy = toRemovalPolicy(
       resolveStateRemovalPolicy(deployment, connector.stateRemovalPolicy),
     );
-
-    const edcIamEnvVars = toEdcIamEnvVars(props.edcIam);
 
     const cpPorts = CONTROL_PLANE_PORT_MAPPING_DEFAULT;
     const dpPorts = DATA_PLANE_PORT_MAPPING_DEFAULT;
@@ -85,10 +85,29 @@ export class ConnectorStack extends Stack {
     });
 
     const secretPrefix = deriveSecretPrefix(deploymentName, connectorId);
-    new Secret(this, "EdcOauthClientSecret", {
+    const oauthSecret = new Secret(this, "EdcOauthClientSecret", {
       secretName: `${secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.DCP_STS_OAUTH_CLIENT_SECRET_ALIAS}`,
       description: `EDC OAuth client secret for connector ${connectorId}`,
     });
+
+    // Registers the connector at the portal and creates its technical user.
+    const bpnl = connectorBpnl(deployment, connector);
+    const portal = new PortalConnector(this, "PortalConnector", {
+      serviceToken: infra.portalConnectorServiceToken,
+      properties: {
+        Environment: deployment.portal.environment,
+        Bpnl: bpnl,
+        ConnectorName: connectorId,
+        ConnectorUrl: `${infra.dspUrl}${connectorId}`,
+        TechnicalUserName: `${deploymentName}-${connectorId}`,
+        AdminSecretName: deriveAdminSecretName(deploymentName, bpnl),
+        OauthSecretName: oauthSecret.secretName,
+      },
+    });
+    portal.node.addDependency(oauthSecret);
+    const edcIamEnvVars = toEdcIamEnvVars(
+      deriveEdcIam(deployment.portal.environment, bpnl, portal),
+    );
 
     new EdcTokenKeyPair(this, "EdcTokenKeyPair", {
       privateKeySecretName: `${secretPrefix}${EDC_SECRETS_MANAGER_ALIASES.TOKEN_SIGNER_PRIVATE_KEY}`,

@@ -343,7 +343,7 @@ aws cloudformation describe-stacks --stack-name DataspaceConnector-Connector-<co
     --query "Stacks[0].Outputs[?OutputKey=='EdcDataPlaneBucketName'].OutputValue" --output text
 ```
 
-**Business Partner Number (BPN):** the organization BPN is the `participantId` under `portal.identity` in `deployment.yaml` in the configuration repository. It is the deployment-wide default (a connector may override it under its own `portal.identity`). Fetch it from CodeCommit:
+**Business Partner Number (BPN):** the connector's `bpnl` in its connector file, else `portal.bpnl` in `deployment.yaml` in the configuration repository. Fetch it from CodeCommit:
 
 ```bash
 aws codecommit get-file --repository-name DataspaceConnector-config \

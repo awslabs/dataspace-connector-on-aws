@@ -19,7 +19,6 @@ import {
 } from "aws-cdk-lib/pipelines";
 
 import { DeploymentStage } from "./deployment-stage";
-import { ConnectorStateTable } from "./constructs/connector-state-table";
 import {
   basyxStackName,
   DeploymentConfig,
@@ -27,28 +26,10 @@ import {
   resolveDeploymentName,
 } from "./config/config";
 import { resolve } from "path";
-import { ResolvedEdcIam } from "./portal/provision-output";
-
-/** Least-privilege DynamoDB access to the connector state table for a pipeline step. */
-function stateTablePolicy(stateTable: ConnectorStateTable): PolicyStatement {
-  return new PolicyStatement({
-    effect: Effect.ALLOW,
-    actions: [
-      "dynamodb:GetItem",
-      "dynamodb:PutItem",
-      "dynamodb:UpdateItem",
-      "dynamodb:DeleteItem",
-      "dynamodb:Query",
-    ],
-    resources: [stateTable.table.tableArn],
-  });
-}
 
 export interface PipelineStackProps extends StackProps {
   readonly pipelineConfig: PipelineYaml;
   readonly deploymentConfig: DeploymentConfig;
-  readonly resolvedEdcIam: ResolvedEdcIam;
-  readonly activeBpnls: string[];
 }
 
 export class PipelineStack extends Stack {
@@ -58,12 +39,6 @@ export class PipelineStack extends Stack {
     const config = props.pipelineConfig;
     const deploymentName = resolveDeploymentName(config);
     const stageId = deploymentName;
-
-    const stateTable = new ConnectorStateTable(
-      this,
-      "ConnectorState",
-      `${deploymentName}-connector-state`,
-    );
 
     if (
       config.configSource === "github" &&
@@ -89,10 +64,6 @@ export class PipelineStack extends Stack {
     const synth = new CodeBuildStep("Synth", {
       input: configSource,
       buildEnvironment: { buildImage: LinuxBuildImage.STANDARD_7_0 },
-      env: {
-        STATE_TABLE_NAME: stateTable.table.tableName,
-        DEPLOYMENT_NAME: deploymentName,
-      },
       installCommands: ["n 24"],
       commands: [
         `APP_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('pipeline.yaml'))['appVersion'])")`,
@@ -101,21 +72,9 @@ export class PipelineStack extends Stack {
         `cd app && git checkout "$APP_VERSION"`,
         `cd edc && ./gradlew clean shadowJar`,
         `cd ../cdk && npm ci --ignore-scripts && npx tsc`,
-        // Populate each connector's edcIam from the portal before synth.
-        `node dist/portal/provision.js --config-path=../..`,
         `npx cdk synth --app 'node dist/app.js' --context config-path=../..`,
       ],
       primaryOutputDirectory: "app/cdk/build/cdk.out",
-      rolePolicyStatements: [
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          actions: ["secretsmanager:GetSecretValue"],
-          resources: [
-            `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${deploymentName}/portal-admin/*`,
-          ],
-        }),
-        stateTablePolicy(stateTable),
-      ],
     });
 
     const cdkBundle = synth.addOutputDirectory("app/cdk");
@@ -137,51 +96,80 @@ export class PipelineStack extends Stack {
     const stage = pipeline.addStage(
       new DeploymentStage(this, stageId, {
         config: props.deploymentConfig,
-        resolvedEdcIam: props.resolvedEdcIam,
-        activeBpnls: props.activeBpnls,
         deploymentName,
       }),
     );
 
+    const recover = this.recoverFailedStacksStep(deploymentName);
     if (config.requireApproval) {
-      stage.addPre(new ManualApprovalStep("Approve"));
+      const approve = new ManualApprovalStep("Approve");
+      recover.addStepDependency(approve);
+      stage.addPre(approve);
     }
+    stage.addPre(recover);
 
     stage.addPost(
-      this.portalFinalizationStep(
-        configSource,
-        cdkBundle,
-        stateTable,
-        deploymentName,
-      ),
+      this.portalFinalizationStep(configSource, cdkBundle, deploymentName),
     );
   }
 
+  private stackArn(stackName: string): string {
+    return `arn:aws:cloudformation:${this.region}:${this.account}:stack/${stackName}/*`;
+  }
+
   /**
-   * Post-deploy finalization: writes OAuth secrets, registers new connectors,
-   * and cleans up orphans (portal deregistration + stack deletion). Reuses the
-   * compiled CDK bundle from Synth — no clone or rebuild.
+   * Deletes connector and BaSyx stacks left in ROLLBACK_COMPLETE by a failed
+   * first create. CloudFormation accepts no change set for such a stack, so
+   * without this every later run fails in Prepare. The stack holds no
+   * resources, and its rollback already removed the portal registration.
+   */
+  private recoverFailedStacksStep(deploymentName: string): CodeBuildStep {
+    const connectors = `${deploymentName}-Connector-`;
+    const basyx = basyxStackName(deploymentName, "");
+    return new CodeBuildStep("RecoverFailedStacks", {
+      commands: [
+        `STACKS=$(aws cloudformation list-stacks --stack-status-filter ROLLBACK_COMPLETE --query "StackSummaries[?starts_with(StackName, '${connectors}') || starts_with(StackName, '${basyx}')].StackName" --output text)`,
+        `for s in $STACKS; do echo "Deleting $s (ROLLBACK_COMPLETE)"; aws cloudformation delete-stack --stack-name "$s"; aws cloudformation wait stack-delete-complete --stack-name "$s"; done`,
+      ],
+      rolePolicyStatements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          // The action has no resource-level permissions.
+          actions: ["cloudformation:ListStacks"],
+          resources: ["*"],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: [
+            "cloudformation:DeleteStack",
+            "cloudformation:DescribeStacks",
+          ],
+          resources: [
+            this.stackArn(`${connectors}*`),
+            this.stackArn(`${basyx}*`),
+          ],
+        }),
+      ],
+    });
+  }
+
+  /**
+   * Post-deploy finalization: the BaSyx DTR offers, and deletion of connector
+   * and BaSyx stacks whose config is gone (a connector stack's delete removes
+   * its portal registration). Reuses the compiled CDK bundle from Synth.
    */
   private portalFinalizationStep(
     configSource: IFileSetProducer,
     cdkBundle: FileSet,
-    stateTable: ConnectorStateTable,
     deploymentName: string,
   ): CodeBuildStep {
-    const secretArn = `arn:aws:secretsmanager:${this.region}:${this.account}:secret`;
-    const adminSecretArn = `${secretArn}:${deploymentName}/portal-admin/*`;
-    const connectorSecretArn = `${secretArn}:${deploymentName}/*/edc.iam.sts.oauth.client.secret-*`;
-    const connectorStackArn = `arn:aws:cloudformation:${this.region}:${this.account}:stack/${deploymentName}-Connector*/*`;
-    const basyxStackArn = `arn:aws:cloudformation:${this.region}:${this.account}:stack/${basyxStackName(deploymentName, "*")}/*`;
-    const sharedInfraStackArn = `arn:aws:cloudformation:${this.region}:${this.account}:stack/${deploymentName}-SharedInfra/*`;
+    const connectorStackArn = this.stackArn(`${deploymentName}-Connector-*`);
+    const basyxStackArn = this.stackArn(basyxStackName(deploymentName, "*"));
+    const sharedInfraStackArn = this.stackArn(`${deploymentName}-SharedInfra`);
 
     return new CodeBuildStep("PortalFinalization", {
       input: configSource,
       additionalInputs: { "cdk-bundle": cdkBundle },
-      env: {
-        STATE_TABLE_NAME: stateTable.table.tableName,
-        DEPLOYMENT_NAME: deploymentName,
-      },
       installCommands: ["n 24"],
       commands: [
         `node cdk-bundle/dist/portal/finalize.js --config-path=. --stack-prefix=${deploymentName}`,
@@ -189,23 +177,13 @@ export class PipelineStack extends Stack {
       rolePolicyStatements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
-          actions: ["secretsmanager:GetSecretValue"],
-          resources: [adminSecretArn],
-        }),
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          actions: ["secretsmanager:PutSecretValue"],
-          resources: [connectorSecretArn],
-        }),
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          // Read-only on SharedInfra (DSP base URL), connector and BaSyx stacks.
+          // Read-only on SharedInfra (API base URLs), connector and BaSyx stacks.
           actions: ["cloudformation:DescribeStacks"],
           resources: [sharedInfraStackArn, connectorStackArn, basyxStackArn],
         }),
         new PolicyStatement({
           effect: Effect.ALLOW,
-          // Finds orphan BaSyx stacks; the action has no resource-level permissions.
+          // Finds orphan stacks; the action has no resource-level permissions.
           actions: ["cloudformation:ListStacks"],
           resources: ["*"],
         }),
@@ -226,7 +204,6 @@ export class PipelineStack extends Stack {
             `arn:aws:execute-api:${this.region}:${this.account}:*/management/*`,
           ],
         }),
-        stateTablePolicy(stateTable),
       ],
     });
   }

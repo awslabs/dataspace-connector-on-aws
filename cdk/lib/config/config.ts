@@ -17,6 +17,13 @@ import { RemovalPolicy } from "aws-cdk-lib";
 import { ArnPrincipal, IPrincipal } from "aws-cdk-lib/aws-iam";
 import * as yaml from "js-yaml";
 
+import {
+  PORTAL_ENVIRONMENTS,
+  PortalEnvironment,
+  PortalEnvironmentSettings,
+  companyDid,
+} from "../portal-connector/client";
+
 export type DeploymentProfile = "development" | "production";
 
 export const LOG_LEVELS = [
@@ -53,19 +60,10 @@ export interface PipelineYaml {
 
 // ─── deployment.yaml ──────────────────────────────────────────────────────────
 
-export interface PortalIdentity {
-  readonly trustedIssuer: string;
-  readonly stsOauthTokenUrl: string;
-  readonly stsDimUrl: string;
-  readonly participantId: string;
-  readonly dcpId: string;
-  readonly didResolver: string;
-}
-
 export interface PortalConfig {
-  readonly environment: "beta" | "production";
-  /** Deployment-wide default identity. Each field is an optional fallback a connector may override. */
-  readonly identity?: Partial<PortalIdentity>;
+  readonly environment: PortalEnvironment;
+  /** Default BPNL of every connector; a connector may set its own. */
+  readonly bpnl?: string;
 }
 
 export interface DeploymentYaml {
@@ -109,13 +107,10 @@ export interface EdcIam {
   readonly didResolver: string;
 }
 
-/** Optional per-connector identity override, merged over the deployment default. */
-export interface ConnectorPortalOverride {
-  readonly identity?: Partial<PortalIdentity>;
-}
-
 export interface ConnectorYaml {
   readonly connectorId: string;
+  /** The connector's BPNL, overriding deployment.yaml portal.bpnl. */
+  readonly bpnl?: string;
   readonly profile?: DeploymentProfile;
   readonly controlPlaneCpu: number;
   readonly controlPlaneMemoryLimitMiB: number;
@@ -135,12 +130,8 @@ export interface ConnectorYaml {
   readonly dataPlaneFlowLeaseMillis?: string;
   /** Overrides the deployment.yaml stateRemovalPolicy for this connector's DynamoDB table and S3 bucket. */
   readonly stateRemovalPolicy?: StateRemovalPolicy;
-  /** Cofinity-X portal technical user (service account) ID, authored by the operator. */
-  readonly serviceAccountId: string;
   /** EDC log level for this connector, overriding the deployment.yaml logLevel. */
   readonly logLevel?: LogLevel;
-  /** Per-connector identity override, merged over the deployment default. */
-  readonly portal?: ConnectorPortalOverride;
 }
 
 /** Loaded deployment configuration (raw YAML, validated). */
@@ -167,16 +158,6 @@ export const EDC_SECRETS_MANAGER_ALIASES = {
   TOKEN_SIGNER_PRIVATE_KEY: "edc.transfer.proxy.token.signer.privatekey",
   TOKEN_VERIFIER_PUBLIC_KEY: "edc.transfer.proxy.token.verifier.publickey",
 };
-
-/** Identity fields required for a connector to be deployable. */
-const PORTAL_IDENTITY_KEYS: (keyof PortalIdentity)[] = [
-  "trustedIssuer",
-  "stsOauthTokenUrl",
-  "stsDimUrl",
-  "participantId",
-  "dcpId",
-  "didResolver",
-];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -219,24 +200,33 @@ export function toEdcIamEnvVars(edcIam: EdcIam): Record<string, string> {
   );
 }
 
-/** Merges the deployment-wide default identity with a connector's override. */
-export function resolveConnectorIdentity(
+/** A connector's BPNL: its own, else the deployment default. The loader guarantees one. */
+export function connectorBpnl(
   deployment: DeploymentYaml,
   connector: ConnectorYaml,
-): Partial<PortalIdentity> {
-  return {
-    ...(deployment.portal.identity ?? {}),
-    ...(connector.portal?.identity ?? {}),
-  };
+): string {
+  return (connector.bpnl ?? deployment.portal.bpnl)!;
 }
 
-/** True when every identity field required for deployment is present and non-empty. */
-export function isIdentityComplete(
-  identity: Partial<PortalIdentity>,
-): identity is PortalIdentity {
-  return PORTAL_IDENTITY_KEYS.every(
-    (key) => typeof identity[key] === "string" && identity[key] !== "",
-  );
+/**
+ * A connector's EDC identity. Everything but the technical user's client id and
+ * token URL follows from the portal environment and the BPNL.
+ */
+export function deriveEdcIam(
+  environment: PortalEnvironment,
+  bpnl: string,
+  technicalUser: { clientId: string; stsOauthTokenUrl: string },
+): EdcIam {
+  const settings: PortalEnvironmentSettings = PORTAL_ENVIRONMENTS[environment];
+  return {
+    trustedIssuer: settings.trustedIssuer,
+    stsOauthTokenUrl: technicalUser.stsOauthTokenUrl,
+    stsOauthClientId: technicalUser.clientId,
+    stsDimUrl: settings.stsDimUrl!,
+    participantId: bpnl,
+    dcpId: companyDid(environment, bpnl),
+    didResolver: settings.didResolver,
+  };
 }
 
 export const DEFAULT_DEPLOYMENT_NAME = "DataspaceConnector";
@@ -305,17 +295,6 @@ interface KeySpec {
 
 const LEAF: KeySpec = {};
 
-const IDENTITY_KEY_SPEC: KeySpec = {
-  keys: {
-    trustedIssuer: LEAF,
-    stsOauthTokenUrl: LEAF,
-    stsDimUrl: LEAF,
-    participantId: LEAF,
-    dcpId: LEAF,
-    didResolver: LEAF,
-  } satisfies Record<keyof PortalIdentity, KeySpec>,
-};
-
 const PIPELINE_KEY_SPEC: KeySpec = {
   keys: {
     appRepo: LEAF,
@@ -342,7 +321,7 @@ const DEPLOYMENT_KEY_SPEC: KeySpec = {
     portal: {
       keys: {
         environment: LEAF,
-        identity: IDENTITY_KEY_SPEC,
+        bpnl: LEAF,
       } satisfies Record<keyof PortalConfig, KeySpec>,
     },
     stateRemovalPolicy: LEAF,
@@ -362,6 +341,7 @@ const DEPLOYMENT_KEY_SPEC: KeySpec = {
 const CONNECTOR_KEY_SPEC: KeySpec = {
   keys: {
     connectorId: LEAF,
+    bpnl: LEAF,
     profile: LEAF,
     controlPlaneCpu: LEAF,
     controlPlaneMemoryLimitMiB: LEAF,
@@ -371,13 +351,7 @@ const CONNECTOR_KEY_SPEC: KeySpec = {
     backgroundStateMachineIterationMillis: LEAF,
     dataPlaneFlowLeaseMillis: LEAF,
     stateRemovalPolicy: LEAF,
-    serviceAccountId: LEAF,
     logLevel: LEAF,
-    portal: {
-      keys: {
-        identity: IDENTITY_KEY_SPEC,
-      } satisfies Record<keyof ConnectorPortalOverride, KeySpec>,
-    },
   } satisfies Record<keyof ConnectorYaml, KeySpec>,
 };
 
@@ -433,9 +407,8 @@ export function basyxEntries(config: DeploymentConfig): ResolvedBasyx[] {
     .map(([bpnl, entry]) => {
       const dtrConnectorId =
         entry.dtrConnector ??
-        connectors.find(
-          (c) => resolveConnectorIdentity(deployment, c).participantId === bpnl,
-        )!.connectorId;
+        connectors.find((c) => connectorBpnl(deployment, c) === bpnl)!
+          .connectorId;
       return { bpnl, entry, dtrConnectorId };
     });
 }
@@ -449,9 +422,7 @@ export function basyxStackName(stackPrefix: string, bpnl: string): string {
 
 /**
  * Loads and validates deployment configuration from YAML files at configPath.
- * Throws if required files or fields are missing. Deploy-gating (which
- * connectors reached IDENTITY_READY) is applied by the deployment stage using
- * provision's ephemeral edcIam map, not here.
+ * Throws if required files or fields are missing.
  */
 export function loadDeploymentConfig(configPath: string): DeploymentConfig {
   const deploymentPath = join(configPath, "deployment.yaml");
@@ -484,6 +455,13 @@ export function loadDeploymentConfig(configPath: string): DeploymentConfig {
     ) as ConnectorYaml;
     rejectUnknownKeys(connector, CONNECTOR_KEY_SPEC, `connectors/${file}`);
     validateConnector(connector, file);
+    if (connector.bpnl !== undefined) {
+      validateBpnl(connector.bpnl, `connectors/${file}`, "bpnl");
+    } else if (deployment.portal.bpnl === undefined) {
+      throw new Error(
+        `connectors/${file}: no BPNL. Set bpnl here or portal.bpnl in deployment.yaml.`,
+      );
+    }
     validateStateRemovalPolicy(
       connector.stateRemovalPolicy,
       `connectors/${file}`,
@@ -527,8 +505,22 @@ function validateDeployment(data: DeploymentYaml, filePath: string): void {
     );
   }
   validateProfile(data.profile, filePath, "profile");
-  if (!data.portal.environment) {
-    throw new Error(`${filePath}: portal section requires 'environment'`);
+  const environment: unknown = data.portal.environment;
+  if (!Object.keys(PORTAL_ENVIRONMENTS).includes(String(environment))) {
+    throw new Error(
+      `${filePath}: portal.environment must be "beta" or "production", got "${String(environment)}"`,
+    );
+  }
+  if (
+    !(PORTAL_ENVIRONMENTS[data.portal.environment] as PortalEnvironmentSettings)
+      .stsDimUrl
+  ) {
+    throw new Error(
+      `${filePath}: portal.environment "${data.portal.environment}" is not supported yet: its wallet (DIM) service URL is unknown.`,
+    );
+  }
+  if (data.portal.bpnl !== undefined) {
+    validateBpnl(data.portal.bpnl, filePath, "portal.bpnl");
   }
   validateLogLevel(data.logLevel, filePath);
   validateStateRemovalPolicy(
@@ -545,7 +537,6 @@ function validateConnector(data: ConnectorYaml, fileName: string): void {
     "controlPlaneMemoryLimitMiB",
     "dataPlaneCpu",
     "dataPlaneMemoryLimitMiB",
-    "serviceAccountId",
   ];
   const missing = required.filter(
     (key) => data[key] === undefined || data[key] === null,
@@ -598,6 +589,12 @@ function validateStateRemovalPolicy(
 
 const BPNL_PATTERN = /^BPNL[0-9A-Z]{12}$/;
 
+function validateBpnl(value: unknown, file: string, path: string): void {
+  if (typeof value !== "string" || !BPNL_PATTERN.test(value)) {
+    throw new Error(`${file}: ${path} '${String(value)}' is not a valid BPNL`);
+  }
+}
+
 /** Validates the deployment.yaml basyx block against the loaded connectors. */
 function validateBasyx(
   deployment: DeploymentYaml,
@@ -609,8 +606,7 @@ function validateBasyx(
   if (!isPlainObject(basyx)) {
     throw new Error(`${file}: basyx must be a map keyed by BPNL`);
   }
-  const bpnlOf = (c: ConnectorYaml) =>
-    resolveConnectorIdentity(deployment, c).participantId;
+  const bpnlOf = (c: ConnectorYaml) => connectorBpnl(deployment, c);
 
   for (const [bpnl, raw] of Object.entries(basyx)) {
     const at = `basyx.${bpnl}`;
@@ -645,7 +641,7 @@ function validateBasyx(
     );
     if (!connectors.some((c) => bpnlOf(c) === bpnl)) {
       throw new Error(
-        `${file}: ${at}: no connector in this deployment has participantId ${bpnl}`,
+        `${file}: ${at}: no connector in this deployment has BPNL ${bpnl}`,
       );
     }
     if (entry.dtrConnector !== undefined) {

@@ -11,24 +11,12 @@ import {
   DeploymentConfig,
   loadDeploymentConfig,
 } from "../lib/config/config";
+import { ConnectorStack } from "../lib/connector-stack";
 import { DeploymentStage } from "../lib/deployment-stage";
-import { ResolvedEdcIam } from "../lib/portal/provision-output";
 
 const BPNL = "BPNL00000007J65N";
 const CONFIG_PATH = join(__dirname, "..", "config-templates");
 const env = { account: "111111111111", region: "eu-central-1" };
-
-const edcIam: ResolvedEdcIam = {
-  example: {
-    trustedIssuer: "did:web:issuer",
-    stsOauthTokenUrl: "https://sts.example/token",
-    stsOauthClientId: "client",
-    stsDimUrl: "https://dim.example",
-    participantId: BPNL,
-    dcpId: "did:web:dcp",
-    didResolver: "https://bdrs.example",
-  },
-};
 
 function config(basyx: boolean): DeploymentConfig {
   const loaded = loadDeploymentConfig(CONFIG_PATH);
@@ -36,45 +24,41 @@ function config(basyx: boolean): DeploymentConfig {
     ...loaded,
     deployment: {
       ...loaded.deployment,
-      portal: {
-        ...loaded.deployment.portal,
-        identity: { ...loaded.deployment.portal.identity, participantId: BPNL },
-      },
+      portal: { ...loaded.deployment.portal, bpnl: BPNL },
       ...(basyx ? { basyx: { [BPNL]: { services: ["dtr"] } } } : {}),
     },
   };
 }
 
-function stage(basyx: boolean, resolved: ResolvedEdcIam): DeploymentStage {
+function stage(basyx: boolean): DeploymentStage {
   const host = new Stack(new App(), "Host", { env });
   return new DeploymentStage(host, "DataspaceConnector", {
     config: config(basyx),
-    resolvedEdcIam: resolved,
-    activeBpnls: [BPNL],
     deploymentName: "DataspaceConnector",
     env,
   });
 }
+
+const connectorStacks = (s: DeploymentStage) =>
+  s.node.children.filter(
+    (c): c is ConnectorStack => c instanceof ConnectorStack,
+  );
 
 const basyxStacks = (s: DeploymentStage) =>
   s.node.children.filter((c): c is BasyxStack => c instanceof BasyxStack);
 
 describe("DeploymentStage BaSyx wiring", () => {
   test("no basyx block: no BaSyx stack", () => {
-    expect(basyxStacks(stage(false, edcIam))).toHaveLength(0);
+    expect(basyxStacks(stage(false))).toHaveLength(0);
   });
 
   test("basyx entry: one BaSyx stack, depending on SharedInfra only", () => {
-    const s = stage(true, edcIam);
+    const s = stage(true);
     const [basyx] = basyxStacks(s);
     expect(basyx.stackName).toBe(basyxStackName("DataspaceConnector", BPNL));
     // Dependencies come from cross-stack references, which resolve at synth.
     s.synth();
     expect(basyx.dependencies.map((d) => d.node.id)).toEqual(["SharedInfra"]);
-  });
-
-  test("dtrConnector not deployed this run: BaSyx still deployed", () => {
-    expect(basyxStacks(stage(true, {}))).toHaveLength(1);
   });
 
   test("basyx profile overrides the deployment profile", () => {
@@ -90,8 +74,6 @@ describe("DeploymentStage BaSyx wiring", () => {
             basyx: { [BPNL]: { services: ["dtr"], profile } },
           },
         },
-        resolvedEdcIam: edcIam,
-        activeBpnls: [BPNL],
         deploymentName: "DataspaceConnector",
         env,
       });
@@ -112,7 +94,7 @@ describe("DeploymentStage BaSyx wiring", () => {
     const second = {
       ...base.connectors[0],
       connectorId: "second",
-      portal: { identity: { participantId: OTHER } },
+      bpnl: OTHER,
     };
     const host = new Stack(new App(), "Host", { env });
     const s = new DeploymentStage(host, "DataspaceConnector", {
@@ -126,11 +108,6 @@ describe("DeploymentStage BaSyx wiring", () => {
           },
         },
       },
-      resolvedEdcIam: {
-        ...edcIam,
-        second: { ...edcIam.example, participantId: OTHER },
-      },
-      activeBpnls: [BPNL, OTHER],
       deploymentName: "DataspaceConnector",
       env,
     });
@@ -155,5 +132,47 @@ describe("DeploymentStage BaSyx wiring", () => {
     // 5 names, plus priority and path of 2 services on 2 listeners each.
     expect(names[0]).toHaveLength(13);
     expect(names[0].filter((n) => names[1].includes(n))).toEqual([]);
+  });
+});
+
+describe("DeploymentStage portal lifecycle", () => {
+  const s = stage(false);
+  const [connector] = connectorStacks(s);
+  const template = Template.fromStack(connector);
+
+  test("every connector deploys, with one PortalConnector resource", () => {
+    expect(connectorStacks(s)).toHaveLength(1);
+    template.resourceCountIs("Custom::PortalConnector", 1);
+    template.hasResourceProperties("Custom::PortalConnector", {
+      Environment: "beta",
+      Bpnl: BPNL,
+      ConnectorName: "example",
+      TechnicalUserName: "DataspaceConnector-example",
+      AdminSecretName: `DataspaceConnector/portal-admin/${BPNL}`,
+    });
+  });
+
+  test("EDC identity: derived values and the technical user's attributes", () => {
+    const [taskDef] = Object.values(
+      template.findResources("AWS::ECS::TaskDefinition"),
+    );
+    const vars = Object.fromEntries(
+      taskDef.Properties.ContainerDefinitions[0].Environment.map(
+        (e: { Name: string; Value: unknown }) => [e.Name, e.Value],
+      ),
+    );
+    expect(vars["tractusx.edc.participant.bpn"]).toBe(BPNL);
+    expect(vars["edc.iam.issuer.id"]).toBe(
+      `did:web:portal-backend.beta.cofinity-x.com:api:administration:staticdata:did:${BPNL}`,
+    );
+    expect(vars["edc.iam.sts.oauth.client.id"]).toEqual({
+      "Fn::GetAtt": [expect.stringMatching(/^PortalConnector/), "ClientId"],
+    });
+    expect(vars["edc.iam.sts.oauth.token.url"]).toEqual({
+      "Fn::GetAtt": [
+        expect.stringMatching(/^PortalConnector/),
+        "StsOauthTokenUrl",
+      ],
+    });
   });
 });

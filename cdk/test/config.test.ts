@@ -9,8 +9,8 @@ import {
   deriveAdminSecretName,
   deriveConnectorTableName,
   deriveSecretPrefix,
-  isIdentityComplete,
-  resolveConnectorIdentity,
+  connectorBpnl,
+  deriveEdcIam,
   resolveDeploymentName,
   toEdcIamEnvVars,
   toPrincipals,
@@ -18,7 +18,6 @@ import {
   validateConnectorId,
   validateDeploymentName,
   validateLogLevel,
-  PortalIdentity,
 } from "../lib/config/config";
 import {
   basyxStackName,
@@ -33,15 +32,6 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
 import * as yaml from "js-yaml";
-
-const completeIdentity: PortalIdentity = {
-  trustedIssuer: "did:web:issuer",
-  stsOauthTokenUrl: "https://token",
-  stsDimUrl: "https://dim",
-  participantId: "BPNL00000000AAAA",
-  dcpId: "did:web:dcp",
-  didResolver: "https://bdrs",
-};
 
 describe("validateLogLevel", () => {
   test.each([undefined, "DEBUG", "INFO", "OFF"])("accepts %s", (level) => {
@@ -130,54 +120,44 @@ describe("name derivation (deploymentName isolation)", () => {
   });
 });
 
-describe("resolveConnectorIdentity", () => {
+describe("connectorBpnl", () => {
   const deployment = {
-    portal: {
-      identity: { participantId: "BPNL-DEFAULT", dcpId: "did:default" },
-    },
+    portal: { environment: "beta", bpnl: "BPNL00000000DFLT" },
   } as unknown as DeploymentYaml;
 
-  test("connector override wins field by field", () => {
-    const connector = {
-      portal: { identity: { participantId: "BPNL-OVERRIDE" } },
-    } as unknown as ConnectorYaml;
-    const merged = resolveConnectorIdentity(deployment, connector);
-    expect(merged.participantId).toBe("BPNL-OVERRIDE");
-    // Non-overridden fields fall back to the deployment default.
-    expect(merged.dcpId).toBe("did:default");
+  test("the connector's own BPNL wins", () => {
+    const connector = { bpnl: "BPNL00000000OWN1" } as unknown as ConnectorYaml;
+    expect(connectorBpnl(deployment, connector)).toBe("BPNL00000000OWN1");
   });
 
-  test("falls back entirely to the deployment default when no override", () => {
-    const connector = {} as unknown as ConnectorYaml;
-    expect(resolveConnectorIdentity(deployment, connector)).toEqual({
-      participantId: "BPNL-DEFAULT",
-      dcpId: "did:default",
-    });
-  });
-
-  test("empty when neither side defines identity", () => {
-    const bare = { portal: {} } as unknown as DeploymentYaml;
-    expect(
-      resolveConnectorIdentity(bare, {} as unknown as ConnectorYaml),
-    ).toEqual({});
+  test("falls back to the deployment default", () => {
+    expect(connectorBpnl(deployment, {} as ConnectorYaml)).toBe(
+      "BPNL00000000DFLT",
+    );
   });
 });
 
-describe("isIdentityComplete", () => {
-  test("true when all required fields are present", () => {
-    expect(isIdentityComplete(completeIdentity)).toBe(true);
+describe("deriveEdcIam", () => {
+  const iam = deriveEdcIam("beta", "BPNL00000000AAAA", {
+    clientId: "client-1",
+    stsOauthTokenUrl: "https://auth.example/oauth/token",
   });
 
-  test("false when a field is missing", () => {
-    const { didResolver, ...partial } = completeIdentity;
-    void didResolver;
-    expect(isIdentityComplete(partial)).toBe(false);
-  });
-
-  test("false when a field is an empty string", () => {
-    expect(isIdentityComplete({ ...completeIdentity, participantId: "" })).toBe(
-      false,
+  test("derives the company DID from the BPNL", () => {
+    expect(iam.dcpId).toBe(
+      "did:web:portal-backend.beta.cofinity-x.com:api:administration:staticdata:did:BPNL00000000AAAA",
     );
+    expect(iam.participantId).toBe("BPNL00000000AAAA");
+  });
+
+  test("takes the environment constants and the technical user's values", () => {
+    expect(iam.trustedIssuer).toMatch(/:did:BPNLCOFINITYEZFA$/);
+    expect(iam.didResolver).toBe(
+      "https://bdrs.beta.cofinity-x.com/api/directory",
+    );
+    expect(iam.stsDimUrl).toMatch(/^https:\/\//);
+    expect(iam.stsOauthClientId).toBe("client-1");
+    expect(iam.stsOauthTokenUrl).toBe("https://auth.example/oauth/token");
   });
 });
 
@@ -202,13 +182,15 @@ describe("connectorPriority", () => {
 
 describe("toEdcIamEnvVars", () => {
   test("maps identity fields to EDC container env var keys", () => {
-    const env = toEdcIamEnvVars({
-      ...completeIdentity,
-      stsOauthClientId: "client-1",
-    });
+    const env = toEdcIamEnvVars(
+      deriveEdcIam("beta", "BPNL00000000AAAA", {
+        clientId: "client-1",
+        stsOauthTokenUrl: "https://token",
+      }),
+    );
     expect(env["tractusx.edc.participant.bpn"]).toBe("BPNL00000000AAAA");
     expect(env["edc.iam.sts.oauth.client.id"]).toBe("client-1");
-    expect(env["edc.iam.trusted-issuer.issuer-1.id"]).toBe("did:web:issuer");
+    expect(env["edc.iam.sts.oauth.token.url"]).toBe("https://token");
   });
 });
 
@@ -241,10 +223,7 @@ const baseDeployment = (): Record<string, unknown> => ({
   containerInsights: true,
   managementApiPrincipals: [],
   observabilityApiPrincipals: [],
-  portal: {
-    environment: "beta",
-    identity: { ...completeIdentity, participantId: BPNL },
-  },
+  portal: { environment: "beta", bpnl: BPNL },
 });
 
 const baseConnector = (id: string): Record<string, unknown> => ({
@@ -253,7 +232,6 @@ const baseConnector = (id: string): Record<string, unknown> => ({
   controlPlaneMemoryLimitMiB: 1024,
   dataPlaneCpu: 256,
   dataPlaneMemoryLimitMiB: 512,
-  serviceAccountId: `sa-${id}`,
 });
 
 const tempDirs: string[] = [];
@@ -288,7 +266,7 @@ const withBasyx = (entry: Record<string, unknown>, key = BPNL) => ({
 
 const otherBpnlConnector = (id: string) => ({
   ...baseConnector(id),
-  portal: { identity: { participantId: OTHER_BPNL } },
+  bpnl: OTHER_BPNL,
 });
 
 const oneConnector = () => ({ a: baseConnector("aa") });
@@ -316,18 +294,6 @@ describe("unknown config keys", () => {
     );
   });
 
-  test("deployment.yaml nested portal.identity key", () => {
-    const d = baseDeployment();
-    (d.portal as Record<string, unknown>).identity = {
-      ...completeIdentity,
-      x: 1,
-    };
-    const dir = writeConfig(d, oneConnector());
-    expect(() => loadDeploymentConfig(dir)).toThrow(
-      "deployment.yaml: unknown key 'portal.identity.x'",
-    );
-  });
-
   test("deployment.yaml key inside a basyx entry", () => {
     const dir = writeConfig(withBasyx({ service: ["dtr"] }), oneConnector());
     expect(() => loadDeploymentConfig(dir)).toThrow(
@@ -343,14 +309,50 @@ describe("unknown config keys", () => {
       "connectors/connector-a.yaml: unknown key 'edcStateRemovalPolicy'",
     );
   });
+});
 
-  test("connector file nested portal.identity key", () => {
-    const dir = writeConfig(baseDeployment(), {
-      a: { ...baseConnector("aa"), portal: { identity: { bpn: "x" } } },
-    });
+describe("portal config", () => {
+  const portal = (p: Record<string, unknown>) => ({
+    ...baseDeployment(),
+    portal: p,
+  });
+
+  test("a connector without any BPNL is rejected", () => {
+    const dir = writeConfig(portal({ environment: "beta" }), oneConnector());
     expect(() => loadDeploymentConfig(dir)).toThrow(
-      "connectors/connector-a.yaml: unknown key 'portal.identity.bpn'",
+      "connectors/connector-a.yaml: no BPNL",
     );
+  });
+
+  test("per-connector BPNLs need no default", () => {
+    const dir = writeConfig(portal({ environment: "beta" }), {
+      a: { ...baseConnector("aa"), bpnl: BPNL },
+    });
+    expect(() => loadDeploymentConfig(dir)).not.toThrow();
+  });
+
+  test("an invalid BPNL is rejected", () => {
+    const dir = writeConfig(
+      portal({ environment: "beta", bpnl: "BPNL-1" }),
+      oneConnector(),
+    );
+    expect(() => loadDeploymentConfig(dir)).toThrow("portal.bpnl 'BPNL-1'");
+  });
+
+  test("production is not supported yet", () => {
+    const dir = writeConfig(
+      portal({ environment: "production", bpnl: BPNL }),
+      oneConnector(),
+    );
+    expect(() => loadDeploymentConfig(dir)).toThrow(/not supported yet/);
+  });
+
+  test("an unknown environment is rejected", () => {
+    const dir = writeConfig(
+      portal({ environment: "staging", bpnl: BPNL }),
+      oneConnector(),
+    );
+    expect(() => loadDeploymentConfig(dir)).toThrow(/beta" or "production/);
   });
 });
 
@@ -463,7 +465,7 @@ describe("basyx validation", () => {
 
   test("BPNL without connector", () => {
     expect(() => load({ services: ["dtr"] }, OTHER_BPNL)).toThrow(
-      `deployment.yaml: basyx.${OTHER_BPNL}: no connector in this deployment has participantId ${OTHER_BPNL}`,
+      `deployment.yaml: basyx.${OTHER_BPNL}: no connector in this deployment has BPNL ${OTHER_BPNL}`,
     );
   });
 

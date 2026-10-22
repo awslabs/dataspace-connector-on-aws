@@ -13,7 +13,6 @@ const CONFIG_PATH = join(__dirname, "..", "config-templates");
 describe("SharedInfra ALB security group", () => {
   const stack = new SharedInfraStack(new App(), "SharedInfra", {
     config: loadDeploymentConfig(CONFIG_PATH).deployment,
-    adminBpnls: [],
     deploymentName: "DataspaceConnector",
   });
   const template = Template.fromStack(stack);

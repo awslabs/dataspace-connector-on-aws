@@ -35,24 +35,14 @@ observabilityApiPrincipals:
 # domainName: "edc.example.com"
 # hostedZoneId: "Z0123456789ABCDEFGHIJ"
 
-# Cofinity-X Portal integration. The pipeline reads each connector's identity
-# credentials from the portal, populates its EDC config, stores the OAuth secret
-# in Secrets Manager, and registers the connector for discovery.
+# Cofinity-X Portal integration. For each connector the pipeline creates a
+# technical user (Identity Wallet Management role), stores its OAuth secret in
+# Secrets Manager, derives the EDC identity and registers the connector for
+# discovery. Removing a connector deletes both.
 #
-# The identity values below are the deployment-wide default, from the portal's
-# "Configure Your Connector" dialog. A connector can override them (see
-# connectors/connector-<id>.yaml) to host multiple organizations in one deployment.
-#
-# Admin technical user credentials (Offer Management + Dataspace Discovery roles)
-# live in AWS Secrets Manager: the first pipeline run creates an empty secret
-# named <deploymentName>/portal-admin/<BPNL> per organization; populate it with
-# {"clientId":"...","clientSecret":"..."} and re-run to deploy connectors.
+# Before the first push, create one secret per BPNL named
+# <deploymentName>/portal-admin/<BPNL> holding {"clientId":"...","clientSecret":"..."}
+# of a portal technical user with the Connector Management role.
 portal:
   environment: beta # "beta" or "production"
-  identity:
-    trustedIssuer: "did:web:..."
-    stsOauthTokenUrl: "https://..."
-    stsDimUrl: "https://..."
-    participantId: "BPNL..."
-    dcpId: "did:web:..."
-    didResolver: "https://..."
+  bpnl: "BPNL000000000000" # Default BPNL of every connector; a connector may set its own
