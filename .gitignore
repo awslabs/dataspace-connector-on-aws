@@ -22,3 +22,5 @@ edc/**/dynamodb-local-metadata.json
 # MCP files
 __pycache__
 .venv
+
+/aidlc
