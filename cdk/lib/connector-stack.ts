@@ -48,8 +48,8 @@ export interface ConnectorStackProps extends StackProps {
 
 /** EDC vault aliases, under the connector's secret prefix. */
 const OAUTH_CLIENT_SECRET = "edc.iam.sts.oauth.client.secret";
-const TOKEN_SIGNER_PRIVATE_KEY = "edc.transfer.proxy.token.signer.privatekey";
-const TOKEN_VERIFIER_PUBLIC_KEY = "edc.transfer.proxy.token.verifier.publickey";
+const TOKEN_SIGNER_PRIVATE_KEY = "edc.transfer.proxy.token.private-key";
+const TOKEN_VERIFIER_PUBLIC_KEY = "edc.transfer.proxy.token.public-key";
 
 export class ConnectorStack extends Stack {
   constructor(scope: Construct, id: string, props: ConnectorStackProps) {
@@ -99,7 +99,7 @@ export class ConnectorStack extends Stack {
     });
     portal.node.addDependency(oauthSecret);
 
-    new EdcTokenKeyPair(this, "EdcTokenKeyPair", {
+    const tokenKeyPair = new EdcTokenKeyPair(this, "TokenKeyPair", {
       serviceToken: infra.tokenKeyPairServiceToken,
       privateKeySecretName: `${secretPrefix}${TOKEN_SIGNER_PRIVATE_KEY}`,
       publicKeySecretName: `${secretPrefix}${TOKEN_VERIFIER_PUBLIC_KEY}`,
@@ -270,6 +270,7 @@ export class ConnectorStack extends Stack {
         "tx.edc.dataplane.token.refresh.endpoint": `${dataPlanePublicUrl}token`,
       },
     });
+    controlPlane.node.addDependency(tokenKeyPair);
     dataPlane.node.addDependency(controlPlane);
 
     new CfnOutput(this, "EdcDataPlaneBucketName", {
