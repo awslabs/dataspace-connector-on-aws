@@ -20,6 +20,8 @@ import org.eclipse.edc.spi.query.CriterionOperatorRegistry
 import org.eclipse.edc.spi.system.ServiceExtension
 import org.eclipse.edc.spi.system.ServiceExtensionContext
 import org.eclipse.edc.spi.types.TypeManager
+import org.eclipse.tractusx.edc.agreements.bpns.spi.store.AgreementsBpnsStore
+import org.eclipse.tractusx.edc.agreements.retirement.spi.store.AgreementsRetirementStore
 import org.eclipse.tractusx.edc.validation.businesspartner.spi.store.BusinessPartnerStore
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema
@@ -28,6 +30,8 @@ import software.amazon.edc.extensions.common.ddb.EDC_DDB_TABLE_NAME_SETTING
 import software.amazon.edc.extensions.common.ddb.edr.DdbEdrEntryIndex
 import software.amazon.edc.extensions.common.ddb.types.EdrEntry
 import software.amazon.edc.extensions.common.ddb.types.Lease
+import software.amazon.edc.extensions.controlplane.ddb.agreements.DdbAgreementsBpnsStore
+import software.amazon.edc.extensions.controlplane.ddb.agreements.DdbAgreementsRetirementStore
 import software.amazon.edc.extensions.controlplane.ddb.assets.DdbAssetIndex
 import software.amazon.edc.extensions.controlplane.ddb.bpn.DdbBpnStore
 import software.amazon.edc.extensions.controlplane.ddb.contracts.DdbContractDefinitionStore
@@ -36,6 +40,8 @@ import software.amazon.edc.extensions.controlplane.ddb.dataplane.DdbDataPlaneIns
 import software.amazon.edc.extensions.controlplane.ddb.policies.DdbPolicyDefinitionStore
 import software.amazon.edc.extensions.controlplane.ddb.policies.DdbPolicyMonitorStore
 import software.amazon.edc.extensions.controlplane.ddb.transfers.DdbTransferProcessStore
+import software.amazon.edc.extensions.controlplane.ddb.types.AgreementBpns
+import software.amazon.edc.extensions.controlplane.ddb.types.AgreementRetirement
 import software.amazon.edc.extensions.controlplane.ddb.types.Asset
 import software.amazon.edc.extensions.controlplane.ddb.types.BpnGroup
 import software.amazon.edc.extensions.controlplane.ddb.types.ContractAgreement
@@ -49,6 +55,8 @@ import java.time.Clock
 
 @Extension("Control Plane DynamoDB Store Extension")
 @Provides(
+    AgreementsBpnsStore::class,
+    AgreementsRetirementStore::class,
     AssetIndex::class,
     BusinessPartnerStore::class,
     ContractDefinitionStore::class,
@@ -93,6 +101,19 @@ class ControlPlaneDdbExtension : ServiceExtension {
         val assetIndex = DdbAssetIndex(criterionOperatorRegistry, typeManager.mapper, assetTable)
         context.registerService(AssetIndex::class.java, assetIndex)
         context.registerService(DataAddressResolver::class.java, assetIndex)
+
+        context.registerService(
+            AgreementsBpnsStore::class.java,
+            DdbAgreementsBpnsStore(ddbClient.table(tableName, TableSchema.fromBean(AgreementBpns::class.java))),
+        )
+
+        context.registerService(
+            AgreementsRetirementStore::class.java,
+            DdbAgreementsRetirementStore(
+                criterionOperatorRegistry,
+                ddbClient.table(tableName, TableSchema.fromBean(AgreementRetirement::class.java)),
+            ),
+        )
 
         context.registerService(
             BusinessPartnerStore::class.java,

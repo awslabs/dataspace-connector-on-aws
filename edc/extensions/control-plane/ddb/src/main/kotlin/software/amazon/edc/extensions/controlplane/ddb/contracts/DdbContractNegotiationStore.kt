@@ -23,7 +23,6 @@ import software.amazon.edc.extensions.common.ddb.utility.extractStringValue
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
 import software.amazon.edc.extensions.common.ddb.utility.hasProperty
 import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
-import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
 import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.common.ddb.utility.registerConstraintSubtypes
 import software.amazon.edc.extensions.common.ddb.utility.toPredicate
@@ -78,7 +77,7 @@ class DdbContractNegotiationStore(
         val typeFilter = criteria.extractStringValue("type")
         val indexed =
             stateCache.getOrLoad {
-                stateIndex.query(queryRequestFromId(EntityType.CONTRACT_NEGOTIATION)).flatMap { it.items() }
+                stateIndex.query(queryRequestFromPk(EntityType.CONTRACT_NEGOTIATION)).flatMap { it.items() }
             }
         val items: Sequence<ContractNegotiation> =
             if (stateValues != null) {

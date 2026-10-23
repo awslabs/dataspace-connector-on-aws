@@ -1,122 +1,61 @@
 # Deploy Connector Workflow
 
-This steering file guides the agent through deploying and operating Dataspace Connectors on AWS. Follow each phase in order and ask the user for input where indicated.
+Guides the agent through deploying Dataspace Connectors on AWS. Follow the phases in order and ask the user for input where indicated.
 
-Deployment is a single GitOps flow: `deploy.sh` creates a CDK Pipeline and a configuration repository, then the pipeline provisions each connector's identity from the Cofinity-X Portal, deploys it, writes its OAuth secret, and registers it for discovery. Stacks are prefixed by the deployment name (default `DataspaceConnector`): `DataspaceConnector-SharedInfra` for shared infrastructure and `DataspaceConnector-Connector-<connectorId>` per connector. See the **cofinity-x-portal** steering file for Portal API background.
+`deploy.sh` creates a CDK pipeline and a configuration repository. From then on the pipeline deploys whatever the configuration repository holds: `<deploymentName>-SharedInfra`, one `<deploymentName>-Connector-<connectorId>` stack per connector file, and one `<deploymentName>-BaSyx-<BPNL>` stack per `basyx` entry. `deploymentName` defaults to `DataspaceConnector`. Each connector stack manages the connector's Cofinity-X Portal lifecycle: it creates the connector's technical user, derives the EDC identity, and registers the connector; deleting the stack deletes both.
 
 ---
 
 ## Phase 1: Verify Prerequisites
 
-Run all checks in a single command:
-
 ```bash
-echo "=== Node ===" && node --version && echo "=== CDK ===" && cdk --version && echo "=== Python ===" && python3 --version && echo "=== uv ===" && uv --version && echo "=== git ===" && git --version && echo "=== AWS Identity ===" && aws sts get-caller-identity
+node --version && python3 --version && uv --version && git --version && aws sts get-caller-identity
 ```
 
-Node.js 24+, the AWS CDK CLI, Python with `uv` (for the MCP server), Git, and working AWS credentials are required. Java and a container runtime are not needed locally: the EDC build and Docker images are built inside the pipeline's CodeBuild.
+Node.js 24+, Python with `uv` (for the MCP server), Git, and working AWS credentials are required. The CDK CLI comes from `cdk/package.json`. Java and a container runtime are not needed: the pipeline builds the EDC images.
 
-Store the AWS profile and the identity ARN. If `$AWS_PROFILE` is unset, ask the user which profile to use, then re-run `aws sts get-caller-identity --profile <profile>` and use that ARN (the IAM principal for the Management API in Phase 3).
+Store the AWS profile and the identity ARN; the ARN goes into `managementApiPrincipals` in Phase 4. If `$AWS_PROFILE` is unset, ask the user which profile to use.
 
 ---
 
 ## Phase 2: Choose Region
 
-Ask the user which AWS region to deploy to (default `eu-central-1`). Store it; it is needed for the deploy script and MCP configuration.
+Ask the user for the AWS region (default `eu-central-1`).
 
 ---
 
-## Phase 3: Cofinity-X Portal Setup
+## Phase 3: Cofinity-X Portal Admin User
 
-These steps are done by the user in the Cofinity-X Portal. See `docs/obtaining-edc-identity-credentials.md` for a screenshot walkthrough.
-
-1. **Admin technical user (once per organization).** Create a technical user with the **Offer Management** and **Dataspace Discovery** roles. The pipeline authenticates as this user to read per-connector credentials and register connectors. You add its Client ID and Secret to AWS Secrets Manager after the first deploy (Phase 5).
-2. **Per-connector technical user.** For each connector, create a technical user with the **Identity Wallet Management** role, wait for its status to become `ACTIVE`, and copy its **service account ID** (the `ID` field on the Technical User Details page).
-3. **Organization identity values.** From the portal's "Configure Your Connector" dialog, collect the values: trusted issuer, OAuth token URL, DIM URL, participant Business Partner Number (BPN), organization Decentralized Identifier (DID), and BPN/DID Resolution Service (BDRS) URL. These are the deployment-wide default; a connector may override any of them under its own `portal.identity` for multi-organization deployments.
+The user does this once per organization (BPNL), following `docs/cofinity-x-portal-setup.md`: create an internal technical user with only the **Connector Management** role in the portal ([Beta](https://portal.beta.cofinity-x.com/); only beta is supported yet), and store its credentials in Secrets Manager as `<deploymentName>/portal-admin/<BPNL>`, holding `{"clientId":"...","clientSecret":"..."}`. Nothing else is created in the portal by hand.
 
 ---
 
 ## Phase 4: Write the Configuration
 
-The pipeline seeds its configuration repository from `cdk/config-templates/` on first deploy, so edit those files before running `deploy.sh`.
+`deploy.sh` seeds the configuration repository from `cdk/config-templates/`, so edit those files first. The README's Configuration section documents every key; ask the user only for values that differ from the defaults.
 
-### `cdk/config-templates/deployment.yaml`
-
-Set the profile, VPC CIDR, the IAM principal ARN(s) from Phase 1, and the `portal` section with the organization identity values from Phase 3:
-
-```yaml
-profile: development
-vpcIpAddresses: "10.0.0.0/20"
-containerInsights: true
-managementApiPrincipals:
-  - "<user-provided-arn>"
-observabilityApiPrincipals:
-  - "<user-provided-arn>"
-portal:
-  environment: beta          # "beta" or "production"
-  identity:
-    trustedIssuer: "<did:web:...>"
-    stsOauthTokenUrl: "<oauth-token-url>"
-    stsDimUrl: "<dim-url>"
-    participantId: "<BPNL...>"
-    dcpId: "<did:web:...>"
-    didResolver: "<bdrs-url>"
-```
-
-### `cdk/config-templates/connectors/connector-<id>.yaml`
-
-One file per connector. Reference the per-connector technical user by its service account ID. The pipeline reads that user's credentials and fills in the EDC identity, so no `edcIam` block is authored here.
-
-```yaml
-connectorId: <user-chosen-id>
-profile: production          # On-Demand; omit to inherit deployment.yaml's profile
-controlPlaneCpu: 256
-controlPlaneMemoryLimitMiB: 1024
-dataPlaneCpu: 256
-dataPlaneMemoryLimitMiB: 512
-interactiveStateMachineIterationMillis: "10000" # negotiation, transfer, data-flow
-backgroundStateMachineIterationMillis: "60000"  # policy monitor + data-plane selector
-edcStateRemovalPolicy: DESTROY
-serviceAccountId: "<service-account-id-from-phase-3>"
-```
-
-`connectorId` must be 2-60 characters, lowercase alphanumeric and hyphens, and cannot start or end with a hyphen. Replace the example template file (`connector-example.yaml`) with the real connector file(s).
+- `deployment.yaml`: set `portal.bpnl` to the organization's BPNL and add the identity ARN from Phase 1 under `managementApiPrincipals` (and `observabilityApiPrincipals` if wanted).
+- `connectors/`: replace `connector-example.yaml` with one `connector-<id>.yaml` per connector, each with its `connectorId`. Set `bpnl` only for a connector of a different organization.
 
 ---
 
 ## Phase 5: Deploy
 
-Export the profile and region, then run the deploy script from the repository root:
-
 ```bash
-export AWS_PROFILE=<deployment-profile>
-export AWS_REGION=<chosen-region>
+export AWS_PROFILE=<profile>
+export AWS_REGION=<region>
 ./deploy.sh
 ```
 
-`deploy.sh` installs dependencies, bootstraps the account, deploys `DataspaceConnectorPipelineStack`, and seeds the CodeCommit config repository (`DataspaceConnector-config`) from the templates.
+The pipeline then runs on its own. On a connector's first deploy its stack waits for the portal to activate the new technical user, which takes about 7 minutes. Monitor with `aws codepipeline get-pipeline-state --name <deploymentName>Pipeline`.
 
-The pipeline then runs automatically:
-1. **Synth** reads each connector's client ID from the portal and assembles its EDC identity. A connector whose organization's admin secret is not yet populated stays pending.
-2. **Deploy** creates `DataspaceConnector-SharedInfra` and, once identities are available, a `DataspaceConnector-Connector-<connectorId>` stack per connector. The shared-infra deploy also creates an empty admin secret `DataspaceConnector/portal-admin/<BPNL>` for each organization in the config.
-3. **PortalFinalization** writes each connector's OAuth secret to Secrets Manager and registers it in the portal.
-
-Complete the admin credentials after the first run: set each `DataspaceConnector/portal-admin/<BPNL>` secret to `{"clientId":"...","clientSecret":"..."}`, then release the pipeline again (or push a config change). Connector OAuth client secrets are written automatically; only the admin secret is entered by hand. Monitor progress with `aws codepipeline get-pipeline-state --name DataspaceConnectorPipeline --region <region>`.
-
-Ongoing changes (adding or removing connectors, upgrading `appVersion`) are made by pushing to the configuration repository, not by editing the templates again.
+Later changes (adding or removing connectors, changing `appVersion`) are pushes to the configuration repository, not edits to the templates.
 
 ---
 
 ## Phase 6: Configure MCP Access
 
-After the Deploy stage completes, read the Management API URL from the shared-infra stack output and write the MCP config. All values are known, so do not prompt the user.
-
-```bash
-aws cloudformation describe-stacks --stack-name DataspaceConnector-SharedInfra --region <region> \
-    --query "Stacks[0].Outputs[?OutputKey=='ManagementApiUrl'].OutputValue" --output text
-```
-
-Write or merge the `dataspace-connector-on-aws` entry into `.kiro/settings/mcp.json`:
+After the deploy stage completes, write or merge this entry into `.kiro/settings/mcp.json`, keeping other servers and replacing an existing entry's values. All values are known, so do not prompt the user.
 
 ```json
 {
@@ -125,30 +64,25 @@ Write or merge the `dataspace-connector-on-aws` entry into `.kiro/settings/mcp.j
       "command": "uv",
       "args": ["--directory", "<absolute-path-to-mcp-directory>", "run", "dataspace-connector-mcp"],
       "env": {
-        "EDC_MANAGEMENT_URL": "<ManagementApiUrl-output>",
         "EDC_USE_AWS_IAM": "true",
         "EDC_MULTI_CONNECTOR": "true",
         "AWS_REGION": "<region>",
-        "AWS_PROFILE": "<aws-profile>"
+        "AWS_PROFILE": "<profile>"
       }
     }
   }
 }
 ```
 
-Use the `ManagementApiUrl` value directly (it is the base `.../management/` URL). In multi-connector mode the connector is selected per tool call via `connector_id`, so the URL has no connector suffix. If you set a custom `deploymentName`, add `DEPLOYMENT_NAME` with the same value to the `env` so `list_connectors` targets the right stacks (it defaults to `DataspaceConnector`). Preserve any other server entries already in the file, and update all env values if a `dataspace-connector-on-aws` entry already exists.
+The server discovers the connectors and their API URLs from CloudFormation. With a custom `deploymentName`, also set `DEPLOYMENT_NAME` so it finds the stacks.
 
 ---
 
 ## Phase 7: Validate MCP Access
-
-After Kiro picks up the MCP server, verify discovery and one connector:
 
 ```python
 list_connectors()
 query_resources(connector_id="<connectorId>", resource_type="assets", limit=1)
 ```
 
-`list_connectors()` returns the deployed connector IDs (it scans CloudFormation for `DataspaceConnector-Connector-` stacks). If the calls succeed, the connector is deployed and the MCP tools are connected (12 tools available). Then move to the **validate-data-exchange** steering file for an end-to-end data exchange test.
-
-If a call fails, check: AWS credentials are valid, the IAM principal ARN matches `managementApiPrincipals`, `EDC_MANAGEMENT_URL` matches the `ManagementApiUrl` output, `EDC_MULTI_CONNECTOR=true` is set, and the region is correct.
+If both succeed, continue with the **validate-data-exchange** steering file. If a call fails, check that the credentials are valid, the identity may invoke the Management API (`managementApiPrincipals` or an IAM policy), and the region is correct.

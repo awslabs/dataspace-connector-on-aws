@@ -19,7 +19,7 @@ import software.amazon.edc.extensions.common.ddb.utility.applyOffsetAndLimit
 import software.amazon.edc.extensions.common.ddb.utility.extractStateValues
 import software.amazon.edc.extensions.common.ddb.utility.getGenericPropertyComparator
 import software.amazon.edc.extensions.common.ddb.utility.keyFromPkSk
-import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromId
+import software.amazon.edc.extensions.common.ddb.utility.queryRequestFromPk
 import software.amazon.edc.extensions.controlplane.ddb.types.PolicyMonitor
 import software.amazon.edc.extensions.controlplane.ddb.types.toDdbPolicyMonitor
 import java.time.Clock
@@ -55,7 +55,7 @@ class DdbPolicyMonitorStore(
         val stateValues = criteria.extractStateValues()
         val indexed =
             stateCache.getOrLoad {
-                stateIndex.query(queryRequestFromId(EntityType.POLICY_MONITOR)).flatMap { it.items() }
+                stateIndex.query(queryRequestFromPk(EntityType.POLICY_MONITOR)).flatMap { it.items() }
             }
         val items =
             if (stateValues != null) {

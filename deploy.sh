@@ -23,31 +23,20 @@ CONFIG_PATH="${1:-./cdk/config-templates}"
 if [ ! -f "${CONFIG_PATH}/pipeline.yaml" ]; then
   echo "Error: pipeline.yaml not found in ${CONFIG_PATH}" >&2
   echo "Usage: ./deploy.sh [config-path]" >&2
-  echo "       Default config path: ./cdk/config-templates" >&2
   exit 1
 fi
+CONFIG_PATH="$(cd "${CONFIG_PATH}" && pwd)"
 
-echo "Deploying pipeline stack to region: ${AWS_REGION} with profile: ${AWS_PROFILE}"
-echo "Config path: ${CONFIG_PATH}"
-
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+echo "Deploying the pipeline to ${AWS_REGION} with profile ${AWS_PROFILE}, config ${CONFIG_PATH}"
 
 cd cdk/
-
-npm install --ignore-scripts
+npm ci --ignore-scripts
 npx tsc
 
-cdk bootstrap
+DEPLOYMENT_NAME=$(node -e "const c = require('js-yaml').load(require('fs').readFileSync('${CONFIG_PATH}/pipeline.yaml', 'utf-8')); console.log(c.deploymentName ?? 'DataspaceConnector')")
 
-DEPLOYMENT_NAME=$(python3 -c "import yaml; print(yaml.safe_load(open('../${CONFIG_PATH}/pipeline.yaml')).get('deploymentName','DataspaceConnector'))")
-echo "Deployment name: ${DEPLOYMENT_NAME}"
+npx cdk bootstrap
+CDK_DEFAULT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text) CDK_DEFAULT_REGION="${AWS_REGION}" \
+  npx cdk deploy "${DEPLOYMENT_NAME}PipelineStack" --context "config-path=${CONFIG_PATH}"
 
-CDK_DEFAULT_ACCOUNT="${ACCOUNT_ID}" CDK_DEFAULT_REGION="${AWS_REGION}" \
-  npx cdk deploy "${DEPLOYMENT_NAME}PipelineStack" \
-  --context "config-path=../${CONFIG_PATH}" \
-  --require-approval never
-
-cd ..
-
-echo ""
-echo "✅ Pipeline deployed. Push changes to your config repository to trigger deployments."
+echo "Pipeline deployed. Push changes to your config repository to trigger deployments."

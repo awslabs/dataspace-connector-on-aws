@@ -9,6 +9,8 @@ package software.amazon.edc.extensions.common.ddb
  */
 object EntityType {
     const val ACCESS_TOKEN = "AccessToken"
+    const val AGREEMENT_BPNS = "AgreementBpns"
+    const val AGREEMENT_RETIREMENT = "AgreementRetirement"
     const val ASSET = "Asset"
     const val BPN_GROUP = "BpnGroup"
     const val CONTRACT_AGREEMENT = "ContractAgreement"

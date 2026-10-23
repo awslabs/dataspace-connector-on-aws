@@ -6,8 +6,6 @@ This workflow verifies the full data exchange flow end-to-end: creating data off
 
 The default validation uses Amazon S3 as the data source, which exercises the full AWS-native data path (IAM roles, S3 data plane extension, token signing). An HttpData alternative is also available for quick smoke tests against external URLs.
 
-The MCP server exposes 12 general-purpose primitives. Resource reads use one generic `get_resource(resource_type, resource_id)` and resource lists use one generic `query_resources(resource_type, ...)`; the `resource_type` values are `assets`, `policy_definitions`, `contract_definitions`, `contract_negotiations`, `contract_agreements`, and `transfer_processes` (plus `edr` for `get_resource`).
-
 ---
 
 ## Phase 1: Verify Connectivity
@@ -28,21 +26,6 @@ query_resources(connector_id="<target-connector>", resource_type="assets", limit
 ```
 
 If this fails, the MCP connection isn't configured. Direct the user to the **deploy-connector** steering file first.
-
-### Step 1.3: Discover CloudWatch Log Groups
-
-The AWS profile and region are needed, check the MCP config at `.kiro/settings/mcp.json` for `AWS_PROFILE` and `AWS_REGION` values:
-
-```bash
-aws cloudformation list-stack-resources --stack-name DataspaceConnector-Connector-<connectorId> --region <region> \
-    --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].[LogicalResourceId,PhysicalResourceId]' --output json
-```
-
-This returns the log group physical resource IDs for the current deployment. Match by logical ID prefix:
-- `ControlPlane` → control plane log group
-- `DataPlane` → data plane log group
-
-Store both log group names, they are needed for diagnosing any issues in Phase 8.
 
 ---
 
@@ -293,18 +276,18 @@ Once `STARTED`, fetch the payload with `fetch_data`, which resolves the EDR and 
 fetch_data(connector_id="<target-connector>", transfer_process_id="<transfer-id>")
 ```
 
-`fetch_data` returns `{status, headers, body}`. It appends the Tractus-X public API sub-path `public/` to the EDR endpoint by default (the endpoint looks like `.../data/<connectorId>/`, and the public API is at `.../data/<connectorId>/public/`); pass an explicit `path` only if the asset needs a different sub-path. It refreshes the EDR token transparently, so the agent can call it repeatedly over time without worrying about token expiry.
+`fetch_data` returns `{status, headers, body}`. It appends `path` to the EDR endpoint, defaulting to `public/`. The data plane route needs at least one segment after the endpoint, and Amazon S3 assets ignore that segment, so the default works for them. An HttpData asset with `proxyPath=true` forwards `path` to its backend, so pass the backend sub-path instead (for a Digital Twin Registry, e.g. `path="shell-descriptors"`). It refreshes the EDR token transparently, so the agent can call it repeatedly over time without worrying about token expiry.
 
 The data plane acts as a proxy, it forwards the request to the provider's actual data source (the `baseUrl` or S3 object configured in the asset's data address) and returns the response. If the response body contains the expected data from the asset's data source, the end-to-end flow is validated.
 
-For advanced use cases (sub-paths, query parameters, POST bodies), `fetch_data` accepts `method`, `path`, `query_params`, and `body`:
+For advanced use cases (sub-paths, query parameters, POST bodies, extra request headers), `fetch_data` accepts `method`, `path`, `query_params`, `body` (a JSON object or array) and `headers`:
 
 ```python
 fetch_data(
     connector_id="<target-connector>",
     transfer_process_id="<transfer-id>",
     method="GET",
-    path="/public/items",
+    path="items",
     query_params={"limit": "10"}
 )
 ```
@@ -323,27 +306,14 @@ This is the recommended validation path. It exercises the full AWS-native data f
 
 ### Step 5.1: Discover Stack Resources
 
-Retrieve the S3 bucket name, DSP endpoint, and BPNL. The DSP endpoint also comes from `list_connectors` (`{dsp_base_url}/{connectorId}`); the bucket comes from the per-connector stack.
-
-**Shared infrastructure outputs** (the DSP endpoint is shared across all connectors):
-
-```bash
-aws cloudformation describe-stacks --stack-name DataspaceConnector-SharedInfra --region <region> \
-    --query "Stacks[0].Outputs" --output json
-```
-
-Extract:
-- `DspApiUrl` → the DSP endpoint base URL. Append the connector ID to form the full DSP address (e.g., `https://xxx.execute-api.<region>.amazonaws.com/protocol/<connectorId>`).
-- `ManagementApiUrl` → the Management API base URL (for reference).
-
-**Per-connector output** (the S3 bucket for this connector's data plane):
+Retrieve the S3 bucket name, DSP endpoint, and BPNL. The DSP endpoint is `{dsp_base_url}/{connectorId}` from `list_connectors`. The bucket is an output of the connector stack:
 
 ```bash
 aws cloudformation describe-stacks --stack-name DataspaceConnector-Connector-<connectorId> --region <region> \
     --query "Stacks[0].Outputs[?OutputKey=='EdcDataPlaneBucketName'].OutputValue" --output text
 ```
 
-**Business Partner Number (BPN):** the organization BPN is the `participantId` under `portal.identity` in `deployment.yaml` in the configuration repository. It is the deployment-wide default (a connector may override it under its own `portal.identity`). Fetch it from CodeCommit:
+**Business Partner Number (BPN):** the connector's `bpnl` in its connector file, else `portal.bpnl` in `deployment.yaml` in the configuration repository. Fetch it from CodeCommit:
 
 ```bash
 aws codecommit get-file --repository-name DataspaceConnector-config \
@@ -560,7 +530,7 @@ manage_transfer(connector_id="<target-connector>", transfer_process_id="all_star
 
 `suspend` and `resume` also exist, but for `HttpData-PULL` transfers `resume` may not restore `STARTED` (the transfer can move to `TERMINATED`); `terminate` is the reliable action.
 
-Any leftover S3 test objects uploaded during the S3 self-test can be removed with `aws s3 rm`. For a full reset, the user can redeploy the stack (DynamoDB tables use the `DESTROY` removal policy by default).
+Any leftover S3 test objects uploaded during the S3 self-test can be removed with `aws s3 rm`.
 
 ---
 
@@ -608,34 +578,19 @@ This returns entries like:
 - Logical ID containing `ControlPlane` → `DataspaceConnector-Connector-<connectorId>-ControlPlaneLogGroup<suffix>`
 - Logical ID containing `DataPlane` → `DataspaceConnector-Connector-<connectorId>-DataPlaneLogGroup<suffix>`
 
-Store both, you'll need them for log queries.
+Store both for the log queries. With a custom `deploymentName`, replace the `DataspaceConnector` prefix.
 
 ### Step 8.3: Pull Time-Correlated Logs from Both Services
 
-Using the timestamp from the failed process (the `stateTimestamp` field from Step 8.1), pull logs from BOTH the control plane and data plane in a window around that time. Always check both services, the root cause may be on either side.
+Using the `stateTimestamp` of the failed process from Step 8.1, pull logs from BOTH the control plane and the data plane for ±30 seconds around it. The root cause may be on either side.
 
-First, find the latest log stream for each service:
-```bash
-aws logs describe-log-streams --log-group-name "<log-group-name>" --region <region> \
-    --order-by LastEventTime --descending --limit 1 \
-    --query 'logStreams[0].logStreamName' --output text
-```
-
-Then pull logs in the time window (use the `stateTimestamp` ± 30 seconds):
-```bash
-aws logs get-log-events --log-group-name "<log-group-name>" --region <region> \
-    --log-stream-name "<stream-name>" \
-    --start-time <stateTimestamp - 30000> --end-time <stateTimestamp + 30000> \
-    --limit 50 --output json --query 'events[*].[timestamp,message]'
-```
-
-You can also filter for specific patterns:
 ```bash
 aws logs filter-log-events --log-group-name "<log-group-name>" --region <region> \
-    --start-time <start> --end-time <end> \
-    --filter-pattern "<keyword>" \
+    --start-time <stateTimestamp - 30000> --end-time <stateTimestamp + 30000> \
     --output json --query 'events[*].[timestamp,message]'
 ```
+
+Add `--filter-pattern "<keyword>"` to narrow the result.
 
 Useful filter patterns: `SEVERE`, `WARNING`, `ERROR`, `DataPlane`, `TransferProcess`, `ContractNegotiation`.
 
@@ -648,7 +603,7 @@ With the error detail from Step 8.1 and the correlated logs from Step 8.3, inter
 | `DataPlane not found` | Data plane registration expired or data plane not running | Control plane logs for `DataPlaneSelectorManagerImpl` state changes; data plane logs for `DataPlaneHealthCheck` registration |
 | `Policy not equal to offer` | Contract negotiation used a policy that doesn't match the catalog offer | Control plane logs for policy evaluation; verify the `permission`/`prohibition`/`obligation` passed to `initiate_negotiation` match the catalog exactly |
 | `Contract agreement not found` | Invalid or expired contract agreement ID used for transfer | Control plane logs; verify the agreement ID exists via `get_resource(resource_type="contract_agreements", ...)` |
-| `Failed to decode token` | Token signing key mismatch between control plane and data plane | Verify the Secrets Manager secrets `<deploymentName>/<connectorId>/edc.transfer.proxy.token.signer.privatekey` and `<deploymentName>/<connectorId>/edc.transfer.proxy.token.verifier.publickey` exist and contain valid RSA keys (these are auto-generated on first deploy by the `EdcTokenKeyPair` construct, if missing, redeploy the connector stack) |
+| `Failed to decode token` | Token signing key mismatch between control plane and data plane | Verify the Secrets Manager secrets `<deploymentName>/<connectorId>/edc.transfer.proxy.token.private-key` and `<deploymentName>/<connectorId>/edc.transfer.proxy.token.public-key` exist and contain a valid EC P-256 key pair (the connector stack generates it on create) |
 | S3 `AccessDenied` | Data plane Fargate task role lacks `s3:GetObject` permission on the bucket | Check the task role policies; verify the bucket ARN matches |
 | `No EDR service with type <type> found` (transfer `TERMINATED` before `STARTED`) | For a consumer PULL, EDC 0.15.x generates the EDR keyed by the transfer's **source** data address type, and by default registers a service only for `HttpData` (via `DataPlaneIamExtension`). Other source types (e.g. `AmazonS3`) need an extension to register one. This deployment ships `edc/extensions/data-plane/s3-edr`, which registers the (source-agnostic) EDR service for `AmazonS3` | Provider-side transfer `errorDetail` (Step 8.1); data plane startup logs for the `AmazonS3 EDR Service` extension; confirm the asset's source `dataAddress.type` has a registered EDR service. To support an additional source type, register it the same way in a small data-plane extension |
 | No logs in data plane | Data plane task may have crashed or not started | Check ECS service status: `aws ecs describe-services --cluster <cluster> --services <service>` |

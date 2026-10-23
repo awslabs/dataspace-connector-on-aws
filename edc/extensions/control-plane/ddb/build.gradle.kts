@@ -1,9 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import org.jlleitschuh.gradle.ktlint.KtlintExtension
-import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
-
 plugins {
     `java-library`
     alias(libs.plugins.kotlin.jvm)
@@ -23,6 +20,8 @@ dependencies {
     implementation(libs.edc.spi.policy.monitor)
     implementation(libs.edc.spi.store.edr)
     implementation(libs.jackson.module.kotlin)
+    implementation(libs.tx.spi.agreements.bpns)
+    implementation(libs.tx.spi.agreements.retirement)
     implementation(libs.tx.spi.bpn.validation)
 
     testImplementation(libs.aws.dynamodb.local)
@@ -34,18 +33,7 @@ dependencies {
     testImplementation(testFixtures(libs.edc.spi.policy))
     testImplementation(testFixtures(libs.edc.spi.policy.monitor))
     testImplementation(testFixtures(libs.edc.spi.transfer))
+    testImplementation(testFixtures(libs.tx.core.agreements.bpns))
+    testImplementation(testFixtures(libs.tx.core.agreements.retirement))
     testImplementation(testFixtures(libs.tx.core.bpn.validation))
-}
-
-configure<KtlintExtension> {
-    reporters {
-        reporter(ReporterType.PLAIN)
-        reporter(ReporterType.CHECKSTYLE)
-    }
-    enableExperimentalRules = false
-    ignoreFailures = false
-}
-
-tasks.withType<Test> {
-    useJUnitPlatform()
 }

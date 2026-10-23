@@ -2,13 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { resolve } from "path";
-import {
-  CfnOutput,
-  IgnoreMode,
-  RemovalPolicy,
-  Stack,
-  StackProps,
-} from "aws-cdk-lib";
+import { CfnOutput, IgnoreMode, Stack, StackProps } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import { Certificate } from "aws-cdk-lib/aws-certificatemanager";
 import { HostedZone } from "aws-cdk-lib/aws-route53";
@@ -34,23 +28,20 @@ import { Cluster, ContainerInsights, ICluster } from "aws-cdk-lib/aws-ecs";
 import { DockerImageAsset, Platform } from "aws-cdk-lib/aws-ecr-assets";
 import { VpcLink } from "aws-cdk-lib/aws-apigatewayv2";
 
-import { Secret } from "aws-cdk-lib/aws-secretsmanager";
-
+import { DeploymentYaml, toPrincipals } from "./config/config";
 import {
-  deriveAdminSecretName,
-  DeploymentYaml,
-  toPrincipals,
-} from "./config/config";
-import {
-  CONTROL_PLANE_PORT_MAPPING_DEFAULT,
-  DATA_PLANE_PORT_MAPPING_DEFAULT,
+  CONTROL_PLANE_PORTS as cpPorts,
+  DATA_PLANE_PORTS as dpPorts,
 } from "./config/port-mappings";
 import { EdcApi } from "./constructs/edc-api";
 import { EdcSecretCleanup } from "./constructs/edc-secret-cleanup";
+import { EdcTokenKeyPairProvider } from "./constructs/edc-token-key-pair";
+import { PortalConnectorProvider } from "./constructs/portal-connector";
+import { DtrOfferProvider } from "./constructs/dtr-offer";
+import { BASYX_PORT } from "./basyx/names";
 
 export interface SharedInfraStackProps extends StackProps {
   readonly config: DeploymentYaml;
-  readonly adminBpnls: string[];
   readonly deploymentName: string;
 }
 
@@ -58,11 +49,15 @@ export class SharedInfraStack extends Stack {
   readonly albArn: string;
   readonly albDnsName: string;
   readonly albSecurityGroupId: string;
+  readonly edcTaskSecurityGroupId: string;
   readonly controlPlaneImage: DockerImageAsset;
   readonly dataPlaneImage: DockerImageAsset;
   readonly dataPlaneUrl: string;
   readonly dspUrl: string;
   readonly managementUrl: string;
+  readonly portalConnectorServiceToken: string;
+  readonly dtrOfferServiceToken: string;
+  readonly tokenKeyPairServiceToken: string;
   readonly ecsCluster: ICluster;
   readonly listenerArns: { [port: number]: string };
   readonly vpc: IVpc;
@@ -72,8 +67,6 @@ export class SharedInfraStack extends Stack {
     super(scope, id, props);
 
     const config = props.config;
-    const cpPorts = CONTROL_PLANE_PORT_MAPPING_DEFAULT;
-    const dpPorts = DATA_PLANE_PORT_MAPPING_DEFAULT;
 
     this.vpc = new Vpc(this, "Vpc", {
       ipAddresses: IpAddresses.cidr(config.vpcIpAddresses),
@@ -114,9 +107,37 @@ export class SharedInfraStack extends Stack {
     });
 
     const allPorts = [...Object.values(cpPorts), ...Object.values(dpPorts)];
-    new Set(allPorts).forEach((port) =>
+    // Data planes read BaSyx through its own listener, so the management port
+    // stays reachable from the VPC link only. It exists in every deployment so
+    // that removing a basyx entry never removes an export a BaSyx stack imports.
+    const listenerPorts = [...allPorts, BASYX_PORT];
+    new Set(listenerPorts).forEach((port) =>
       albSg.addEgressRule(Peer.ipv4(this.vpc.vpcCidrBlock), Port.tcp(port)),
     );
+
+    // The VPC link shares the ALB security group (replacing a VPC link's
+    // security group replaces the link), so API Gateway traffic is allowed by
+    // a self-reference. Connector tasks reach the ALB only on the control ports
+    // and the BaSyx read port; a BaSyx read also needs that BPNL's Cognito token,
+    // whose secret only its dtrConnector's data plane can read.
+    const edcTaskSg = new SecurityGroup(this, "EdcTaskSecurityGroup", {
+      description:
+        "Attached to EDC tasks so they can call the ALB control ports",
+      allowAllOutbound: false,
+      vpc: this.vpc,
+    });
+    for (const port of [
+      cpPorts.default,
+      cpPorts.management,
+      cpPorts.protocol,
+      dpPorts.default,
+      dpPorts.public,
+    ]) {
+      albSg.addIngressRule(albSg, Port.tcp(port), "API Gateway VPC link");
+    }
+    for (const port of [cpPorts.control, dpPorts.control, BASYX_PORT]) {
+      albSg.addIngressRule(edcTaskSg, Port.tcp(port), "EDC tasks");
+    }
 
     const alb = new ApplicationLoadBalancer(this, "Alb", {
       internetFacing: false,
@@ -125,12 +146,16 @@ export class SharedInfraStack extends Stack {
     });
 
     this.listenerArns = {};
-    for (const port of new Set(allPorts)) {
+    for (const port of new Set(listenerPorts)) {
       const listener = alb.addListener(`Listener${port}`, {
         port,
+        open: false,
         protocol: ApplicationProtocol.HTTP,
         defaultAction: ListenerAction.fixedResponse(404, {
-          messageBody: "No matching EDC connector",
+          messageBody:
+            port === BASYX_PORT
+              ? "No matching BaSyx service"
+              : "No matching EDC connector",
         }),
       });
       this.listenerArns[port] = listener.listenerArn;
@@ -139,6 +164,7 @@ export class SharedInfraStack extends Stack {
     this.albArn = alb.loadBalancerArn;
     this.albDnsName = alb.loadBalancerDnsName;
     this.albSecurityGroupId = albSg.securityGroupId;
+    this.edcTaskSecurityGroupId = edcTaskSg.securityGroupId;
 
     const vpcLink = new VpcLink(this, "VpcLink", {
       vpc: this.vpc,
@@ -147,52 +173,54 @@ export class SharedInfraStack extends Stack {
     });
     this.vpcLinkId = vpcLink.vpcLinkId;
 
-    let certificate;
-    let hostedZone;
-    if (config.domainName && config.hostedZoneId && config.certificateArn) {
-      certificate = Certificate.fromCertificateArn(
-        this,
-        "Certificate",
-        config.certificateArn,
-      );
-      hostedZone = HostedZone.fromHostedZoneAttributes(this, "HostedZone", {
-        hostedZoneId: config.hostedZoneId,
-        zoneName: config.domainName,
-      });
-    }
-
     const api = new EdcApi(this, "EdcApi", {
       albArn: this.albArn,
-      certificate,
-      controlPlanePortMapping: cpPorts,
-      dataPlanePortMapping: dpPorts,
-      hostedZone,
       loadBalancerAddress: this.albDnsName,
+      vpcLinkId: this.vpcLinkId,
+      domain: config.domainName
+        ? {
+            certificate: Certificate.fromCertificateArn(
+              this,
+              "Certificate",
+              config.certificateArn!,
+            ),
+            hostedZone: HostedZone.fromHostedZoneAttributes(
+              this,
+              "HostedZone",
+              {
+                hostedZoneId: config.hostedZoneId!,
+                zoneName: config.domainName,
+              },
+            ),
+          }
+        : undefined,
       managementApiPrincipals: toPrincipals(config.managementApiPrincipals),
       observabilityApiPrincipals: toPrincipals(
         config.observabilityApiPrincipals,
       ),
       profile: config.profile,
-      vpcLinkId: this.vpcLinkId,
+      dataTrace: config.logLevel === "DEBUG" || config.logLevel === "TRACE",
     });
-
-    this.dspUrl = api.outputs.dspUrl;
-    this.dataPlaneUrl = api.outputs.dataPlaneUrl;
-    this.managementUrl = api.outputs.managementUrl;
+    this.dspUrl = api.dspUrl;
+    this.dataPlaneUrl = api.dataPlaneUrl;
+    this.managementUrl = api.managementUrl;
 
     new EdcSecretCleanup(this, "EdcSecretCleanup");
 
-    // Per-tenant portal admin secret placeholders (one per BPNL). Created empty
-    // for the operator to populate out-of-band; CDK owns their lifecycle and
-    // deletes one when its BPNL leaves the active set. The set is the union of
-    // config BPNLs and live DDB orgKeys, emitted by provision.
-    for (const bpnl of props.adminBpnls) {
-      new Secret(this, `PortalAdmin${bpnl}`, {
-        secretName: deriveAdminSecretName(props.deploymentName, bpnl),
-        description: `Cofinity-X portal admin credentials for BPNL ${bpnl} (JSON: clientId, clientSecret). Populate out-of-band.`,
-        removalPolicy: RemovalPolicy.DESTROY,
-      });
-    }
+    this.portalConnectorServiceToken = new PortalConnectorProvider(
+      this,
+      "PortalConnectorProvider",
+      props.deploymentName,
+    ).serviceToken;
+    this.tokenKeyPairServiceToken = new EdcTokenKeyPairProvider(
+      this,
+      "EdcTokenKeyPairProvider",
+      props.deploymentName,
+    ).serviceToken;
+    this.dtrOfferServiceToken = new DtrOfferProvider(this, "DtrOfferProvider", {
+      vpc: this.vpc,
+      albSecurityGroup: albSg,
+    }).serviceToken;
 
     new CfnOutput(this, "VpcId", { value: this.vpc.vpcId });
     new CfnOutput(this, "ClusterArn", { value: this.ecsCluster.clusterArn });

@@ -5,111 +5,220 @@ openapi: 3.0.1
 info:
   title: EDC API
   version: "1.0"
+x-amazon-apigateway-request-validators:
+  all:
+    validateRequestBody: true
+    validateRequestParameters: true
+x-amazon-apigateway-request-validator: all
 paths:
-  /{connectorId}/check/health:
+  /{connectorId}/control-plane/check/health:
     get:
-      description: Performs a liveness probe to determine whether the runtime is working properly.
-      operationId: checkHealth
+      operationId: controlPlaneCheckHealth
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
+      description: Performs a liveness probe to determine whether the runtime is working properly.
+      tags:
+        - Application Observability
       responses:
         "200":
+          description: The runtime is working properly.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthStatus"
-          description: The runtime is working properly.
-      tags:
-        - Application Observability
+                type: object
       x-amazon-apigateway-auth:
         type: AWS_IAM
       x-amazon-apigateway-integration:
         type: http_proxy
-        httpMethod: ANY
+        httpMethod: GET
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
         uri: http://${loadBalancerDnsName}/{connectorId}/api/check/health
         integrationTarget: ${albArn}
-        requestParameters:
-          integration.request.path.connectorId: method.request.path.connectorId
-  /{connectorId}/check/liveness:
+  /{connectorId}/control-plane/check/liveness:
     get:
-      description: Performs a liveness probe to determine whether the runtime is working properly.
-      operationId: getLiveness
+      operationId: controlPlaneGetLiveness
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
+      description: Performs a liveness probe to determine whether the runtime is working properly.
+      tags:
+        - Application Observability
       responses:
         "200":
+          description: The runtime is working properly.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthStatus"
-          description: The runtime is working properly.
-      tags:
-        - Application Observability
+                type: object
       x-amazon-apigateway-auth:
         type: AWS_IAM
       x-amazon-apigateway-integration:
         type: http_proxy
-        httpMethod: ANY
+        httpMethod: GET
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
         uri: http://${loadBalancerDnsName}/{connectorId}/api/check/liveness
         integrationTarget: ${albArn}
-        requestParameters:
-          integration.request.path.connectorId: method.request.path.connectorId
-  /{connectorId}/check/readiness:
+  /{connectorId}/control-plane/check/readiness:
     get:
-      description: Performs a readiness probe to determine whether the runtime is able to accept requests.
-      operationId: getReadiness
+      operationId: controlPlaneGetReadiness
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
+      description: Performs a readiness probe to determine whether the runtime is able to accept requests.
+      tags:
+        - Application Observability
       responses:
         "200":
+          description: The runtime is able to accept requests.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthStatus"
-          description: The runtime is able to accept requests.
-      tags:
-        - Application Observability
+                type: object
       x-amazon-apigateway-auth:
         type: AWS_IAM
       x-amazon-apigateway-integration:
         type: http_proxy
-        httpMethod: ANY
+        httpMethod: GET
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
         uri: http://${loadBalancerDnsName}/{connectorId}/api/check/readiness
         integrationTarget: ${albArn}
-        requestParameters:
-          integration.request.path.connectorId: method.request.path.connectorId
-  /{connectorId}/check/startup:
+  /{connectorId}/control-plane/check/startup:
     get:
-      description: Performs a startup probe to determine whether the runtime has completed startup.
-      operationId: getStartup
+      operationId: controlPlaneGetStartup
       parameters:
         - $ref: "#/components/parameters/ConnectorId"
+      description: Performs a startup probe to determine whether the runtime has completed startup.
+      tags:
+        - Application Observability
       responses:
         "200":
+          description: The runtime has completed startup.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthStatus"
-          description: The runtime has completed startup.
-      tags:
-        - Application Observability
+                type: object
       x-amazon-apigateway-auth:
         type: AWS_IAM
       x-amazon-apigateway-integration:
         type: http_proxy
-        httpMethod: ANY
+        httpMethod: GET
         connectionId: ${vpcLinkId}
         connectionType: VPC_LINK
-        uri: http://${loadBalancerDnsName}/{connectorId}/api/check/startup
-        integrationTarget: ${albArn}
         requestParameters:
           integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${loadBalancerDnsName}/{connectorId}/api/check/startup
+        integrationTarget: ${albArn}
+  /{connectorId}/data-plane/check/health:
+    get:
+      operationId: dataPlaneCheckHealth
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
+      description: Performs a liveness probe to determine whether the runtime is working properly.
+      tags:
+        - Application Observability
+      responses:
+        "200":
+          description: The runtime is working properly.
+          content:
+            application/json:
+              schema:
+                type: object
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${dataPlaneDefaultAddress}/{connectorId}/api/check/health
+        integrationTarget: ${albArn}
+  /{connectorId}/data-plane/check/liveness:
+    get:
+      operationId: dataPlaneGetLiveness
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
+      description: Performs a liveness probe to determine whether the runtime is working properly.
+      tags:
+        - Application Observability
+      responses:
+        "200":
+          description: The runtime is working properly.
+          content:
+            application/json:
+              schema:
+                type: object
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${dataPlaneDefaultAddress}/{connectorId}/api/check/liveness
+        integrationTarget: ${albArn}
+  /{connectorId}/data-plane/check/readiness:
+    get:
+      operationId: dataPlaneGetReadiness
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
+      description: Performs a readiness probe to determine whether the runtime is able to accept requests.
+      tags:
+        - Application Observability
+      responses:
+        "200":
+          description: The runtime is able to accept requests.
+          content:
+            application/json:
+              schema:
+                type: object
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${dataPlaneDefaultAddress}/{connectorId}/api/check/readiness
+        integrationTarget: ${albArn}
+  /{connectorId}/data-plane/check/startup:
+    get:
+      operationId: dataPlaneGetStartup
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
+      description: Performs a startup probe to determine whether the runtime has completed startup.
+      tags:
+        - Application Observability
+      responses:
+        "200":
+          description: The runtime has completed startup.
+          content:
+            application/json:
+              schema:
+                type: object
+      x-amazon-apigateway-auth:
+        type: AWS_IAM
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        connectionId: ${vpcLinkId}
+        connectionType: VPC_LINK
+        requestParameters:
+          integration.request.path.connectorId: method.request.path.connectorId
+        uri: http://${dataPlaneDefaultAddress}/{connectorId}/api/check/startup
+        integrationTarget: ${albArn}
 components:
   parameters:
     ConnectorId:
@@ -119,31 +228,3 @@ components:
       schema:
         type: string
       description: Connector identifier for path-based routing
-  schemas:
-    Failure:
-      type: object
-      properties:
-        failureDetail:
-          type: string
-        messages:
-          type: array
-          items:
-            type: string
-    HealthCheckResult:
-      type: object
-      properties:
-        component:
-          type: string
-        failure:
-          $ref: "#/components/schemas/Failure"
-        isHealthy:
-          type: boolean
-    HealthStatus:
-      type: object
-      properties:
-        componentResults:
-          type: array
-          items:
-            $ref: "#/components/schemas/HealthCheckResult"
-        isSystemHealthy:
-          type: boolean

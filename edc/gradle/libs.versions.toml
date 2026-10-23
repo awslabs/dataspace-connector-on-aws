@@ -1,9 +1,9 @@
 [versions]
-aws-sdk = "2.54.12"
+aws-sdk = "2.57.2"
 edc = "0.15.1"
-jackson = "2.22.2"
+jackson = "2.22.4"
 junit-jupiter = "6.1.3"
-kotlin = "2.4.10"
+kotlin = "2.4.21"
 log4j = "2.26.1"
 tx = "0.12.2"
 
@@ -21,6 +21,7 @@ edc-spi-contract = { module = "org.eclipse.edc:contract-spi", version.ref = "edc
 edc-spi-core = { module = "org.eclipse.edc:core-spi", version.ref = "edc" }
 edc-spi-dataplane = { module = "org.eclipse.edc:data-plane-spi", version.ref = "edc" }
 edc-spi-dataplane-selector = { module = "org.eclipse.edc:data-plane-selector-spi", version.ref = "edc" }
+edc-spi-oauth2 = { module = "org.eclipse.edc:oauth2-spi", version.ref = "edc" }
 edc-spi-policy = { module = "org.eclipse.edc:policy-spi", version.ref = "edc" }
 edc-spi-policy-monitor = { module = "org.eclipse.edc:policy-monitor-spi", version.ref = "edc" }
 edc-spi-store-edr = { module = "org.eclipse.edc:edr-store-spi", version.ref = "edc" }
@@ -30,19 +31,21 @@ edc-transaction-local = { module = "org.eclipse.edc:transaction-local", version.
 edc-vault-aws = { module = "org.eclipse.edc.aws:vault-aws", version.ref = "edc" }
 jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-jupiter" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
-kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
-log4j-api = { module = "org.apache.logging.log4j:log4j-api", version.ref = "log4j" }
-log4j-bom = { module = "org.apache.logging.log4j:log4j-bom", version.ref = "log4j" }
 log4j-core = { module = "org.apache.logging.log4j:log4j-core", version.ref = "log4j" }
-log4j-layout-template-json = { module = "org.apache.logging.log4j:log4j-layout-template-json", version.ref = "log4j" }
 log4j-slf4j2-impl = { module = "org.apache.logging.log4j:log4j-slf4j2-impl", version.ref = "log4j" }
 tx-controlplane-base = { module = "org.eclipse.tractusx.edc:edc-controlplane-base", version.ref = "tx" }
+tx-core-agreements-bpns = { module = "org.eclipse.tractusx.edc:bpns-evaluation-core", version.ref = "tx" }
+tx-core-agreements-retirement = { module = "org.eclipse.tractusx.edc:retirement-evaluation-core", version.ref = "tx" }
 tx-core-bpn-validation = { module = "org.eclipse.tractusx.edc:bpn-validation-core", version.ref = "tx" }
 tx-dataplane-base = { module = "org.eclipse.tractusx.edc:edc-dataplane-base", version.ref = "tx" }
+tx-spi-agreements-bpns = { module = "org.eclipse.tractusx.edc:bpns-evaluation-spi", version.ref = "tx" }
+tx-spi-agreements-retirement = { module = "org.eclipse.tractusx.edc:retirement-evaluation-spi", version.ref = "tx" }
 tx-spi-bpn-validation = { module = "org.eclipse.tractusx.edc:bpn-validation-spi", version.ref = "tx"}
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version = "14.2.0" }
 shadow = { id = "com.gradleup.shadow", version = "9.6.1" }
+swagger = { id = "io.swagger.core.v3.swagger-gradle-plugin", version = "2.2.55" }

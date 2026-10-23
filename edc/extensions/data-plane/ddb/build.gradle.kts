@@ -23,7 +23,3 @@ dependencies {
 
     testImplementation(testFixtures(libs.edc.spi.dataplane))
 }
-
-tasks.withType<Test> {
-    useJUnitPlatform()
-}

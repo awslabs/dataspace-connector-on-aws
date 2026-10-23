@@ -87,7 +87,7 @@ def test_status_hint_maps_codes():
     assert "referenced" in server._status_hint(409, "").lower()
     assert "policy" in server._status_hint(400, "Policy not equal to offer").lower()
     assert "state" in server._status_hint(400, "some other error").lower()
-    assert "public/" in server._status_hint(403, "")
+    assert "empty path" in server._status_hint(403, "")
     assert server._status_hint(500, "") is None
 
 
@@ -110,7 +110,6 @@ def test_resource_maps():
         "contract_negotiations", "contract_agreements", "transfer_processes",
     }
     assert server._RESOURCE_PATH["policy_definitions"] == "policydefinitions"
-    assert server._DELETABLE == {"assets", "policy_definitions", "contract_definitions"}
 
 
 def test_resolve_management_url_single_connector():
@@ -168,14 +167,6 @@ def test_delete_resource_deletable(monkeypatch):
     out = run(fn(server.delete_resource)(resource_type="assets", resource_id="a1", connector_id="c"))
     assert cap.calls[0]["method"] == "DELETE" and cap.calls[0]["path"] == "/v3/assets/a1"
     assert out["success"] is True and out["resource_id"] == "a1"
-
-
-def test_delete_resource_rejects_non_deletable(monkeypatch):
-    cap = Capture()
-    monkeypatch.setattr(server, "_api_request", cap)
-    out = run(fn(server.delete_resource)(resource_type="transfer_processes", resource_id="x", connector_id="c"))
-    assert out["error"] is True
-    assert cap.calls == []
 
 
 # --- Create / consumer payload shapes -------------------------------------------
@@ -362,4 +353,30 @@ def test_fetch_data_403_has_hint(monkeypatch):
 
     out = run(fn(server.fetch_data)(transfer_process_id="tp1", connector_id="c"))
     assert out["status"] == 403
-    assert "public/" in out["hint"] and "token" in out["hint"].lower()
+    assert "empty path" in out["hint"] and "token" in out["hint"].lower()
+
+
+def test_fetch_data_sends_empty_array_body(monkeypatch):
+    async def fake_api(method, path, payload=None, connector_id=None):
+        return {"endpoint": "https://dp.example.com/data/carbonex", "authorization": "tok"}
+
+    monkeypatch.setattr(server, "_api_request", fake_api)
+    FakeAsyncClient.queue = [FakeResponse(200, json_body=[])]
+    monkeypatch.setattr(server.httpx, "AsyncClient", FakeAsyncClient)
+
+    run(fn(server.fetch_data)(transfer_process_id="tp1", method="POST", path="lookup/shellsByAssetLink", body=[]))
+    assert FakeAsyncClient.last["kwargs"]["content"] == b"[]"
+    assert FakeAsyncClient.last["kwargs"]["headers"]["Content-Type"] == "application/json"
+
+
+def test_fetch_data_extra_headers_cannot_override_authorization(monkeypatch):
+    async def fake_api(method, path, payload=None, connector_id=None):
+        return {"endpoint": "https://dp.example.com/data/carbonex", "authorization": "tok"}
+
+    monkeypatch.setattr(server, "_api_request", fake_api)
+    FakeAsyncClient.queue = [FakeResponse(200, json_body={})]
+    monkeypatch.setattr(server.httpx, "AsyncClient", FakeAsyncClient)
+
+    run(fn(server.fetch_data)(transfer_process_id="tp1", headers={"Edc-Bpn": "BPNL0000000FORGED", "authorization": "x"}))
+    sent = FakeAsyncClient.last["kwargs"]["headers"]
+    assert sent == {"Edc-Bpn": "BPNL0000000FORGED", "Authorization": "tok"}

@@ -13,41 +13,22 @@ import {
   CodeBuildStep,
   CodePipeline,
   CodePipelineSource,
-  FileSet,
-  IFileSetProducer,
   ManualApprovalStep,
 } from "aws-cdk-lib/pipelines";
 
 import { DeploymentStage } from "./deployment-stage";
-import { ConnectorStateTable } from "./constructs/connector-state-table";
 import {
+  basyxEntries,
+  basyxStackName,
   DeploymentConfig,
   PipelineYaml,
   resolveDeploymentName,
 } from "./config/config";
 import { resolve } from "path";
-import { ResolvedEdcIam } from "./portal/provision-output";
-
-/** Least-privilege DynamoDB access to the connector state table for a pipeline step. */
-function stateTablePolicy(stateTable: ConnectorStateTable): PolicyStatement {
-  return new PolicyStatement({
-    effect: Effect.ALLOW,
-    actions: [
-      "dynamodb:GetItem",
-      "dynamodb:PutItem",
-      "dynamodb:UpdateItem",
-      "dynamodb:DeleteItem",
-      "dynamodb:Query",
-    ],
-    resources: [stateTable.table.tableArn],
-  });
-}
 
 export interface PipelineStackProps extends StackProps {
   readonly pipelineConfig: PipelineYaml;
   readonly deploymentConfig: DeploymentConfig;
-  readonly resolvedEdcIam: ResolvedEdcIam;
-  readonly activeBpnls: string[];
 }
 
 export class PipelineStack extends Stack {
@@ -56,22 +37,6 @@ export class PipelineStack extends Stack {
 
     const config = props.pipelineConfig;
     const deploymentName = resolveDeploymentName(config);
-    const stageId = deploymentName;
-
-    const stateTable = new ConnectorStateTable(
-      this,
-      "ConnectorState",
-      `${deploymentName}-connector-state`,
-    );
-
-    if (
-      config.configSource === "github" &&
-      (!config.configRepoName || !config.connectionArn)
-    ) {
-      throw new Error(
-        "pipeline.yaml: github configSource requires configRepoName and connectionArn.",
-      );
-    }
 
     const configSource =
       config.configSource === "github"
@@ -79,19 +44,21 @@ export class PipelineStack extends Stack {
             connectionArn: config.connectionArn!,
           })
         : CodePipelineSource.codeCommit(
-            // CodeCommit repo name is derived from deploymentName so instances
-            // never collide; the pipeline creates and seeds it.
-            this.getOrCreateConfigRepo(`${deploymentName}-config`),
+            new Repository(this, "ConfigRepo", {
+              repositoryName: `${deploymentName}-config`,
+              description:
+                "Configuration repository for Dataspace Connector on AWS deployments",
+              code: Code.fromDirectory(
+                resolve(__dirname, "../config-templates"),
+                "main",
+              ),
+            }),
             "main",
           );
 
     const synth = new CodeBuildStep("Synth", {
       input: configSource,
       buildEnvironment: { buildImage: LinuxBuildImage.STANDARD_7_0 },
-      env: {
-        STATE_TABLE_NAME: stateTable.table.tableName,
-        DEPLOYMENT_NAME: deploymentName,
-      },
       installCommands: ["n 24"],
       commands: [
         `APP_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('pipeline.yaml'))['appVersion'])")`,
@@ -100,24 +67,10 @@ export class PipelineStack extends Stack {
         `cd app && git checkout "$APP_VERSION"`,
         `cd edc && ./gradlew clean shadowJar`,
         `cd ../cdk && npm ci --ignore-scripts && npx tsc`,
-        // Populate each connector's edcIam from the portal before synth.
-        `node dist/portal/provision.js --config-path=../..`,
         `npx cdk synth --app 'node dist/app.js' --context config-path=../..`,
       ],
       primaryOutputDirectory: "app/cdk/build/cdk.out",
-      rolePolicyStatements: [
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          actions: ["secretsmanager:GetSecretValue"],
-          resources: [
-            `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${deploymentName}/portal-admin/*`,
-          ],
-        }),
-        stateTablePolicy(stateTable),
-      ],
     });
-
-    const cdkBundle = synth.addOutputDirectory("app/cdk");
 
     const pipeline = new CodePipeline(this, "Pipeline", {
       pipelineName: `${deploymentName}Pipeline`,
@@ -134,96 +87,80 @@ export class PipelineStack extends Stack {
     });
 
     const stage = pipeline.addStage(
-      new DeploymentStage(this, stageId, {
+      new DeploymentStage(this, deploymentName, {
         config: props.deploymentConfig,
-        resolvedEdcIam: props.resolvedEdcIam,
-        activeBpnls: props.activeBpnls,
         deploymentName,
       }),
     );
 
-    if (config.requireApproval) {
-      stage.addPre(new ManualApprovalStep("Approve"));
-    }
-
-    stage.addPost(
-      this.portalFinalizationStep(
-        configSource,
-        cdkBundle,
-        stateTable,
-        deploymentName,
-      ),
+    const cleanUp = this.cleanUpStacksStep(
+      deploymentName,
+      props.deploymentConfig,
     );
+    if (config.requireApproval) {
+      const approve = new ManualApprovalStep("Approve");
+      cleanUp.addStepDependency(approve);
+      stage.addPre(approve);
+    }
+    stage.addPre(cleanUp);
+  }
+
+  private stackArn(stackName: string): string {
+    return `arn:aws:cloudformation:${this.region}:${this.account}:stack/${stackName}/*`;
   }
 
   /**
-   * Post-deploy finalization: writes OAuth secrets, registers new connectors,
-   * and cleans up orphans (portal deregistration + stack deletion). Reuses the
-   * compiled CDK bundle from Synth — no clone or rebuild.
+   * Before the deploy, deletes the BaSyx and connector stacks whose config is
+   * gone, BaSyx first, and any left in ROLLBACK_COMPLETE by a failed first
+   * create, which accept no change set. CDK Pipelines never deletes a stack
+   * itself. A connector stack's delete removes its portal registration, a
+   * BaSyx stack's delete its DTR offer.
    */
-  private portalFinalizationStep(
-    configSource: IFileSetProducer,
-    cdkBundle: FileSet,
-    stateTable: ConnectorStateTable,
+  private cleanUpStacksStep(
     deploymentName: string,
+    config: DeploymentConfig,
   ): CodeBuildStep {
-    const secretArn = `arn:aws:secretsmanager:${this.region}:${this.account}:secret`;
-    const adminSecretArn = `${secretArn}:${deploymentName}/portal-admin/*`;
-    const connectorSecretArn = `${secretArn}:${deploymentName}/*/edc.iam.sts.oauth.client.secret-*`;
-    const connectorStackArn = `arn:aws:cloudformation:${this.region}:${this.account}:stack/${deploymentName}-Connector*/*`;
-    const sharedInfraStackArn = `arn:aws:cloudformation:${this.region}:${this.account}:stack/${deploymentName}-SharedInfra/*`;
-
-    return new CodeBuildStep("PortalFinalization", {
-      input: configSource,
-      additionalInputs: { "cdk-bundle": cdkBundle },
-      env: {
-        STATE_TABLE_NAME: stateTable.table.tableName,
-        DEPLOYMENT_NAME: deploymentName,
-      },
-      installCommands: ["n 24"],
+    const connectors = `${deploymentName}-Connector-`;
+    const basyx = basyxStackName(deploymentName, "");
+    const keep = [
+      ...config.connectors.map((c) => `${connectors}${c.connectorId}`),
+      ...basyxEntries(config).map((b) =>
+        basyxStackName(deploymentName, b.bpnl),
+      ),
+    ];
+    return new CodeBuildStep("CleanUpStacks", {
       commands: [
-        `node cdk-bundle/dist/portal/finalize.js --config-path=. --stack-prefix=${deploymentName}`,
+        `KEEP=" ${keep.join(" ")} "`,
+        [
+          `for p in ${basyx} ${connectors}; do`,
+          `aws cloudformation list-stacks --query "StackSummaries[?StackStatus!='DELETE_COMPLETE' && starts_with(StackName, '$p')].[StackName,StackStatus]" --output text |`,
+          `while read -r s status; do`,
+          `case "$KEEP" in *" $s "*) [ "$status" = ROLLBACK_COMPLETE ] || continue;; esac;`,
+          `echo "Deleting $s ($status)";`,
+          `aws cloudformation delete-stack --stack-name "$s" && aws cloudformation wait stack-delete-complete --stack-name "$s" || exit 1;`,
+          `done || exit 1;`,
+          `done`,
+        ].join(" "),
       ],
       rolePolicyStatements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
-          actions: ["secretsmanager:GetSecretValue"],
-          resources: [adminSecretArn],
+          // The action has no resource-level permissions.
+          actions: ["cloudformation:ListStacks"],
+          resources: ["*"],
         }),
         new PolicyStatement({
           effect: Effect.ALLOW,
-          actions: ["secretsmanager:PutSecretValue"],
-          resources: [connectorSecretArn],
-        }),
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          // Read-only on SharedInfra (DSP base URL) and connector stacks.
-          actions: ["cloudformation:DescribeStacks"],
-          resources: [sharedInfraStackArn, connectorStackArn],
-        }),
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          // Orphan cleanup deletes connector stacks only, never SharedInfra.
           actions: [
             "cloudformation:DeleteStack",
-            "cloudformation:DescribeStackEvents",
+            "cloudformation:DescribeStacks",
           ],
-          resources: [connectorStackArn],
+          resources: [
+            this.stackArn(`${connectors}*`),
+            this.stackArn(`${basyx}*`),
+          ],
         }),
-        stateTablePolicy(stateTable),
       ],
-    });
-  }
-
-  private getOrCreateConfigRepo(repoName: string): Repository {
-    return new Repository(this, "ConfigRepo", {
-      repositoryName: repoName,
-      description:
-        "Configuration repository for Dataspace Connector on AWS deployments",
-      code: Code.fromDirectory(
-        resolve(__dirname, "../config-templates"),
-        "main",
-      ),
     });
   }
 }
