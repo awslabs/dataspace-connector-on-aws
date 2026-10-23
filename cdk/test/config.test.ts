@@ -18,6 +18,7 @@ import {
   validateDeploymentName,
   validateLogLevel,
 } from "../lib/config/config";
+import { STS_DIM_URL } from "../lib/portal-connector/client";
 import {
   basyxStackName,
   DeploymentConfig,
@@ -156,7 +157,7 @@ describe("edcIdentityEnvironment", () => {
     expect(env["tx.edc.iam.iatp.bdrs.server.url"]).toBe(
       "https://bdrs.beta.cofinity-x.com/api/directory",
     );
-    expect(env["tx.edc.iam.sts.dim.url"]).toMatch(/^https:\/\//);
+    expect(env["tx.edc.iam.sts.dim.url"]).toBe(STS_DIM_URL);
     expect(env["edc.iam.sts.oauth.client.id"]).toBe("client-1");
     expect(env["edc.iam.sts.oauth.token.url"]).toBe(
       "https://auth.example/oauth/token",
@@ -347,12 +348,14 @@ describe("portal config", () => {
     expect(() => loadDeploymentConfig(dir)).toThrow("portal.bpnl 'BPNL-1'");
   });
 
-  test("production is not supported yet", () => {
+  test("production is accepted", () => {
     const dir = writeConfig(
       portal({ environment: "production", bpnl: BPNL }),
       oneConnector(),
     );
-    expect(() => loadDeploymentConfig(dir)).toThrow(/not supported yet/);
+    expect(loadDeploymentConfig(dir).deployment.portal.environment).toBe(
+      "production",
+    );
   });
 
   test("an unknown environment is rejected", () => {

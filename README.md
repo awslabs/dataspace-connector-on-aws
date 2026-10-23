@@ -23,7 +23,7 @@ To participate in secure, sovereign data sharing through the Catena-X data space
 
 * Node.js 24+
 * AWS CLI configured with credentials for your target account
-* A [Cofinity-X Portal](https://portal.beta.cofinity-x.com/) account for your Catena-X–onboarded organization
+* A Cofinity-X Portal ([Beta](https://portal.beta.cofinity-x.com/) or [Production](https://myportal.cofinity-x.com/)) account for your Catena-X–onboarded organization
 
 ### How It Works
 
@@ -107,7 +107,7 @@ Shared infrastructure plus Cofinity-X Portal integration. The pipeline derives e
 
 | Key | Required | Default | Description |
 |---|---|---|---|
-| `portal.environment` | yes | | Cofinity-X Portal environment. Only `beta` is supported until the production wallet service URL is confirmed. |
+| `portal.environment` | yes | | Cofinity-X Portal environment: `beta` or `production`. |
 | `portal.bpnl` | unless every connector sets `bpnl` | | Default BPNL of every connector. |
 | `profile` | | `development` | Shared infrastructure and BaSyx: `development` (1 NAT gateway, Fargate Spot) or `production` (2 NAT gateways, On-Demand). See [Deployment Profiles](#deployment-profiles). |
 | `vpcIpAddresses` | | `10.0.0.0/20` | VPC CIDR. |

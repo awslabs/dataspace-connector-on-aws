@@ -22,9 +22,11 @@ export interface PortalEnvironmentSettings {
   readonly didHost: string;
   readonly trustedIssuer: string;
   readonly didResolver: string;
-  /** Wallet (DIM) service URL. Undefined where not yet known. */
-  readonly stsDimUrl?: string;
 }
+
+/** Wallet (DIM) service URL, the same for every portal environment. */
+export const STS_DIM_URL =
+  "https://dis-integration-service-prod.eu10.div.cloud.sap/api/v2.0.0/dcp/catena-x-portal";
 
 export const PORTAL_ENVIRONMENTS = {
   beta: {
@@ -35,8 +37,6 @@ export const PORTAL_ENVIRONMENTS = {
     trustedIssuer:
       "did:web:portal-backend.beta.cofinity-x.com:api:administration:staticdata:did:BPNLCOFINITYEZFA",
     didResolver: "https://bdrs.beta.cofinity-x.com/api/directory",
-    stsDimUrl:
-      "https://dis-integration-service-prod.eu10.div.cloud.sap/api/v2.0.0/dcp/catena-x-portal",
   },
   production: {
     backend: "https://portal-backend.svc.cofinity-x.com/api/administration",

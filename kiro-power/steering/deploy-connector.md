@@ -26,7 +26,7 @@ Ask the user for the AWS region (default `eu-central-1`).
 
 ## Phase 3: Cofinity-X Portal Admin User
 
-The user does this once per organization (BPNL), following `docs/cofinity-x-portal-setup.md`: create an internal technical user with only the **Connector Management** role in the portal ([Beta](https://portal.beta.cofinity-x.com/); only beta is supported yet), and store its credentials in Secrets Manager as `<deploymentName>/portal-admin/<BPNL>`, holding `{"clientId":"...","clientSecret":"..."}`. Nothing else is created in the portal by hand.
+The user does this once per organization (BPNL), following `docs/cofinity-x-portal-setup.md`: create an internal technical user with only the **Connector Management** role in the portal ([Beta](https://portal.beta.cofinity-x.com/) or [Production](https://myportal.cofinity-x.com/)), and store its credentials in Secrets Manager as `<deploymentName>/portal-admin/<BPNL>`, holding `{"clientId":"...","clientSecret":"..."}`. Nothing else is created in the portal by hand.
 
 ---
 

@@ -7,6 +7,7 @@ It does this as one internal **admin technical user** per organization (BPNL), w
 ## Prerequisites
 
 - Your organization is onboarded to the Catena-X data space and has a wallet
+- Your organization has the **Active Participant** company role, which the portal requires to offer the **Connector Management** technical user role
 - You have access to the relevant Cofinity-X Portal instance
 
 ## Step 1: Create the admin technical user
@@ -36,7 +37,7 @@ To rotate the secret, update the value; the next connector create or update uses
 | `edc.iam.issuer.id`                  | The company DID the portal hosts for the BPNL              |
 | `edc.iam.trusted-issuer.issuer-1.id` | The portal operator's DID                                  |
 | `tx.edc.iam.iatp.bdrs.server.url`    | The portal environment's BPN/DID Resolution Service (BDRS) |
-| `tx.edc.iam.sts.dim.url`             | The portal environment's wallet (DIM) service              |
+| `tx.edc.iam.sts.dim.url`             | The wallet (DIM) service, the same for Beta and Production |
 | `edc.iam.sts.oauth.client.id`        | The connector's technical user                             |
 | `edc.iam.sts.oauth.token.url`        | The connector's technical user                             |
 

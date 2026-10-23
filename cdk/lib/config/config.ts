@@ -21,6 +21,7 @@ import {
   PORTAL_ENVIRONMENTS,
   PortalEnvironment,
   PortalEnvironmentSettings,
+  STS_DIM_URL,
   companyDid,
 } from "../portal-connector/client";
 
@@ -184,7 +185,7 @@ export function edcIdentityEnvironment(
     "edc.iam.trusted-issuer.issuer-1.id": settings.trustedIssuer,
     "edc.iam.sts.oauth.token.url": technicalUser.stsOauthTokenUrl,
     "edc.iam.sts.oauth.client.id": technicalUser.clientId,
-    "tx.edc.iam.sts.dim.url": settings.stsDimUrl!,
+    "tx.edc.iam.sts.dim.url": STS_DIM_URL,
     "tractusx.edc.participant.bpn": bpnl,
     "edc.iam.issuer.id": did,
     "edc.participant.id": did,
@@ -483,14 +484,6 @@ function validateDeployment(data: DeploymentYaml, filePath: string): void {
   if (!Object.keys(PORTAL_ENVIRONMENTS).includes(String(environment))) {
     throw new Error(
       `${filePath}: portal.environment must be "beta" or "production", got "${String(environment)}"`,
-    );
-  }
-  if (
-    !(PORTAL_ENVIRONMENTS[data.portal.environment] as PortalEnvironmentSettings)
-      .stsDimUrl
-  ) {
-    throw new Error(
-      `${filePath}: portal.environment "${data.portal.environment}" is not supported yet: its wallet (DIM) service URL is unknown.`,
     );
   }
   if (data.portal.bpnl !== undefined) {
