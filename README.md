@@ -129,7 +129,7 @@ For each connector the pipeline creates a Cofinity-X Portal technical user (**Id
 | `bpnl` | | `portal.bpnl` | The connector's BPNL, to host connectors of more than one organization in one deployment. |
 | `profile` | | `production` | `production` (On-Demand, 1-month logs) or `development` (Fargate Spot, 1-week logs), independent of the deployment `profile`. |
 | `controlPlaneCpu`, `controlPlaneMemoryLimitMiB` | | `256`, `1024` | Control plane Fargate task size. |
-| `dataPlaneCpu`, `dataPlaneMemoryLimitMiB` | | `256`, `512` | Data plane Fargate task size. |
+| `dataPlaneCpu`, `dataPlaneMemoryLimitMiB` | | `256`, `512` | Data plane Fargate task size. For high-volume pulls use at least `1024`, `2048` (see [Submodels at Scale](docs/submodels-at-scale.md#size-the-data-plane)). |
 | `interactiveStateMachineIterationMillis` | | `10000` | Iteration interval of the negotiation, transfer and data-flow state machines. |
 | `backgroundStateMachineIterationMillis` | | `60000` | Iteration interval of the policy monitor and data-plane selector. |
 | `dataPlaneFlowLeaseMillis` | | `10000` | How often an open PULL flow renews its lease (one DynamoDB write). After 5 missed renewals another data plane may take the flow over. |
@@ -155,7 +155,7 @@ Each listed BPNL gets its own `<deploymentName>-BaSyx-<BPNL>` stack with an Auro
 
 #### Registering twins and submodels
 
-The pipeline creates the services empty. Your applications write shell descriptors and submodels through the management API, signed with SigV4 and carrying a BaSyx writer token. [Digital Twins with Eclipse BaSyx](docs/digital-twins-with-basyx.md) walks through the provider and consumer steps with examples.
+The pipeline creates the services empty. Your applications write shell descriptors and submodels through the management API, signed with SigV4 and carrying a BaSyx writer token. [Digital Twins with Eclipse BaSyx](docs/digital-twins-with-basyx.md) walks through the provider and consumer steps with examples. [Submodels at Scale](docs/submodels-at-scale.md) covers high-volume exchanges and an AWS-native alternative to the BaSyx Submodel Repository.
 
 Things to know:
 

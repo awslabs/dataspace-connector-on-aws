@@ -14,7 +14,7 @@ It does this as one internal **admin technical user** per organization (BPNL), w
 
 From the Cofinity-X Portal, open **Technical Setup** in the top navigation bar and select **Technical User Management**.
 
-![Navigate to Technical User Management](../img/cofinity-x-portal-setup-1.png)
+![Navigate to Technical User Management](../img/cofinity-x-portal-setup.png)
 
 Create a technical user with the **Internal technical user profile** and only the **Connector Management** role. Copy its **Client ID** and **Secret**.
 
