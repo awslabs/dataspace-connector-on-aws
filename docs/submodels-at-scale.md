@@ -20,9 +20,9 @@ Single calls add a round trip through the data plane per record. Prefer the bulk
 | Task | Use | Measured |
 |---|---|---|
 | Register twins | `POST /bulk/shell-descriptors` (asynchronous) | 1,000 shells in 8.9 s |
-| Find new twins | `POST lookup/shellsByAssetLink?createdAfter=<RFC 3339>` | 2,000 IDs in 3 calls, 0.4 s |
-| Read descriptors | `GET shell-descriptors?limit=1000` | 2,000 descriptors in 3 calls, 1.5 s |
-| Read submodels | `GET submodels/$value?semanticId=<referenceB64>&limit=` | 100 submodels in 2 calls |
+| Find new twins | `POST /lookup/shellsByAssetLink?createdAfter=<RFC 3339>` | 2,000 IDs in 3 calls, 0.4 s |
+| Read descriptors | `GET /shell-descriptors?limit=1000` | 2,000 descriptors in 3 calls, 1.5 s |
+| Read submodels | `GET /submodels/$value?semanticId=<referenceB64>&limit=` | 100 submodels in 2 calls |
 
 `semanticId` is the base64url-encoded JSON Reference `{"type":"ExternalReference","keys":[{"type":"GlobalReference","value":"<semanticId>"}]}`, not the plain IRI.
 
@@ -32,8 +32,8 @@ Every submodel request passes through the provider data plane. We ran load tests
 
 | `dataPlaneCpu` / `dataPlaneMemoryLimitMiB` | Warm task | Newly started task under load |
 |---|---|---|
-| `256` / `512` (default) | 80-160 requests/s | Stayed CPU-bound for more than 10 minutes; adding a second task lowered total throughput |
-| `1024` / `2048` | 360+ requests/s | Warm after about 1 minute; two tasks reached 440 requests/s |
+| `256` / `512` (default) | 80-160 requests/s | Stayed CPU-bound for 10 minutes; adding a second task lowered total throughput |
+| `1024` / `2048` | More than 360 requests/s | Warm after about 1 minute; two tasks reached 440 requests/s |
 
 In these tests each proxied request cost 0.5 DynamoDB read capacity units. For high-volume exchanges, raise `dataPlaneCpu` before adding tasks, and terminate transfers you no longer pull from (see [Open Transfers and DynamoDB Cost](open-transfers-and-dynamodb-cost.md)).
 
