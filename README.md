@@ -118,6 +118,7 @@ Shared infrastructure plus Cofinity-X Portal integration. The pipeline derives e
 | `observabilityApiPrincipals` | | none | Same for the Observability API. |
 | `logLevel` | | Tractus-X default | EDC log level of all connectors: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR` or `OFF`. `DEBUG` and `TRACE` also turn on API Gateway data tracing, which logs full request and response bodies, including tokens, to CloudWatch. Don't use them in production. |
 | `stateRemovalPolicy` | | `RETAIN` | Whether stored state (each connector's DynamoDB table and S3 bucket, each BaSyx database) is kept (`RETAIN`) or deleted (`DESTROY`) with its stack. |
+| `persistence` | | `dynamodb` | EDC store: `dynamodb` (one DynamoDB table per connector) or `aurora` (one Aurora Serverless v2 PostgreSQL cluster per connector). Applies to all connectors; a connector may override it. |
 | `certificateArn`, `domainName`, `hostedZoneId` | all or none | | Custom domain, see [Custom Domain](#custom-domain). |
 | `basyx` | | | Digital Twin Registry per BPNL, see [Digital Twin Registry](#digital-twin-registry-eclipse-basyx). |
 
@@ -137,6 +138,7 @@ For each connector the pipeline creates a Cofinity-X Portal technical user (**Id
 | `dataPlaneFlowLeaseMillis` | | `10000` | How often an open PULL flow renews its lease (one DynamoDB write). After 5 missed renewals another data plane may take the flow over. |
 | `stateRemovalPolicy` | | deployment value | Overrides `stateRemovalPolicy` for this connector. |
 | `logLevel` | | deployment value | Overrides `logLevel` for this connector. |
+| `persistence` | | deployment value | EDC store: `dynamodb` (one DynamoDB table per connector) or `aurora` (one Aurora Serverless v2 PostgreSQL cluster per connector). Overrides `persistence` for this connector. |
 
 ### Custom Domain
 

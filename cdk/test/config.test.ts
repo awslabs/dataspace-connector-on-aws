@@ -8,6 +8,7 @@ import {
   ConnectorYaml,
   connectorPriority,
   deriveAdminSecretName,
+  deriveConnectorClusterIdentifier,
   deriveConnectorTableName,
   deriveSecretPrefix,
   connectorBpnl,
@@ -15,6 +16,7 @@ import {
   resolveDeploymentName,
   toPrincipals,
   toRemovalPolicy,
+  validateClusterIdentifier,
   validateConnectorId,
   validateDeploymentName,
   validateLogLevel,
@@ -429,6 +431,141 @@ describe("stateRemovalPolicy validation", () => {
     );
     expect(() => loadDeploymentConfig(dir)).toThrow(
       `deployment.yaml: basyx.${BPNL}.stateRemovalPolicy must be "RETAIN" or "DESTROY", got "X"`,
+    );
+  });
+});
+
+describe("persistence", () => {
+  test("deployment defaults to dynamodb", () => {
+    const { deployment, connectors } = loadDeploymentConfig(
+      writeConfig(baseDeployment(), oneConnector()),
+    );
+    expect(deployment.persistence).toBe("dynamodb");
+    expect(connectors[0].persistence).toBe("dynamodb");
+  });
+
+  test("connector inherits the deployment value", () => {
+    const { connectors } = loadDeploymentConfig(
+      writeConfig(
+        { ...baseDeployment(), persistence: "aurora" },
+        { a: baseConnector("aa"), b: baseConnector("bb") },
+      ),
+    );
+    expect(connectors.map((c) => c.persistence)).toEqual(["aurora", "aurora"]);
+  });
+
+  test("connector override wins over the deployment value", () => {
+    const { deployment, connectors } = loadDeploymentConfig(
+      writeConfig(baseDeployment(), {
+        a: { ...baseConnector("aa"), persistence: "aurora" },
+        b: baseConnector("bb"),
+      }),
+    );
+    expect(deployment.persistence).toBe("dynamodb");
+    expect(connectors.map((c) => c.persistence)).toEqual([
+      "aurora",
+      "dynamodb",
+    ]);
+  });
+
+  test("connector can override an aurora deployment back to dynamodb", () => {
+    const { connectors } = loadDeploymentConfig(
+      writeConfig(
+        { ...baseDeployment(), persistence: "aurora" },
+        { a: { ...baseConnector("aa"), persistence: "dynamodb" } },
+      ),
+    );
+    expect(connectors[0].persistence).toBe("dynamodb");
+  });
+
+  test("deployment value must be dynamodb or aurora", () => {
+    const dir = writeConfig(
+      { ...baseDeployment(), persistence: "postgres" },
+      oneConnector(),
+    );
+    expect(() => loadDeploymentConfig(dir)).toThrow(
+      'deployment.yaml: persistence must be "dynamodb" or "aurora", got "postgres"',
+    );
+  });
+
+  test("connector value must be dynamodb or aurora", () => {
+    const dir = writeConfig(baseDeployment(), {
+      a: { ...baseConnector("aa"), persistence: "Aurora" },
+    });
+    expect(() => loadDeploymentConfig(dir)).toThrow(
+      'connectors/connector-a.yaml: persistence must be "dynamodb" or "aurora", got "Aurora"',
+    );
+  });
+
+  test("an empty value is rejected rather than defaulted", () => {
+    const dir = writeConfig(baseDeployment(), {
+      a: { ...baseConnector("aa"), persistence: null },
+    });
+    expect(() => loadDeploymentConfig(dir)).toThrow(
+      'connectors/connector-a.yaml: persistence must be "dynamodb" or "aurora", got "null"',
+    );
+  });
+
+  test("a misspelled key is still rejected", () => {
+    const deployment = writeConfig(
+      { ...baseDeployment(), persistance: "aurora" },
+      oneConnector(),
+    );
+    expect(() => loadDeploymentConfig(deployment)).toThrow(
+      "deployment.yaml: unknown key 'persistance'",
+    );
+    const connector = writeConfig(baseDeployment(), {
+      a: { ...baseConnector("aa"), persistance: "aurora" },
+    });
+    expect(() => loadDeploymentConfig(connector)).toThrow(
+      "connectors/connector-a.yaml: unknown key 'persistance'",
+    );
+  });
+});
+
+describe("Aurora cluster identifier", () => {
+  test("is the lowercased deployment and connector name", () => {
+    expect(deriveConnectorClusterIdentifier("DataspaceConnector", "ccm")).toBe(
+      "dataspaceconnector-ccm",
+    );
+  });
+
+  test("accepts the default deployment name with a long connectorId", () => {
+    expect(() =>
+      validateClusterIdentifier("DataspaceConnector", "c".repeat(44)),
+    ).not.toThrow();
+  });
+
+  test("accepts exactly 63 characters", () => {
+    expect(() =>
+      validateClusterIdentifier("d".repeat(10), "c".repeat(52)),
+    ).not.toThrow();
+  });
+
+  test("rejects more than 63 characters", () => {
+    expect(() =>
+      validateClusterIdentifier("d".repeat(10), "c".repeat(53)),
+    ).toThrow(/is 64 characters \(max 63\)/);
+  });
+
+  test("rejects the maximum deploymentName with the maximum connectorId", () => {
+    expect(() =>
+      validateClusterIdentifier("d".repeat(41), "c".repeat(60)),
+    ).toThrow(/characters \(max 63\)/);
+  });
+
+  test("rejects an identifier that starts with a digit", () => {
+    expect(() => validateClusterIdentifier("1dep", "ccm")).toThrow(
+      /must start with a letter/,
+    );
+  });
+
+  test("rejects consecutive hyphens from either part", () => {
+    expect(() => validateClusterIdentifier("dep--x", "ccm")).toThrow(
+      /two consecutive hyphens/,
+    );
+    expect(() => validateClusterIdentifier("dep", "a--b")).toThrow(
+      /two consecutive hyphens/,
     );
   });
 });

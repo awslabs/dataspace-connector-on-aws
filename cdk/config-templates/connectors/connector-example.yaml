@@ -12,3 +12,4 @@ connectorId: example
 # dataPlaneFlowLeaseMillis: 10000
 # stateRemovalPolicy: RETAIN
 # logLevel: DEBUG
+# persistence: dynamodb
