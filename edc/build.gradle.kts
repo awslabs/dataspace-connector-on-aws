@@ -32,13 +32,50 @@ subprojects {
         isReproducibleFileOrder = true
     }
 
-    // The control-plane and data-plane runtimes: one fat jar each, with the
-    // shared Log4j 2 config, and the OpenAPI document the API specs are
-    // generated from (scripts/regenerate-api-specs.py).
+    // The control-plane and data-plane runtimes: one fat jar per persistence
+    // and plane, with the shared Log4j 2 config, and the OpenAPI document the
+    // API specs are generated from (scripts/regenerate-api-specs.py).
+    //
+    // EDC loads every extension on the classpath and has no setting to disable
+    // one, so the store choice is a classpath choice. `runtimeOnly` holds what
+    // both variants share; `ddb` and `postgres` hold what differs:
+    //   shadowJar          -> <project>.jar           (runtimeOnly + ddb)
+    //   postgresShadowJar  -> <project>-postgres.jar  (runtimeOnly + postgres)
+    // postgresShadowJar is deliberately not wired into assemble/build.
     plugins.withId("com.gradleup.shadow") {
-        the<SourceSetContainer>()["main"].resources.srcDir(rootProject.file("logging"))
-        tasks.named<ShadowJar>("shadowJar") {
-            archiveFileName.set("${project.name}.jar")
+        val mainSourceSet = the<SourceSetContainer>()["main"]
+        mainSourceSet.resources.srcDir(rootProject.file("logging"))
+
+        val ddb =
+            configurations.create("ddb") {
+                isCanBeResolved = false
+                isCanBeConsumed = false
+            }
+        val postgres =
+            configurations.create("postgres") {
+                isCanBeResolved = false
+                isCanBeConsumed = false
+            }
+
+        // The default classpath stays the DynamoDB variant.
+        val runtimeClasspath = configurations.getByName("runtimeClasspath")
+        runtimeClasspath.extendsFrom(ddb)
+
+        // Common + PostgreSQL dependencies resolve as one graph, so version
+        // alignment and conflict resolution see everything that ends up in the jar.
+        val postgresRuntimeClasspath =
+            configurations.create("postgresRuntimeClasspath") {
+                isCanBeConsumed = false
+                extendsFrom(configurations.getByName("runtimeOnly"), postgres)
+                attributes {
+                    runtimeClasspath.attributes.keySet().forEach { key ->
+                        @Suppress("UNCHECKED_CAST")
+                        attribute(key as Attribute<Any>, runtimeClasspath.attributes.getAttribute(key)!!)
+                    }
+                }
+            }
+
+        tasks.withType<ShadowJar>().configureEach {
             isZip64 = true
             manifest.attributes["Main-Class"] = "org.eclipse.edc.boot.system.runtime.BaseRuntime"
             mergeServiceFiles()
@@ -46,6 +83,16 @@ subprojects {
             transform<Log4j2PluginsCacheFileTransformer>()
             // Drop the log4j2.json (Root OFF) from tractusx log4j2-monitor; JSON outranks XML.
             exclude("log4j2.json")
+            // The plugin applies these to `shadowJar` only; a task registered here would
+            // keep dependency signature files, which the JVM rejects on the merged jar.
+            exclude(
+                "META-INF/INDEX.LIST",
+                "META-INF/*.SF",
+                "META-INF/*.DSA",
+                "META-INF/*.RSA",
+                "META-INF/versions/**/module-info.class",
+                "module-info.class",
+            )
             filesMatching(
                 listOf(
                     "META-INF/services/**",
@@ -54,6 +101,19 @@ subprojects {
             ) {
                 duplicatesStrategy = DuplicatesStrategy.INCLUDE
             }
+        }
+
+        tasks.named<ShadowJar>("shadowJar") {
+            archiveFileName.set("${project.name}.jar")
+        }
+
+        tasks.register<ShadowJar>("postgresShadowJar") {
+            group = "build"
+            description = "Assembles the fat jar with the PostgreSQL stores instead of the DynamoDB ones."
+            archiveFileName.set("${project.name}-postgres.jar")
+            // Brings the shared log4j2.xml and any local resources.
+            from(mainSourceSet.output)
+            this.configurations.set(listOf(postgresRuntimeClasspath))
         }
     }
 

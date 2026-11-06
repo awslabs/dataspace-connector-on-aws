@@ -20,6 +20,9 @@ operating connectors.
 
 ## Build & test
 - EDC: `cd edc && ./gradlew build` (also `shadowJar`, `test`, `ktlintFormat`).
+  `shadowJar` builds the DynamoDB runtime jars (`control-plane.jar`, `data-plane.jar`).
+  `./gradlew postgresShadowJar` builds the PostgreSQL variants (`*-postgres.jar`);
+  `build` does not.
 - CDK: `cd cdk && npm ci && npx tsc && npx cdk synth`.
 - MCP: `cd mcp && uv run pytest`.
 
