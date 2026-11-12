@@ -52,16 +52,18 @@ export AWS_REGION=eu-central-1
 ./deploy.sh
 ```
 
-This bootstraps the account, deploys the pipeline stack, and creates a CodeCommit configuration repository pre-populated with template YAML files. Alternatively, you can configure your existing GitHub repository.
+On the first run it asks for the values that are fixed once the pipeline exists (deployment name, app repository and version, and the config repository provider: CodeCommit, or GitHub with a repository and an AWS CodeConnections connection) and writes them to `./config`, a copy of the templates that Git ignores. It then bootstraps the account and deploys the pipeline stack. Later runs reuse `./config`; `./deploy.sh <config-path>` uses another folder instead.
 
-**3. Configure and push.** Clone the config repo, edit the YAML files (see [Configuration](#configuration)), and push:
+**3. Configure and push.** Edit the YAML files (see [Configuration](#configuration)) and push them to the config repository. With CodeCommit, the pipeline creates `<deploymentName>-config` seeded with your `./config`:
 
 ```bash
-git clone codecommit::eu-central-1://<your-profile>@DataspaceConnector-config
-cd DataspaceConnector-config
-# edit pipeline.yaml, deployment.yaml, and connectors/*.yaml
+git clone codecommit::eu-central-1://<your-profile>@<deploymentName>-config
+cd <deploymentName>-config
+# edit deployment.yaml and connectors/*.yaml
 git add -A && git commit -m "Initial configuration" && git push origin main
 ```
+
+With GitHub, push the contents of `./config` to your repository.
 
 The pipeline run deploys the shared infrastructure and every connector. The portal takes several minutes to create a connector's technical user, so a connector's first deploy takes correspondingly longer. All later changes flow through Git pushes to the config repository.
 
@@ -98,7 +100,7 @@ The templates in [`cdk/config-templates/`](cdk/config-templates/) list every key
 | `configSource` | | `codecommit` | `codecommit` (created by `deploy.sh`) or `github`. |
 | `configRepoName` | for `github` | | Configuration repository (`owner/name`). |
 | `connectionArn` | for `github` | | AWS CodeConnections connection ARN for that repository. |
-| `deploymentName` | | `DataspaceConnector` | Prefixes every resource (pipeline, stacks, configuration repository, secrets), so independent deployments can share one account and region. Set it once, before the first deploy. |
+| `deploymentName` | | `DataspaceConnector` | Prefixes every resource (pipeline, stacks, configuration repository, secrets), so independent deployments can share one account and region. Set by `deploy.sh` and fixed after the first deploy; the pipeline fails if the config repository changes it. |
 | `requireApproval` | | `false` | Adds a manual approval step before each deploy. |
 
 ### `deployment.yaml`

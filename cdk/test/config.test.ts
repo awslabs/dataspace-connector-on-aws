@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {
+  assertDeploymentName,
   DEFAULT_DEPLOYMENT_NAME,
   DeploymentYaml,
   ConnectorYaml,
@@ -90,6 +91,19 @@ describe("resolveDeploymentName", () => {
     expect(
       resolveDeploymentName({ deploymentName: "coexist-test" } as never),
     ).toBe("coexist-test");
+  });
+});
+
+describe("assertDeploymentName", () => {
+  test("passes without a pipeline name or with the same name", () => {
+    expect(() => assertDeploymentName("Acme")).not.toThrow();
+    expect(() => assertDeploymentName("Acme", "Acme")).not.toThrow();
+  });
+
+  test("fails when the config repo renames the deployment", () => {
+    expect(() => assertDeploymentName("Acme", "DataspaceConnector")).toThrow(
+      'pipeline.yaml sets deploymentName "Acme", but this pipeline was created as "DataspaceConnector". deploymentName cannot change after the first deploy.',
+    );
   });
 });
 
@@ -276,6 +290,17 @@ describe("loader", () => {
     });
     expect(() => loadPipelineConfig(dir)).toThrow(
       "pipeline.yaml: configSource github requires configRepoName and connectionArn",
+    );
+  });
+
+  test("rejects an unknown configSource", () => {
+    const dir = writeConfig(baseDeployment(), oneConnector(), {
+      appRepo: "x/y",
+      appVersion: "main",
+      configSource: "GitHub",
+    });
+    expect(() => loadPipelineConfig(dir)).toThrow(
+      'pipeline.yaml: configSource must be codecommit or github, got "GitHub"',
     );
   });
 });

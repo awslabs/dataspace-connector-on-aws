@@ -24,11 +24,12 @@ import {
   PipelineYaml,
   resolveDeploymentName,
 } from "./config/config";
-import { resolve } from "path";
 
 export interface PipelineStackProps extends StackProps {
   readonly pipelineConfig: PipelineYaml;
   readonly deploymentConfig: DeploymentConfig;
+  /** Folder a new CodeCommit config repo is seeded from (only read at repository creation). */
+  readonly seedPath: string;
 }
 
 export class PipelineStack extends Stack {
@@ -48,10 +49,7 @@ export class PipelineStack extends Stack {
               repositoryName: `${deploymentName}-config`,
               description:
                 "Configuration repository for Dataspace Connector on AWS deployments",
-              code: Code.fromDirectory(
-                resolve(__dirname, "../config-templates"),
-                "main",
-              ),
+              code: Code.fromDirectory(props.seedPath, "main"),
             }),
             "main",
           );
@@ -67,7 +65,7 @@ export class PipelineStack extends Stack {
         `cd app && git checkout "$APP_VERSION"`,
         `cd edc && ./gradlew clean shadowJar`,
         `cd ../cdk && npm ci --ignore-scripts && npx tsc`,
-        `npx cdk synth --app 'node dist/app.js' --context config-path=../..`,
+        `npx cdk synth --app 'node dist/app.js' --context config-path=../.. --context deployment-name=${deploymentName}`,
       ],
       primaryOutputDirectory: "app/cdk/build/cdk.out",
     });

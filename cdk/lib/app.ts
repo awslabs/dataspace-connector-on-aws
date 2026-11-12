@@ -6,6 +6,7 @@ import { App, Tags } from "aws-cdk-lib";
 
 import { PipelineStack } from "./pipeline-stack";
 import {
+  assertDeploymentName,
   loadDeploymentConfig,
   loadPipelineConfig,
   resolveDeploymentName,
@@ -16,19 +17,26 @@ const app = new App();
 
 // Config path from context, defaulting to the bundled templates (used for a
 // bare `cdk synth` sanity check). Real deployments pass --context config-path.
+const templates = resolve(__dirname, "../config-templates");
 const configPath = app.node.tryGetContext("config-path")
   ? resolve(app.node.tryGetContext("config-path"))
-  : resolve(__dirname, "../config-templates");
+  : templates;
+// deploy.sh seeds a new CodeCommit config repo from the config it deploys.
+const seedPath = app.node.tryGetContext("seed-path")
+  ? resolve(app.node.tryGetContext("seed-path"))
+  : templates;
 
 const pipelineConfig = loadPipelineConfig(configPath);
 const deploymentConfig = loadDeploymentConfig(configPath);
 
 const deploymentName = resolveDeploymentName(pipelineConfig);
 validateDeploymentName(deploymentName);
+assertDeploymentName(deploymentName, app.node.tryGetContext("deployment-name"));
 
 new PipelineStack(app, `${deploymentName}PipelineStack`, {
   pipelineConfig,
   deploymentConfig,
+  seedPath,
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION,
