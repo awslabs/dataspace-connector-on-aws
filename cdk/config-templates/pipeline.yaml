@@ -4,6 +4,6 @@ appRepo: awslabs/dataspace-connector-on-aws
 appVersion: main
 # configSource: codecommit
 # configRepoName: my-org/config-repo
-# connectionArn: "arn:aws:codestar-connections:eu-central-1:123456789012:connection/..."
+# connectionArn: "arn:aws:codeconnections:eu-central-1:123456789012:connection/..."
 # deploymentName: DataspaceConnector
 # requireApproval: false

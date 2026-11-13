@@ -209,6 +209,19 @@ export function validateDeploymentName(name: string): void {
   }
 }
 
+/** The pipeline passes its own name; a config repo that sets another one cannot be deployed by it. */
+export function assertDeploymentName(
+  configured: string,
+  pipeline?: string,
+): void {
+  if (pipeline && pipeline !== configured) {
+    throw new Error(
+      `pipeline.yaml sets deploymentName "${configured}", but this pipeline was created as "${pipeline}". ` +
+        `deploymentName cannot change after the first deploy.`,
+    );
+  }
+}
+
 /** Derives the per-tenant admin secret name, namespaced by deployment. */
 export function deriveAdminSecretName(
   deploymentName: string,
@@ -457,6 +470,14 @@ export function loadPipelineConfig(configPath: string): PipelineYaml {
     readFileSync(pipelinePath, "utf-8"),
   ) as PipelineYaml;
   rejectUnknownKeys(pipeline, PIPELINE_KEY_SPEC, "pipeline.yaml");
+  if (
+    pipeline.configSource !== undefined &&
+    !["codecommit", "github"].includes(pipeline.configSource)
+  ) {
+    throw new Error(
+      `pipeline.yaml: configSource must be codecommit or github, got "${pipeline.configSource}"`,
+    );
+  }
   if (
     pipeline.configSource === "github" &&
     (!pipeline.configRepoName || !pipeline.connectionArn)

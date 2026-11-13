@@ -192,14 +192,15 @@ The resource ARN format for `execute-api:Invoke`:
 arn:aws:execute-api:{region}:{account-id}:{api-id}/{stage}/{HTTP-VERB}/{resource-path}
 ```
 
-In this project, the stage name is `management` (the API Gateway deployment stage). The `{resource-path}` begins with the `{connectorId}` segment followed by the EDC API path.
+In this project, the stage name is `management` (the API Gateway deployment stage). The `{resource-path}` begins with the `{connectorId}` segment followed by the EDC API path, or with `basyx/<BPNL>` for the BaSyx services.
 
 | Pattern | Grants access to |
 |---------|-----------------|
 | `arn:aws:execute-api:eu-central-1:111122223333:1234567890/management/*/connector-a/*` | All methods, all paths under `connector-a` |
 | `arn:aws:execute-api:eu-central-1:111122223333:1234567890/management/GET/connector-a/*` | Read-only access to `connector-a` |
 | `arn:aws:execute-api:eu-central-1:111122223333:1234567890/management/*/connector-a/v3/assets` | All methods on `/v3/assets` only |
-| `arn:aws:execute-api:eu-central-1:111122223333:1234567890/management/*/*` | All connectors (admin access) |
+| `arn:aws:execute-api:eu-central-1:111122223333:1234567890/management/*/basyx/<BPNL>/*` | The BaSyx services of one `basyx` entry (writes also need a BaSyx writer token) |
+| `arn:aws:execute-api:eu-central-1:111122223333:1234567890/management/*/*` | All connectors and BaSyx services (admin access) |
 
 Use wildcards (`*`) for stage, HTTP verb, or path segments as needed. The API ID is the first hostname label of the `ManagementApiUrl` output on the `DataspaceConnector-SharedInfra` stack (e.g., `https://{api-id}.execute-api.{region}.amazonaws.com/management/`).
 

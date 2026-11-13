@@ -316,7 +316,7 @@ aws cloudformation describe-stacks --stack-name DataspaceConnector-Connector-<co
 **Business Partner Number (BPN):** the connector's `bpnl` in its connector file, else `portal.bpnl` in `deployment.yaml` in the configuration repository. Fetch it from CodeCommit:
 
 ```bash
-aws codecommit get-file --repository-name DataspaceConnector-config \
+aws codecommit get-file --repository-name <deploymentName>-config \
     --file-path deployment.yaml --region <region> --query 'fileContent' --output text | base64 -d
 ```
 

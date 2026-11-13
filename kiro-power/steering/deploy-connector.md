@@ -32,7 +32,9 @@ The user does this once per organization (BPNL), following `docs/cofinity-x-port
 
 ## Phase 4: Write the Configuration
 
-`deploy.sh` seeds the configuration repository from `cdk/config-templates/`, so edit those files first. The README's Configuration section documents every key; ask the user only for values that differ from the defaults.
+Copy `cdk/config-templates/` to `./config` (Git ignores it); `deploy.sh` deploys the pipeline from it and seeds the CodeCommit configuration repository with it. The README's Configuration section documents every key; ask the user only for values that differ from the defaults.
+
+- `pipeline.yaml`: `deploymentName`, `appRepo`, `appVersion` and `configSource` (with `configRepoName` and `connectionArn` for GitHub) are fixed once the pipeline exists, so confirm them before deploying.
 
 - `deployment.yaml`: set `portal.bpnl` to the organization's BPNL and add the identity ARN from Phase 1 under `managementApiPrincipals` (and `observabilityApiPrincipals` if wanted).
 - `connectors/`: replace `connector-example.yaml` with one `connector-<id>.yaml` per connector, each with its `connectorId`. Set `bpnl` only for a connector of a different organization.
@@ -44,10 +46,10 @@ The user does this once per organization (BPNL), following `docs/cofinity-x-port
 ```bash
 export AWS_PROFILE=<profile>
 export AWS_REGION=<region>
-./deploy.sh
+./deploy.sh ./config
 ```
 
-The pipeline then runs on its own. On a connector's first deploy its stack waits for the portal to activate the new technical user, which takes about 7 minutes. Monitor with `aws codepipeline get-pipeline-state --name <deploymentName>Pipeline`.
+With GitHub as the configuration source, push the contents of `./config` to that repository. The pipeline then runs on its own. On a connector's first deploy its stack waits for the portal to activate the new technical user, which takes about 7 minutes. Monitor with `aws codepipeline get-pipeline-state --name <deploymentName>Pipeline`.
 
 Later changes (adding or removing connectors, changing `appVersion`) are pushes to the configuration repository, not edits to the templates.
 

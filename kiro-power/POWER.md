@@ -28,7 +28,7 @@ Deployment is a single GitOps flow: `deploy.sh` creates a CDK Pipeline and a con
 
 - `node@24` and `npm`
 - `aws` (AWS CLI) with credentials configured
-- `python@3.10+` and `uv` (for the MCP server)
+- `python@3.11+` and `uv` (for the MCP server)
 - `git`
 - An organization onboarded to Catena-X, with access to the Cofinity-X Portal
 

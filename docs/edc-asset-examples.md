@@ -1,6 +1,6 @@
 # EDC Asset Examples
 
-Examples of asset definitions for the EDC Management API (`POST /management/<connectorId>/v3/assets`). Each asset is offered in the catalog only once a contract definition selects it with an access and a usage policy. See [Management API Access Patterns](management-api-access-patterns.md) for how to call the API.
+Examples of asset definitions for the EDC Management API (`POST /management/<connectorId>/v3/assets`). Each asset is offered in the catalog only once a contract definition selects it with an access and a usage policy; the [Tractus-X policy walkthrough](https://github.com/eclipse-tractusx/tractusx-edc/blob/main/docs/usage/management-api-walkthrough/02_policies.md) shows the Catena-X policies. See [Management API Access Patterns](management-api-access-patterns.md) for how to call the API.
 
 Values in angle brackets are placeholders.
 
@@ -42,9 +42,9 @@ This is the asset the pipeline creates for the Digital Twin Registry of a `basyx
 
 The placeholders are the outputs `DtrUrl`, `TokenUrl`, `ClientId`, `ClientSecretAlias` and `Scope` of the `<deploymentName>-BaSyx-<BPNL>` stack. The same pattern works for any HTTP backend that accepts client-credentials tokens.
 
-## Battery passport submodel in the BaSyx Submodel Repository
+## Submodels in the BaSyx Submodel Repository
 
-A submodel asset that points at one submodel in the BaSyx Submodel Repository deployed with `services: [dtr, submodelRepository]`. The data plane reaches the repository with the same Cognito client as the DTR. `<submodelIdBase64Url>` is the submodel ID, base64url-encoded without padding, as the AAS API expects.
+One asset for all submodels of a use case in the BaSyx Submodel Repository deployed with `services: [dtr, submodelRepository]`. Each shell descriptor's `href` selects one submodel (`<dataPlanePublicUrl>/submodels/<submodelIdB64>`), and BaSyx returns a submodel only to the BPNLs in its `supplementalSemanticIds`. The data plane reaches the repository with the same Cognito client as the DTR. See [Submodels at Scale](submodels-at-scale.md).
 
 ```json
 {
@@ -60,12 +60,12 @@ A submodel asset that points at one submodel in the BaSyx Submodel Repository de
   "properties": {
     "dct:type": { "@id": "cx-taxo:Submodel" },
     "cx-common:version": "3.0",
-    "aas-semantics:semanticId": { "@id": "<batteryPassSemanticId>" }
+    "aas-semantics:semanticId": { "@id": "<semanticId>" }
   },
   "dataAddress": {
     "@type": "DataAddress",
     "type": "HttpData",
-    "baseUrl": "http://<albHost>:5004/basyx/<BPNL>/smrepo/submodels/<submodelIdBase64Url>",
+    "baseUrl": "http://<albHost>:5004/basyx/<BPNL>/smrepo",
     "proxyPath": "true",
     "proxyQueryParams": "true",
     "oauth2:tokenUrl": "<TokenUrl>",
@@ -76,7 +76,32 @@ A submodel asset that points at one submodel in the BaSyx Submodel Repository de
 }
 ```
 
-`<albHost>` is the host part of `DtrUrl`. Take `<batteryPassSemanticId>` from the battery passport aspect model version your use case requires (CX-0160). Offer the asset with a usage policy that includes `FrameworkAgreement` `DataExchangeGovernance:1.0` and `UsagePurpose` `cx.circular.dpp:1`. [Digital Twins with Eclipse BaSyx](digital-twins-with-basyx.md) shows how the submodel and its shell descriptor are written and how a consumer reaches the asset.
+`<albHost>` is the host part of `DtrUrl`. Take `<semanticId>` from the aspect model your use case standard requires, and offer the asset with the usage purpose that standard defines. [Digital Twins with Eclipse BaSyx](digital-twins-with-basyx.md) shows how the submodel and its shell descriptor are written and how a consumer reaches the asset.
+
+## API key-protected HTTP API
+
+For a backend that checks a static key header, such as the AWS-native submodel service in [Submodels at Scale](submodels-at-scale.md#aws-native-submodel-service). The data plane reads the key from the secret `secretName` under the connector's secret prefix and sends it in the header `authKey` on every request.
+
+```json
+{
+  "@context": { "@vocab": "https://w3id.org/edc/v0.0.1/ns/" },
+  "@type": "Asset",
+  "@id": "<assetId>",
+  "properties": {
+    "name": "<name>",
+    "contentType": "application/json"
+  },
+  "dataAddress": {
+    "@type": "DataAddress",
+    "type": "HttpData",
+    "baseUrl": "<ApiUrl>",
+    "proxyPath": "true",
+    "proxyQueryParams": "true",
+    "authKey": "x-api-key",
+    "secretName": "<secretName>"
+  }
+}
+```
 
 ## Amazon S3 object
 
@@ -98,52 +123,5 @@ An object in the connector's data-plane bucket (output `EdcDataPlaneBucketName` 
     "bucketName": "<bucketName>",
     "objectName": "<objectKey>"
   }
-}
-```
-
-## Policies and contract definition
-
-The DTR offer uses these, and they work as a starting point for the assets above. Policy definitions use the Catena-X policy context:
-
-```json
-{
-  "@context": [
-    "https://w3id.org/dspace/2025/1/odrl-profile.jsonld",
-    "https://w3id.org/catenax/2025/9/policy/context.jsonld",
-    { "@vocab": "https://w3id.org/edc/v0.0.1/ns/" }
-  ],
-  "@type": "PolicyDefinition",
-  "@id": "<usagePolicyId>",
-  "policy": {
-    "@type": "Set",
-    "permission": [
-      {
-        "action": "use",
-        "constraint": [
-          {
-            "and": [
-              { "leftOperand": "FrameworkAgreement", "operator": "eq", "rightOperand": "DataExchangeGovernance:1.0" },
-              { "leftOperand": "UsagePurpose", "operator": "isAnyOf", "rightOperand": "<usagePurpose>" }
-            ]
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-An access policy has the same shape with `"action": "access"` and the single constraint `{ "leftOperand": "Membership", "operator": "eq", "rightOperand": "active" }`. The contract definition links them to the asset:
-
-```json
-{
-  "@context": { "@vocab": "https://w3id.org/edc/v0.0.1/ns/" },
-  "@type": "ContractDefinition",
-  "@id": "<contractDefinitionId>",
-  "accessPolicyId": "<accessPolicyId>",
-  "contractPolicyId": "<usagePolicyId>",
-  "assetsSelector": [
-    { "operandLeft": "https://w3id.org/edc/v0.0.1/ns/id", "operator": "=", "operandRight": "<assetId>" }
-  ]
 }
 ```
