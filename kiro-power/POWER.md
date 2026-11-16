@@ -12,7 +12,7 @@ author: "AWS"
 
 This power helps you deploy and operate a production-ready Dataspace Connector for Catena-X on AWS. It combines an AWS CDK deployment blueprint with 12 MCP tools for the Eclipse Dataspace Components (EDC) Management API; each tool's description carries its usage rules.
 
-The connector uses Tractus-X EDC with AWS-native integrations: Amazon DynamoDB for control plane persistence, AWS Secrets Manager for credentials, Amazon S3 for data transfer, and Amazon API Gateway with IAM authorization for secure API access.
+The connector uses Tractus-X EDC with AWS-native integrations: Amazon DynamoDB or Amazon Aurora PostgreSQL for EDC state (per connector, by its `persistence` setting), AWS Secrets Manager for credentials, Amazon S3 for data transfer, and Amazon API Gateway with IAM authorization for secure API access.
 
 Deployment is a single GitOps flow: `deploy.sh` creates a CDK Pipeline and a configuration repository, then the pipeline creates each connector's technical user in the Cofinity-X Portal, deploys the connector, and registers it for discovery. The same configuration repository can hold one or many connectors.
 

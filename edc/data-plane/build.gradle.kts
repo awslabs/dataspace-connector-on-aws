@@ -9,7 +9,6 @@ plugins {
 
 dependencies {
     runtimeOnly(libs.tx.dataplane.base)
-    runtimeOnly(project(":extensions:data-plane:ddb"))
     runtimeOnly(project(":extensions:data-plane:oauth2-token-cache"))
     runtimeOnly(project(":extensions:data-plane:s3-edr"))
 
@@ -19,4 +18,12 @@ dependencies {
 
     runtimeOnly(libs.log4j.slf4j2.impl)
     runtimeOnly(libs.log4j.core)
+
+    // Persistence variants, see the root build.gradle.kts.
+    "ddb"(project(":extensions:data-plane:ddb"))
+
+    "postgres"(libs.edc.bom.dataplane.feature.sql)
+    "postgres"(libs.edc.edr.index.sql)
+    "postgres"(libs.tx.connector.migration)
+    "postgres"(libs.postgres)
 }

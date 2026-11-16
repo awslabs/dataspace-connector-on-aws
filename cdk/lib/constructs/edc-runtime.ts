@@ -4,7 +4,14 @@
 import { Construct } from "constructs";
 import { PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
-import { IVpc, Peer, Port, SecurityGroup } from "aws-cdk-lib/aws-ec2";
+import { Duration } from "aws-cdk-lib";
+import {
+  ISecurityGroup,
+  IVpc,
+  Peer,
+  Port,
+  SecurityGroup,
+} from "aws-cdk-lib/aws-ec2";
 import { IApplicationTargetGroup } from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import {
   AwsLogDriverMode,
@@ -14,6 +21,7 @@ import {
   FargateTaskDefinition,
   ICluster,
   LogDriver,
+  Secret as EcsSecret,
 } from "aws-cdk-lib/aws-ecs";
 
 import { DeploymentProfile } from "../config/config";
@@ -28,6 +36,10 @@ export interface EdcRuntimeProps {
   /** Named ports; `default` serves `/api` and the health check, each other `/api/<name>`. */
   readonly ports: Readonly<Record<string, number>>;
   readonly environment: Record<string, string>;
+  /** Injected by ECS as environment variables; the values never enter the task definition. */
+  readonly secrets?: Record<string, EcsSecret>;
+  /** How long ECS ignores failing load balancer health checks of a new task. Default: the CDK default of 60 seconds. */
+  readonly healthCheckGracePeriod?: Duration;
   readonly taskRolePolicyStatements: PolicyStatement[];
   readonly albSecurityGroupId: string;
   /** Lets the task call the ALB control ports. */
@@ -37,6 +49,10 @@ export interface EdcRuntimeProps {
 
 /** One EDC runtime (control or data plane) as a Fargate service behind the shared ALB. */
 export class EdcRuntime extends Construct {
+  /** The runtime's own task security group. Its egress already covers ports 1024-65535. */
+  readonly securityGroup: ISecurityGroup;
+  readonly service: FargateService;
+
   constructor(scope: Construct, id: string, props: EdcRuntimeProps) {
     super(scope, id);
     const ports = Object.entries(props.ports);
@@ -45,6 +61,7 @@ export class EdcRuntime extends Construct {
       allowAllOutbound: false,
       vpc: props.vpc,
     });
+    this.securityGroup = securityGroup;
     for (const [, port] of ports) {
       securityGroup.addIngressRule(
         Peer.securityGroupId(props.albSecurityGroupId),
@@ -79,6 +96,7 @@ export class EdcRuntime extends Construct {
       containerName: id,
       image: props.image,
       environment: { ...props.environment, ...webHttp },
+      secrets: props.secrets,
       logging: LogDriver.awsLogs({
         logGroup: new LogGroup(this, "LogGroup", {
           retention:
@@ -103,6 +121,7 @@ export class EdcRuntime extends Construct {
           : undefined,
       circuitBreaker: { enable: true, rollback: true },
       cluster: props.cluster,
+      healthCheckGracePeriod: props.healthCheckGracePeriod,
       minHealthyPercent: 100,
       securityGroups: [
         securityGroup,
@@ -114,6 +133,7 @@ export class EdcRuntime extends Construct {
       ],
       taskDefinition,
     });
+    this.service = service;
     for (const [, port] of ports) {
       props.targetGroups[port].addTarget(
         service.loadBalancerTarget({ containerName: id, containerPort: port }),

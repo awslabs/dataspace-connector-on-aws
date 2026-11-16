@@ -1,7 +1,13 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { CfnOutput, RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
+import {
+  CfnOutput,
+  Duration,
+  RemovalPolicy,
+  Stack,
+  StackProps,
+} from "aws-cdk-lib";
 import { Construct } from "constructs";
 import {
   ApplicationProtocol,
@@ -14,24 +20,29 @@ import {
   Bucket,
   BucketEncryption,
 } from "aws-cdk-lib/aws-s3";
-import { ContainerImage } from "aws-cdk-lib/aws-ecs";
+import { DockerImageAsset } from "aws-cdk-lib/aws-ecr-assets";
+import { ContainerImage, Secret as EcsSecret } from "aws-cdk-lib/aws-ecs";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 
 import {
   ConnectorYaml,
   DeploymentYaml,
+  PersistenceType,
   connectorBpnl,
   deriveAdminSecretName,
+  deriveConnectorClusterIdentifier,
   deriveConnectorTableName,
   deriveSecretPrefix,
   edcIdentityEnvironment,
   toRemovalPolicy,
+  validateClusterIdentifier,
 } from "./config/config";
 import {
   CONTROL_PLANE_PORTS as cpPorts,
   DATA_PLANE_PORTS as dpPorts,
 } from "./config/port-mappings";
+import { EdcAurora } from "./constructs/edc-aurora";
 import { EdcDdb } from "./constructs/edc-ddb";
 import { EdcRuntime } from "./constructs/edc-runtime";
 import { EdcTokenKeyPair } from "./constructs/edc-token-key-pair";
@@ -51,6 +62,34 @@ const OAUTH_CLIENT_SECRET = "edc.iam.sts.oauth.client.secret";
 const TOKEN_SIGNER_PRIVATE_KEY = "edc.transfer.proxy.token.private-key";
 const TOKEN_VERIFIER_PUBLIC_KEY = "edc.transfer.proxy.token.public-key";
 
+/**
+ * Both planes of an Aurora connector run the Tractus-X Flyway migration at
+ * boot, against the same database and schema. Concurrent runs serialize on
+ * Flyway's lock.
+ */
+const MIGRATION_SCHEMA = "public";
+
+/**
+ * Covers an Aurora resume from auto-pause plus the first boot's schema migration,
+ * during which the load balancer health check fails.
+ */
+const AURORA_HEALTH_CHECK_GRACE_PERIOD = Duration.minutes(5);
+
+/** The image of one plane for a persistence type, which the shared infrastructure builds if a connector uses it. */
+function runtimeImage(
+  images: Partial<Record<PersistenceType, DockerImageAsset>>,
+  persistence: PersistenceType,
+  plane: string,
+): ContainerImage {
+  const asset = images[persistence];
+  if (!asset) {
+    throw new Error(
+      `No ${plane} image is built for persistence "${persistence}"; the shared infrastructure builds images only for the persistence types of the configured connectors`,
+    );
+  }
+  return ContainerImage.fromDockerImageAsset(asset);
+}
+
 export class ConnectorStack extends Stack {
   constructor(scope: Construct, id: string, props: ConnectorStackProps) {
     super(scope, id, props);
@@ -65,10 +104,26 @@ export class ConnectorStack extends Stack {
     const secretPrefix = deriveSecretPrefix(deploymentName, connectorId);
     const dspUrl = `${infra.dspUrl}${connectorId}`;
 
-    const ddb = new EdcDdb(this, "EdcDdb", {
-      removalPolicy,
-      tableName: deriveConnectorTableName(deploymentName, connectorId),
-    });
+    const persistence = connector.persistence;
+    let ddb: EdcDdb | undefined;
+    let aurora: EdcAurora | undefined;
+    if (persistence === "aurora") {
+      validateClusterIdentifier(deploymentName, connectorId);
+      aurora = new EdcAurora(this, "EdcAurora", {
+        clusterIdentifier: deriveConnectorClusterIdentifier(
+          deploymentName,
+          connectorId,
+        ),
+        profile,
+        removalPolicy,
+        vpc: infra.vpc,
+      });
+    } else {
+      ddb = new EdcDdb(this, "EdcDdb", {
+        removalPolicy,
+        tableName: deriveConnectorTableName(deploymentName, connectorId),
+      });
+    }
 
     const s3Bucket = new Bucket(this, "DataPlaneBucket", {
       autoDeleteObjects: removalPolicy === RemovalPolicy.DESTROY,
@@ -188,31 +243,40 @@ export class ConnectorStack extends Stack {
         effect: Effect.ALLOW,
         resources: [s3Bucket.bucketArn, `${s3Bucket.bucketArn}/*`],
       }),
-      new PolicyStatement({
-        actions: [
-          "dynamodb:BatchGetItem",
-          "dynamodb:BatchWriteItem",
-          "dynamodb:ConditionCheckItem",
-          "dynamodb:DeleteItem",
-          "dynamodb:DescribeTable",
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:Query",
-          "dynamodb:UpdateItem",
-        ],
-        effect: Effect.ALLOW,
-        resources: [ddb.table.tableArn, `${ddb.table.tableArn}/index/*`],
-      }),
+      ...(ddb
+        ? [
+            new PolicyStatement({
+              actions: [
+                "dynamodb:BatchGetItem",
+                "dynamodb:BatchWriteItem",
+                "dynamodb:ConditionCheckItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:DescribeTable",
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:Query",
+                "dynamodb:UpdateItem",
+              ],
+              effect: Effect.ALLOW,
+              resources: [ddb.table.tableArn, `${ddb.table.tableArn}/index/*`],
+            }),
+          ]
+        : []),
     ];
 
     const alb = infra.albDnsName;
+    const identity = edcIdentityEnvironment(
+      deployment.portal.environment,
+      bpnl,
+      portal,
+    );
     const environment = {
-      ...edcIdentityEnvironment(deployment.portal.environment, bpnl, portal),
+      ...identity,
       // Points the S3 extension's static-credential probe at the connector's own
       // (nonexistent) secrets, so it resolves not-found and uses the task role.
       "edc.aws.access.key": `${secretPrefix}edc.aws.access.key`,
       "edc.aws.secret.access.key": `${secretPrefix}edc.aws.secret.access.key`,
-      "edc.ddb.table.name": ddb.table.tableName,
+      ...(ddb && { "edc.ddb.table.name": ddb.table.tableName }),
       "edc.hostname": alb,
       "edc.iam.did.web.use.https": "true",
       "edc.iam.sts.oauth.client.secret.alias": `${secretPrefix}${OAUTH_CLIENT_SECRET}`,
@@ -221,6 +285,14 @@ export class ConnectorStack extends Stack {
       "edc.transfer.proxy.token.verifier.publickey.alias": `${secretPrefix}${TOKEN_VERIFIER_PUBLIC_KEY}`,
       "edc.vault.aws.region": this.region,
       ...(logLevel && { EDC_LOG_LEVEL: logLevel }),
+      ...(aurora && {
+        "edc.datasource.default.url": aurora.jdbcUrl,
+        // connector-migration refuses to boot without it, and the value must
+        // never change once set, so it is the participant id, which never does.
+        "edc.participant.context.id": identity["edc.participant.id"],
+        "tx.edc.postgresql.migration.enabled": "true",
+        "tx.edc.postgresql.migration.schema": MIGRATION_SCHEMA,
+      }),
     };
     const common = {
       cluster: infra.ecsCluster,
@@ -230,11 +302,31 @@ export class ConnectorStack extends Stack {
       albSecurityGroupId: infra.albSecurityGroupId,
       taskSecurityGroupId: infra.edcTaskSecurityGroupId,
       targetGroups,
+      // The user name and password reach the container as ECS secrets, not
+      // through the vault: vault aliases are account-global, and the task role
+      // reads only this connector's prefix.
+      ...(aurora && {
+        healthCheckGracePeriod: AURORA_HEALTH_CHECK_GRACE_PERIOD,
+        secrets: {
+          EDC_DATASOURCE_DEFAULT_USER: EcsSecret.fromSecretsManager(
+            aurora.secret,
+            "username",
+          ),
+          EDC_DATASOURCE_DEFAULT_PASSWORD: EcsSecret.fromSecretsManager(
+            aurora.secret,
+            "password",
+          ),
+        },
+      }),
     };
 
     const controlPlane = new EdcRuntime(this, "ControlPlane", {
       ...common,
-      image: ContainerImage.fromDockerImageAsset(infra.controlPlaneImage),
+      image: runtimeImage(
+        infra.controlPlaneImages,
+        persistence,
+        "control plane",
+      ),
       cpu: connector.controlPlaneCpu,
       memoryLimitMiB: connector.controlPlaneMemoryLimitMiB,
       ports: cpPorts,
@@ -256,7 +348,7 @@ export class ConnectorStack extends Stack {
     const dataPlanePublicUrl = `${infra.dataPlaneUrl}${connectorId}/`;
     const dataPlane = new EdcRuntime(this, "DataPlane", {
       ...common,
-      image: ContainerImage.fromDockerImageAsset(infra.dataPlaneImage),
+      image: runtimeImage(infra.dataPlaneImages, persistence, "data plane"),
       cpu: connector.dataPlaneCpu,
       memoryLimitMiB: connector.dataPlaneMemoryLimitMiB,
       ports: dpPorts,
@@ -273,8 +365,34 @@ export class ConnectorStack extends Stack {
     controlPlane.node.addDependency(tokenKeyPair);
     dataPlane.node.addDependency(controlPlane);
 
+    if (aurora) {
+      // Each service waits for the cluster and for the rule admitting its own
+      // tasks, but not for the other plane's rule (see EdcAurora.allowFrom).
+      for (const [runtime, name, label] of [
+        [controlPlane, "ControlPlane", "control plane"],
+        [dataPlane, "DataPlane", "data plane"],
+      ] as const) {
+        runtime.service.node.addDependency(
+          aurora.cluster,
+          aurora.allowFrom(
+            `AllowFrom${name}`,
+            runtime.securityGroup,
+            `EDC ${label}`,
+          ),
+        );
+      }
+    }
+
     new CfnOutput(this, "EdcDataPlaneBucketName", {
       value: s3Bucket.bucketName,
     });
+    if (aurora) {
+      new CfnOutput(this, "EdcAuroraClusterEndpoint", {
+        value: aurora.cluster.clusterEndpoint.hostname,
+      });
+      new CfnOutput(this, "EdcAuroraSecretArn", {
+        value: aurora.secret.secretArn,
+      });
+    }
   }
 }

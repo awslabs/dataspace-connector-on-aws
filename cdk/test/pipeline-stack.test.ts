@@ -14,13 +14,23 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 
-import { loadDeploymentConfig, PipelineYaml } from "../lib/config/config";
-import { PipelineStack } from "../lib/pipeline-stack";
+import {
+  DeploymentConfig,
+  loadDeploymentConfig,
+  loadPipelineConfig,
+  PersistenceType,
+  PipelineYaml,
+} from "../lib/config/config";
+import { PipelineStack, runtimeJarTasks } from "../lib/pipeline-stack";
 
 const TEMPLATES = join(__dirname, "..", "config-templates");
 const env = { account: "111111111111", region: "eu-central-1" };
 
-function synth(pipeline: Partial<PipelineYaml>, seedPath = TEMPLATES) {
+function synth(
+  pipeline: Partial<PipelineYaml>,
+  seedPath = TEMPLATES,
+  deploymentConfig: DeploymentConfig = loadDeploymentConfig(TEMPLATES),
+) {
   const app = new App({ outdir: mkdtempSync(join(tmpdir(), "pipeline-")) });
   const stack = new PipelineStack(app, "AcmePipelineStack", {
     pipelineConfig: {
@@ -29,7 +39,7 @@ function synth(pipeline: Partial<PipelineYaml>, seedPath = TEMPLATES) {
       deploymentName: "Acme",
       ...pipeline,
     },
-    deploymentConfig: loadDeploymentConfig(TEMPLATES),
+    deploymentConfig,
     seedPath,
     env,
   });
@@ -71,4 +81,80 @@ test("pipeline synth passes the deployment name to the guard", () => {
     template.findResources("AWS::CodeBuild::Project"),
   );
   expect(specs).toContain("--context deployment-name=Acme");
+});
+
+/** The bundled templates with one connector per given persistence type. */
+function config(...types: PersistenceType[]): DeploymentConfig {
+  const loaded = loadDeploymentConfig(TEMPLATES);
+  return {
+    ...loaded,
+    connectors: types.map((persistence, i) => ({
+      ...loaded.connectors[0],
+      connectorId: `conn-${i}`,
+      persistence,
+    })),
+  };
+}
+
+/** The shell commands of the Synth CodeBuild project. */
+function synthCommands(deploymentConfig: DeploymentConfig): string[] {
+  const { template } = synth(
+    loadPipelineConfig(TEMPLATES),
+    TEMPLATES,
+    deploymentConfig,
+  );
+  const buildSpecs = Object.values(
+    template.findResources("AWS::CodeBuild::Project"),
+  ).map((r) => JSON.stringify(r.Properties.Source.BuildSpec));
+  const synthSpec = buildSpecs.find((spec) => spec.includes("cdk synth"));
+  expect(synthSpec).toBeDefined();
+  return Object.values(JSON.parse(JSON.parse(synthSpec!)).phases).flatMap(
+    (phase) => (phase as { commands: string[] }).commands,
+  );
+}
+
+const gradleCommand = (deploymentConfig: DeploymentConfig) =>
+  synthCommands(deploymentConfig).filter((c) => c.includes("gradlew"));
+
+describe("runtimeJarTasks", () => {
+  test.each([
+    [["dynamodb"], ["shadowJar"]],
+    [["aurora"], ["postgresShadowJar"]],
+    [
+      ["dynamodb", "aurora"],
+      ["shadowJar", "postgresShadowJar"],
+    ],
+    [[], []],
+  ] as [PersistenceType[], string[]][])("%j -> %j", (types, tasks) => {
+    expect(runtimeJarTasks(new Set(types))).toEqual(tasks);
+  });
+});
+
+describe("PipelineStack Synth step", () => {
+  test("dynamodb only: renders the unchanged command", () => {
+    expect(gradleCommand(config("dynamodb", "dynamodb"))).toEqual([
+      "cd edc && ./gradlew clean shadowJar",
+    ]);
+  });
+
+  test("dynamodb only: every Synth command is the one the pipeline rendered before persistence", () => {
+    const cdkSynth = synthCommands(config("dynamodb")).filter((c) =>
+      c.includes("cdk synth"),
+    );
+    expect(cdkSynth).toEqual([
+      "npx cdk synth --app 'node dist/app.js' --context config-path=../.. --context deployment-name=Acme",
+    ]);
+  });
+
+  test("aurora only: builds the PostgreSQL jars alone", () => {
+    expect(gradleCommand(config("aurora", "aurora"))).toEqual([
+      "cd edc && ./gradlew clean postgresShadowJar",
+    ]);
+  });
+
+  test("mixed: builds both variants in one Gradle invocation", () => {
+    expect(gradleCommand(config("aurora", "dynamodb"))).toEqual([
+      "cd edc && ./gradlew clean shadowJar postgresShadowJar",
+    ]);
+  });
 });

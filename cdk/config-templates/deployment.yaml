@@ -12,6 +12,7 @@ portal:
 #   - "arn:aws:iam::<account-id>:role/<role-name>"
 # logLevel: DEBUG
 # stateRemovalPolicy: RETAIN
+# persistence: dynamodb
 # certificateArn: "arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id>"
 # domainName: "edc.example.com"
 # hostedZoneId: "Z0123456789ABCDEFGHIJ"
