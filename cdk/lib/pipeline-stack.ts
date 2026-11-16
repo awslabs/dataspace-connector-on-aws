@@ -36,14 +36,14 @@ export interface PipelineStackProps extends StackProps {
 
 /**
  * The Gradle tasks that build the runtime jars the connectors' images need:
- * shadowJar for DynamoDB, postgresShadowJar for Aurora.
+ * shadowJar for DynamoDB, postgresShadowJar for PostgreSQL.
  */
 export function runtimeJarTasks(
   persistence: ReadonlySet<PersistenceType>,
 ): string[] {
   return [
     ...(persistence.has("dynamodb") ? ["shadowJar"] : []),
-    ...(persistence.has("aurora") ? ["postgresShadowJar"] : []),
+    ...(persistence.has("postgres") ? ["postgresShadowJar"] : []),
   ];
 }
 

@@ -448,53 +448,72 @@ describe("persistence", () => {
   test("connector inherits the deployment value", () => {
     const { connectors } = loadDeploymentConfig(
       writeConfig(
-        { ...baseDeployment(), persistence: "aurora" },
+        { ...baseDeployment(), persistence: "postgres" },
         { a: baseConnector("aa"), b: baseConnector("bb") },
       ),
     );
-    expect(connectors.map((c) => c.persistence)).toEqual(["aurora", "aurora"]);
+    expect(connectors.map((c) => c.persistence)).toEqual([
+      "postgres",
+      "postgres",
+    ]);
   });
 
   test("connector override wins over the deployment value", () => {
     const { deployment, connectors } = loadDeploymentConfig(
       writeConfig(baseDeployment(), {
-        a: { ...baseConnector("aa"), persistence: "aurora" },
+        a: { ...baseConnector("aa"), persistence: "postgres" },
         b: baseConnector("bb"),
       }),
     );
     expect(deployment.persistence).toBe("dynamodb");
     expect(connectors.map((c) => c.persistence)).toEqual([
-      "aurora",
+      "postgres",
       "dynamodb",
     ]);
   });
 
-  test("connector can override an aurora deployment back to dynamodb", () => {
+  test("connector can override a postgres deployment back to dynamodb", () => {
     const { connectors } = loadDeploymentConfig(
       writeConfig(
-        { ...baseDeployment(), persistence: "aurora" },
+        { ...baseDeployment(), persistence: "postgres" },
         { a: { ...baseConnector("aa"), persistence: "dynamodb" } },
       ),
     );
     expect(connectors[0].persistence).toBe("dynamodb");
   });
 
-  test("deployment value must be dynamodb or aurora", () => {
+  test("deployment value must be dynamodb or postgres", () => {
     const dir = writeConfig(
-      { ...baseDeployment(), persistence: "postgres" },
+      { ...baseDeployment(), persistence: "mysql" },
       oneConnector(),
     );
     expect(() => loadDeploymentConfig(dir)).toThrow(
-      'deployment.yaml: persistence must be "dynamodb" or "aurora", got "postgres"',
+      'deployment.yaml: persistence must be "dynamodb" or "postgres", got "mysql"',
     );
   });
 
-  test("connector value must be dynamodb or aurora", () => {
+  test("the old value aurora is rejected, not accepted as an alias", () => {
+    const dir = writeConfig(
+      { ...baseDeployment(), persistence: "aurora" },
+      oneConnector(),
+    );
+    expect(() => loadDeploymentConfig(dir)).toThrow(
+      'deployment.yaml: persistence must be "dynamodb" or "postgres", got "aurora"',
+    );
+    const connector = writeConfig(baseDeployment(), {
+      a: { ...baseConnector("aa"), persistence: "aurora" },
+    });
+    expect(() => loadDeploymentConfig(connector)).toThrow(
+      'connectors/connector-a.yaml: persistence must be "dynamodb" or "postgres", got "aurora"',
+    );
+  });
+
+  test("connector value must be dynamodb or postgres", () => {
     const dir = writeConfig(baseDeployment(), {
-      a: { ...baseConnector("aa"), persistence: "Aurora" },
+      a: { ...baseConnector("aa"), persistence: "Postgres" },
     });
     expect(() => loadDeploymentConfig(dir)).toThrow(
-      'connectors/connector-a.yaml: persistence must be "dynamodb" or "aurora", got "Aurora"',
+      'connectors/connector-a.yaml: persistence must be "dynamodb" or "postgres", got "Postgres"',
     );
   });
 
@@ -503,7 +522,7 @@ describe("persistence", () => {
       a: { ...baseConnector("aa"), persistence: null },
     });
     expect(() => loadDeploymentConfig(dir)).toThrow(
-      'connectors/connector-a.yaml: persistence must be "dynamodb" or "aurora", got "null"',
+      'connectors/connector-a.yaml: persistence must be "dynamodb" or "postgres", got "null"',
     );
   });
 
@@ -543,35 +562,37 @@ describe("persistence", () => {
     });
 
     test("follows the deployment default", () => {
-      expect(typesIn("aurora", [undefined, undefined])).toEqual(["aurora"]);
+      expect(typesIn("postgres", [undefined, undefined])).toEqual(["postgres"]);
     });
 
-    test("is aurora alone when every connector overrides to aurora", () => {
-      expect(typesIn(undefined, ["aurora", "aurora"])).toEqual(["aurora"]);
+    test("is postgres alone when every connector overrides to postgres", () => {
+      expect(typesIn(undefined, ["postgres", "postgres"])).toEqual([
+        "postgres",
+      ]);
     });
 
     test("lists both types in PERSISTENCE_TYPES order, once each", () => {
-      expect(typesIn(undefined, ["aurora", undefined, "aurora"])).toEqual([
+      expect(typesIn(undefined, ["postgres", undefined, "postgres"])).toEqual([
         "dynamodb",
-        "aurora",
+        "postgres",
       ]);
-      expect(typesIn("aurora", ["dynamodb", undefined])).toEqual([
+      expect(typesIn("postgres", ["dynamodb", undefined])).toEqual([
         "dynamodb",
-        "aurora",
+        "postgres",
       ]);
     });
   });
 
   test("a misspelled key is still rejected", () => {
     const deployment = writeConfig(
-      { ...baseDeployment(), persistance: "aurora" },
+      { ...baseDeployment(), persistance: "postgres" },
       oneConnector(),
     );
     expect(() => loadDeploymentConfig(deployment)).toThrow(
       "deployment.yaml: unknown key 'persistance'",
     );
     const connector = writeConfig(baseDeployment(), {
-      a: { ...baseConnector("aa"), persistance: "aurora" },
+      a: { ...baseConnector("aa"), persistance: "postgres" },
     });
     expect(() => loadDeploymentConfig(connector)).toThrow(
       "connectors/connector-a.yaml: unknown key 'persistance'",

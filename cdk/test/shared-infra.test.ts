@@ -117,8 +117,8 @@ describe("SharedInfra runtime images", () => {
     expect(Object.keys(stack.dataPlaneImages)).toEqual(["dynamodb"]);
   });
 
-  test("dynamodb and aurora: four images, only the aurora ones carry JAR", () => {
-    const { stack, buildArgs } = synthesize(["dynamodb", "aurora"]);
+  test("dynamodb and postgres: four images, only the postgres ones carry JAR", () => {
+    const { stack, buildArgs } = synthesize(["dynamodb", "postgres"]);
     expect(buildArgs).toEqual({
       ControlPlaneImage: undefined,
       ControlPlanePostgresImage: { JAR: "control-plane-postgres.jar" },
@@ -127,20 +127,20 @@ describe("SharedInfra runtime images", () => {
     });
     // Variants of one plane build from the same directory but hash apart.
     expect(stack.controlPlaneImages.dynamodb!.assetHash).not.toBe(
-      stack.controlPlaneImages.aurora!.assetHash,
+      stack.controlPlaneImages.postgres!.assetHash,
     );
     expect(stack.dataPlaneImages.dynamodb!.assetHash).not.toBe(
-      stack.dataPlaneImages.aurora!.assetHash,
+      stack.dataPlaneImages.postgres!.assetHash,
     );
   });
 
-  test("aurora only: two images, both with the PostgreSQL jar", () => {
-    const { stack, buildArgs } = synthesize(["aurora"]);
+  test("postgres only: two images, both with the PostgreSQL jar", () => {
+    const { stack, buildArgs } = synthesize(["postgres"]);
     expect(buildArgs).toEqual({
       ControlPlanePostgresImage: { JAR: "control-plane-postgres.jar" },
       DataPlanePostgresImage: { JAR: "data-plane-postgres.jar" },
     });
-    expect(Object.keys(stack.controlPlaneImages)).toEqual(["aurora"]);
-    expect(Object.keys(stack.dataPlaneImages)).toEqual(["aurora"]);
+    expect(Object.keys(stack.controlPlaneImages)).toEqual(["postgres"]);
+    expect(Object.keys(stack.dataPlaneImages)).toEqual(["postgres"]);
   });
 });

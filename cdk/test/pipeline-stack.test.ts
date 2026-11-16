@@ -119,9 +119,9 @@ const gradleCommand = (deploymentConfig: DeploymentConfig) =>
 describe("runtimeJarTasks", () => {
   test.each([
     [["dynamodb"], ["shadowJar"]],
-    [["aurora"], ["postgresShadowJar"]],
+    [["postgres"], ["postgresShadowJar"]],
     [
-      ["dynamodb", "aurora"],
+      ["dynamodb", "postgres"],
       ["shadowJar", "postgresShadowJar"],
     ],
     [[], []],
@@ -146,14 +146,14 @@ describe("PipelineStack Synth step", () => {
     ]);
   });
 
-  test("aurora only: builds the PostgreSQL jars alone", () => {
-    expect(gradleCommand(config("aurora", "aurora"))).toEqual([
+  test("postgres only: builds the PostgreSQL jars alone", () => {
+    expect(gradleCommand(config("postgres", "postgres"))).toEqual([
       "cd edc && ./gradlew clean postgresShadowJar",
     ]);
   });
 
   test("mixed: builds both variants in one Gradle invocation", () => {
-    expect(gradleCommand(config("aurora", "dynamodb"))).toEqual([
+    expect(gradleCommand(config("postgres", "dynamodb"))).toEqual([
       "cd edc && ./gradlew clean shadowJar postgresShadowJar",
     ]);
   });

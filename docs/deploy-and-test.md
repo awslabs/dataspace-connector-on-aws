@@ -1,6 +1,6 @@
 # Deploying and Testing a Branch
 
-How to deploy a branch of this repository, including one that is not merged yet, into a test account and verify that every configured persistence type works. The procedure is the normal [Quick Start](../README.md#quick-start) with a few additions for unmerged code and for `aurora` connectors.
+How to deploy a branch of this repository, including one that is not merged yet, into a test account and verify that every configured persistence type works. The procedure is the normal [Quick Start](../README.md#quick-start) with a few additions for unmerged code and for `postgres` connectors.
 
 ## Prerequisites
 
@@ -65,17 +65,17 @@ managementApiPrincipals:
 connectorId: ddb-test
 ```
 
-`connectors/connector-aurora-test.yaml`
+`connectors/connector-postgres-test.yaml`
 
 ```yaml
-connectorId: aurora-test
-persistence: aurora
+connectorId: postgres-test
+persistence: postgres
 ```
 
 Notes:
 
 * `stateRemovalPolicy: DESTROY` lets the teardown remove the table, the bucket and the Aurora cluster with the stacks. The default `RETAIN` leaves them behind, and a retained Aurora cluster blocks re-creating a connector with the same id (see [Persistence](../README.md#persistence)).
-* `profile` in `deployment.yaml` applies to the shared infrastructure and BaSyx. A connector's own `profile` defaults to `production` regardless, which for an `aurora` connector means the larger capacity ceiling and 7 days of backups. Set `profile: development` in the connector file if you want the smaller cluster.
+* `profile` in `deployment.yaml` applies to the shared infrastructure and BaSyx. A connector's own `profile` defaults to `production` regardless, which for a `postgres` connector means the larger capacity ceiling and 7 days of backups. Set `profile: development` in the connector file if you want the smaller cluster.
 * `managementApiPrincipals` must include the principal that runs the test, or every Management API call returns 403.
 * Delete `connectors/connector-example.yaml` from the repository, or the pipeline tries to deploy it.
 
@@ -118,7 +118,7 @@ aws logs filter-log-events --log-group-name <log group> --filter-pattern ready -
 * The table `DataspaceConnector-<id>` exists.
 * The data-plane log contains `Data Plane DynamoDB Extension initialization complete!`.
 
-### `aurora`
+### `postgres`
 
 * The cluster `dataspaceconnector-<id>` (the deployment name and connector id, lowercased) is `available`:
 
@@ -154,7 +154,7 @@ Start the MCP server from the `mcp` directory with `EDC_USE_AWS_IAM=true`, `EDC_
 
 ### Confirming the rows landed in Aurora
 
-The runtime answering the Management API does not prove where it stored the data. For an `aurora` connector, read the tables. The cluster is only reachable from inside the VPC, so enable the RDS Data API on the test cluster and query through it with the cluster's credentials secret (output `EdcAuroraSecretArn` of the connector stack). The role you run these commands with needs `rds:EnableHttpEndpoint` on the cluster, `rds-data:ExecuteStatement` on the cluster and `secretsmanager:GetSecretValue` on that secret:
+The runtime answering the Management API does not prove where it stored the data. For a `postgres` connector, read the tables. The cluster is only reachable from inside the VPC, so enable the RDS Data API on the test cluster and query through it with the cluster's credentials secret (output `EdcAuroraSecretArn` of the connector stack). The role you run these commands with needs `rds:EnableHttpEndpoint` on the cluster, `rds-data:ExecuteStatement` on the cluster and `secretsmanager:GetSecretValue` on that secret:
 
 ```bash
 aws rds enable-http-endpoint --resource-arn <cluster ARN>

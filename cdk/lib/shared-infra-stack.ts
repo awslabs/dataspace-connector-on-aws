@@ -57,7 +57,7 @@ type Plane = "control-plane" | "data-plane";
 
 /** The jar a persistence type's image runs; the Dockerfile default is the dynamodb jar. */
 const jarName = (plane: Plane, persistence: PersistenceType): string =>
-  persistence === "aurora" ? `${plane}-postgres.jar` : `${plane}.jar`;
+  persistence === "postgres" ? `${plane}-postgres.jar` : `${plane}.jar`;
 
 export class SharedInfraStack extends Stack {
   readonly albArn: string;
@@ -262,7 +262,7 @@ export class SharedInfraStack extends Stack {
     const images: Partial<Record<PersistenceType, DockerImageAsset>> = {};
     for (const persistence of PERSISTENCE_TYPES) {
       if (!persistenceTypes.has(persistence)) continue;
-      const other = persistence === "aurora" ? "dynamodb" : "aurora";
+      const other = persistence === "postgres" ? "dynamodb" : "postgres";
       images[persistence] = new DockerImageAsset(
         this,
         persistence === "dynamodb"
@@ -270,7 +270,7 @@ export class SharedInfraStack extends Stack {
           : `${idPrefix}PostgresImage`,
         {
           directory: resolve(__dirname, `../../edc/${plane}`),
-          ...(persistence === "aurora"
+          ...(persistence === "postgres"
             ? { buildArgs: { JAR: jarName(plane, persistence) } }
             : {}),
           exclude: [`build/libs/${jarName(plane, other)}`],

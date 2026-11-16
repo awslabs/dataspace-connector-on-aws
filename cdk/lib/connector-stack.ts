@@ -63,7 +63,7 @@ const TOKEN_SIGNER_PRIVATE_KEY = "edc.transfer.proxy.token.private-key";
 const TOKEN_VERIFIER_PUBLIC_KEY = "edc.transfer.proxy.token.public-key";
 
 /**
- * Both planes of an Aurora connector run the Tractus-X Flyway migration at
+ * Both planes of a postgres connector run the Tractus-X Flyway migration at
  * boot, against the same database and schema. Concurrent runs serialize on
  * Flyway's lock.
  */
@@ -107,7 +107,7 @@ export class ConnectorStack extends Stack {
     const persistence = connector.persistence;
     let ddb: EdcDdb | undefined;
     let aurora: EdcAurora | undefined;
-    if (persistence === "aurora") {
+    if (persistence === "postgres") {
       validateClusterIdentifier(deploymentName, connectorId);
       aurora = new EdcAurora(this, "EdcAurora", {
         clusterIdentifier: deriveConnectorClusterIdentifier(

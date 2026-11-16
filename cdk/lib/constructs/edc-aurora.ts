@@ -34,7 +34,7 @@ export interface EdcAuroraProps {
 
 /**
  * One Aurora Serverless v2 PostgreSQL cluster per connector, the store of
- * both EDC planes when the connector's persistence is "aurora". Mirrors the
+ * both EDC planes when the connector's persistence is "postgres". Mirrors the
  * Aurora cluster of the BaSyx stack.
  */
 export class EdcAurora extends Construct {

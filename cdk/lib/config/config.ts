@@ -42,7 +42,7 @@ export const STATE_REMOVAL_POLICIES = ["DESTROY", "RETAIN"] as const;
 export type StateRemovalPolicy = (typeof STATE_REMOVAL_POLICIES)[number];
 
 /** Where a connector's EDC control plane and data plane keep their state. */
-export const PERSISTENCE_TYPES = ["dynamodb", "aurora"] as const;
+export const PERSISTENCE_TYPES = ["dynamodb", "postgres"] as const;
 export type PersistenceType = (typeof PERSISTENCE_TYPES)[number];
 
 export const BASYX_SERVICES = ["dtr", "submodelRepository"] as const;
@@ -145,7 +145,7 @@ export interface DeploymentConfig {
  * lowercase alphanumeric + hyphens, 2–60 chars, no leading/trailing hyphen.
  * Used in ALB paths, URL rewrite regex, API Gateway paths, Secrets Manager
  * prefixes, CloudFormation stack names, DynamoDB table names, ECS runtime IDs
- * and, for persistence "aurora", the Aurora cluster identifier. The cluster
+ * and, for persistence "postgres", the Aurora cluster identifier. The cluster
  * identifier also carries the deploymentName and has a 63-character limit that
  * the bounds here and on deploymentName (60 + 41) do not guarantee, so the
  * connector stack checks the combination with validateClusterIdentifier.
@@ -272,7 +272,7 @@ const CLUSTER_IDENTIFIER_MAX = 63;
  * Throws if the Aurora cluster identifier of this deployment and connector
  * breaks an RDS naming rule: at most 63 characters, starts with a letter, no
  * two consecutive hyphens. The connectorId already rules out a trailing hyphen.
- * Call it for connectors whose persistence is "aurora".
+ * Call it for connectors whose persistence is "postgres".
  */
 export function validateClusterIdentifier(
   deploymentName: string,
@@ -637,14 +637,14 @@ function validateStateRemovalPolicy(
   }
 }
 
-/** Throws unless value is omitted, "dynamodb" or "aurora". */
+/** Throws unless value is omitted, "dynamodb" or "postgres". */
 function validatePersistence(value: unknown, file: string, path: string): void {
   if (
     value !== undefined &&
     !PERSISTENCE_TYPES.includes(value as PersistenceType)
   ) {
     throw new Error(
-      `${file}: ${path} must be "dynamodb" or "aurora", got "${String(value)}"`,
+      `${file}: ${path} must be "dynamodb" or "postgres", got "${String(value)}"`,
     );
   }
 }

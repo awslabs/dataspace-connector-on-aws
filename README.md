@@ -120,7 +120,7 @@ Shared infrastructure plus Cofinity-X Portal integration. The pipeline derives e
 | `observabilityApiPrincipals` | | none | Same for the Observability API. |
 | `logLevel` | | Tractus-X default | EDC log level of all connectors: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR` or `OFF`. `DEBUG` and `TRACE` also turn on API Gateway data tracing, which logs full request and response bodies, including tokens, to CloudWatch. Don't use them in production. |
 | `stateRemovalPolicy` | | `RETAIN` | Whether stored state (each connector's DynamoDB table or Aurora cluster with its credentials secret, each connector's S3 bucket, each BaSyx database) is kept (`RETAIN`) or deleted (`DESTROY`) with its stack. |
-| `persistence` | | `dynamodb` | EDC store: `dynamodb` (one DynamoDB table per connector) or `aurora` (one Aurora Serverless v2 PostgreSQL cluster per connector). Applies to all connectors; a connector may override it. |
+| `persistence` | | `dynamodb` | EDC store: `dynamodb` (one DynamoDB table per connector) or `postgres` (one Aurora Serverless v2 PostgreSQL cluster per connector). Applies to all connectors; a connector may override it. |
 | `certificateArn`, `domainName`, `hostedZoneId` | all or none | | Custom domain, see [Custom Domain](#custom-domain). |
 | `basyx` | | | Digital Twin Registry per BPNL, see [Digital Twin Registry](#digital-twin-registry-eclipse-basyx). |
 
@@ -140,25 +140,25 @@ For each connector the pipeline creates a Cofinity-X Portal technical user (**Id
 | `dataPlaneFlowLeaseMillis` | | `10000` | How often an open PULL flow renews its lease (one store write). After 5 missed renewals another data plane may take the flow over. |
 | `stateRemovalPolicy` | | deployment value | Overrides `stateRemovalPolicy` for this connector. |
 | `logLevel` | | deployment value | Overrides `logLevel` for this connector. |
-| `persistence` | | deployment value | EDC store: `dynamodb` (one DynamoDB table per connector) or `aurora` (one Aurora Serverless v2 PostgreSQL cluster per connector). Overrides `persistence` for this connector. |
+| `persistence` | | deployment value | EDC store: `dynamodb` (one DynamoDB table per connector) or `postgres` (one Aurora Serverless v2 PostgreSQL cluster per connector). Overrides `persistence` for this connector. |
 
 ### Persistence
 
 Each connector keeps its EDC state (assets, policies, contract definitions, negotiations, agreements, transfers, EDRs) in a store of its own, selected by `persistence`:
 
 * **`dynamodb`** (default): one on-demand DynamoDB table named `<deploymentName>-<connectorId>`, accessed by the task role. Both planes run this project's DynamoDB store extensions.
-* **`aurora`**: one Aurora Serverless v2 PostgreSQL cluster per connector, with the identifier `<deploymentname>-<connectorid>` (lowercase). The identifier must follow RDS's naming rules, or synth fails: at most 63 characters, starting with a letter, and no two consecutive hyphens.
+* **`postgres`**: one Aurora Serverless v2 PostgreSQL cluster per connector, with the identifier `<deploymentname>-<connectorid>` (lowercase). The identifier must follow RDS's naming rules, or synth fails: at most 63 characters, starting with a letter, and no two consecutive hyphens.
   * The cluster has a database named `edc`, a credentials secret in AWS Secrets Manager with the user `edc`, and a security group that admits only the connector's two Fargate services on port 5432.
   * It has a higher capacity ceiling and keeps backups for 7 days under the connector's `profile: production`, and keeps backups for 1 day under `development`. It encrypts its storage and has deletion protection under `RETAIN`.
   * It is configured to pause after 5 idle minutes, but the control plane's state machines query the store on their `interactiveStateMachineIterationMillis` / `backgroundStateMachineIterationMillis` schedule, so in practice it does not pause.
-  * Both planes run the upstream Tractus-X PostgreSQL stores and the Tractus-X Flyway migration (`connector-migration`) at boot, which creates and upgrades the schema. The first boot therefore takes longer, and the ECS health check grace period of Aurora connectors is 5 minutes.
+  * Both planes run the upstream Tractus-X PostgreSQL stores and the Tractus-X Flyway migration (`connector-migration`) at boot, which creates and upgrades the schema. The first boot therefore takes longer, and the ECS health check grace period of postgres connectors is 5 minutes.
   * The connector stack outputs `EdcAuroraClusterEndpoint` and `EdcAuroraSecretArn`.
 
 The choice is made when a connector is created. Changing `persistence` on an existing connector provisions an empty store of the new type and the runtimes start against it; EDC state does not move, and the old table or cluster stays or goes with `stateRemovalPolicy`.
 
-Under `stateRemovalPolicy: RETAIN`, removing an `aurora` connector leaves its cluster, the cluster's writer instance and DB subnet group, its credentials secret and its security group in your account. The cluster keeps its fixed identifier, so delete these manually before adding the connector again; the retained cluster has deletion protection, so disable it first. The security group lives in the shared VPC, so it also has to go before the `SharedInfra` stack can be deleted (see [Teardown](#teardown)).
+Under `stateRemovalPolicy: RETAIN`, removing a `postgres` connector leaves its cluster, the cluster's writer instance and DB subnet group, its credentials secret and its security group in your account. The cluster keeps its fixed identifier, so delete these manually before adding the connector again; the retained cluster has deletion protection, so disable it first. The security group lives in the shared VPC, so it also has to go before the `SharedInfra` stack can be deleted (see [Teardown](#teardown)).
 
-The task definitions of an `aurora` connector carry these settings, on both planes:
+The task definitions of a `postgres` connector carry these settings, on both planes:
 
 | Setting | Value |
 |---|---|
@@ -205,7 +205,7 @@ To completely remove all deployed resources, follow these steps in order:
 
 **1. Remove the `basyx` block and all connector YAML files** from the config repo and push. The pipeline's cleanup step destroys the BaSyx and connector stacks, which deregisters the connectors from the portal.
 
-**2. Delete the shared infrastructure stack** (removes the network, the load balancer and the APIs). Under `RETAIN`, a removed `aurora` connector's cluster and its security group stay in the shared VPC; delete the cluster (with its writer instance and DB subnet group) and then the security group first, or the VPC deletion fails:
+**2. Delete the shared infrastructure stack** (removes the network, the load balancer and the APIs). Under `RETAIN`, a removed `postgres` connector's cluster and its security group stay in the shared VPC; delete the cluster (with its writer instance and DB subnet group) and then the security group first, or the VPC deletion fails:
 
 ```bash
 aws cloudformation delete-stack --stack-name DataspaceConnector-SharedInfra --region <region>

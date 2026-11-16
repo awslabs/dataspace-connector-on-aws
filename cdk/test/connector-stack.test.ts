@@ -146,8 +146,8 @@ describe("ConnectorStack with persistence dynamodb", () => {
   });
 });
 
-describe("ConnectorStack with persistence aurora", () => {
-  const s = stage([{ id: "example", persistence: "aurora" }]);
+describe("ConnectorStack with persistence postgres", () => {
+  const s = stage([{ id: "example", persistence: "postgres" }]);
   const template = Template.fromStack(connectorStack(s, "example"));
   const planes = containers(template);
 
@@ -188,7 +188,7 @@ describe("ConnectorStack with persistence aurora", () => {
         connectors: [
           {
             ...loaded.connectors[0],
-            persistence: "aurora",
+            persistence: "postgres",
             profile: "development",
           },
         ],
@@ -341,10 +341,10 @@ describe("ConnectorStack with persistence aurora", () => {
   test("runs the PostgreSQL images", () => {
     const { controlPlaneImages, dataPlaneImages } = sharedInfra(s);
     expect(imageOf(planes.ControlPlane)).toContain(
-      controlPlaneImages.aurora!.assetHash,
+      controlPlaneImages.postgres!.assetHash,
     );
     expect(imageOf(planes.DataPlane)).toContain(
-      dataPlaneImages.aurora!.assetHash,
+      dataPlaneImages.postgres!.assetHash,
     );
     expect(controlPlaneImages.dynamodb).toBeUndefined();
   });
@@ -365,7 +365,9 @@ describe("ConnectorStack with persistence aurora", () => {
     (stateRemovalPolicy, deletionProtection, policy) => {
       const t = Template.fromStack(
         connectorStack(
-          stage([{ id: "example", persistence: "aurora", stateRemovalPolicy }]),
+          stage([
+            { id: "example", persistence: "postgres", stateRemovalPolicy },
+          ]),
           "example",
         ),
       );
@@ -400,9 +402,9 @@ describe("Aurora cluster identifier", () => {
   const deploymentName = "A".repeat(41);
   const connectorId = "c".repeat(30);
 
-  test("an over-long identifier fails the aurora connector", () => {
+  test("an over-long identifier fails the postgres connector", () => {
     expect(() =>
-      stage([{ id: connectorId, persistence: "aurora" }], deploymentName),
+      stage([{ id: connectorId, persistence: "postgres" }], deploymentName),
     ).toThrow(/Aurora cluster identifier .* is 72 characters \(max 63\)/);
   });
 
@@ -416,10 +418,10 @@ describe("Aurora cluster identifier", () => {
 describe("DeploymentStage with connectors of both persistence types", () => {
   const s = stage([
     { id: "ddb-one", persistence: "dynamodb" },
-    { id: "aurora-one", persistence: "aurora" },
+    { id: "postgres-one", persistence: "postgres" },
   ]);
   const ddb = Template.fromStack(connectorStack(s, "ddb-one"));
-  const aurora = Template.fromStack(connectorStack(s, "aurora-one"));
+  const postgres = Template.fromStack(connectorStack(s, "postgres-one"));
 
   test("synthesizes", () => {
     expect(() => s.synth()).not.toThrow();
@@ -428,22 +430,22 @@ describe("DeploymentStage with connectors of both persistence types", () => {
   test("each connector gets its own store and images", () => {
     ddb.resourceCountIs("AWS::DynamoDB::GlobalTable", 1);
     ddb.resourceCountIs("AWS::RDS::DBCluster", 0);
-    aurora.resourceCountIs("AWS::DynamoDB::GlobalTable", 0);
-    aurora.resourceCountIs("AWS::RDS::DBCluster", 1);
+    postgres.resourceCountIs("AWS::DynamoDB::GlobalTable", 0);
+    postgres.resourceCountIs("AWS::RDS::DBCluster", 1);
 
     const { controlPlaneImages } = sharedInfra(s);
     expect(imageOf(containers(ddb).ControlPlane)).toContain(
       controlPlaneImages.dynamodb!.assetHash,
     );
-    expect(imageOf(containers(aurora).ControlPlane)).toContain(
-      controlPlaneImages.aurora!.assetHash,
+    expect(imageOf(containers(postgres).ControlPlane)).toContain(
+      controlPlaneImages.postgres!.assetHash,
     );
   });
 });
 
-describe("DeploymentStage with aurora connectors only", () => {
+describe("DeploymentStage with postgres connectors only", () => {
   test("synthesizes, with no DynamoDB image", () => {
-    const s = stage([{ id: "aurora-one", persistence: "aurora" }]);
+    const s = stage([{ id: "postgres-one", persistence: "postgres" }]);
     expect(() => s.synth()).not.toThrow();
     expect(sharedInfra(s).controlPlaneImages.dynamodb).toBeUndefined();
   });
