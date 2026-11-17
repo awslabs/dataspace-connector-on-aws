@@ -39,7 +39,6 @@ test("create writes the offer, contract definition after its policies", async ()
   });
   expect(result.PhysicalResourceId).toBe(`alpha/${DTR_ID}`);
   expect(calls).toEqual([
-    `DELETE /contractdefinitions/${DTR_ID}`,
     "POST /policydefinitions",
     "POST /policydefinitions",
     "POST /contractdefinitions",
@@ -53,6 +52,7 @@ test("an existing offer is updated in place", async () => {
   expect(calls).toContain(`PUT /policydefinitions/${DTR_ID}-access`);
   expect(calls).toContain("PUT /contractdefinitions");
   expect(calls).toContain("PUT /assets");
+  expect(calls.filter((c) => c.startsWith("DELETE"))).toEqual([]);
 });
 
 test("delete tolerates a connector that is gone or an asset under agreement", async () => {

@@ -73,14 +73,9 @@ export async function onEvent(
   return { PhysicalResourceId: `${props.ConnectorId}/${DTR_ID}` };
 }
 
-/**
- * Tractus-X rejects changes to a policy that a contract definition
- * references, so the contract definition goes first and comes back last.
- * Existing agreements are not affected.
- */
+/** Tractus-X accepts policy updates while a contract definition references them, as long as the policy type stays the same. */
 async function write(api: Request, props: DtrOfferProperties): Promise<void> {
   const definitions = offer(props);
-  await api("DELETE", `/contractdefinitions/${DTR_ID}`);
   await upsert(api, "/policydefinitions", definitions.accessPolicy, true);
   await upsert(api, "/policydefinitions", definitions.usagePolicy, true);
   await upsert(api, "/contractdefinitions", definitions.contractDefinition);
