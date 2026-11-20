@@ -201,7 +201,7 @@ describe("ConnectorStack with persistence postgres", () => {
     for (const container of Object.values(planes)) {
       const vars = environment(container);
       expect(JSON.stringify(vars["edc.datasource.default.url"])).toContain(
-        ":5432/edc?sslmode=require",
+        ":5432/edc?sslmode=require&connectTimeout=30&sslResponseTimeout=30000",
       );
       expect(vars["edc.participant.context.id"]).toBe(DID);
       expect(vars["edc.participant.context.id"]).toBe(

@@ -42,7 +42,11 @@ export class EdcAurora extends Construct {
   readonly secret: DatabaseSecret;
   /** The cluster's security group; admit the runtimes with `allowFrom`. */
   readonly securityGroup: SecurityGroup;
-  /** Aurora PostgreSQL 17 and newer force TLS (rds.force_ssl=1). */
+  /**
+   * Aurora PostgreSQL 17 and newer force TLS (rds.force_ssl=1). The two
+   * timeouts let the first connection wait out a resume from auto-pause, which
+   * takes longer than the driver defaults (10 s connect, 5 s SSL response).
+   */
   readonly jdbcUrl: string;
 
   constructor(scope: Construct, id: string, props: EdcAuroraProps) {
@@ -81,7 +85,7 @@ export class EdcAurora extends Construct {
           : props.removalPolicy,
     });
 
-    this.jdbcUrl = `jdbc:postgresql://${this.cluster.clusterEndpoint.hostname}:${POSTGRES_PORT}/${DATABASE_NAME}?sslmode=require`;
+    this.jdbcUrl = `jdbc:postgresql://${this.cluster.clusterEndpoint.hostname}:${POSTGRES_PORT}/${DATABASE_NAME}?sslmode=require&connectTimeout=30&sslResponseTimeout=30000`;
   }
 
   /**
