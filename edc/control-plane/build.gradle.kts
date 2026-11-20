@@ -26,5 +26,4 @@ dependencies {
     "postgres"(libs.tx.store.bpn.validation.sql)
     "postgres"(libs.tx.store.edr.index.lock.sql)
     "postgres"(libs.tx.connector.migration)
-    "postgres"(libs.postgres)
 }

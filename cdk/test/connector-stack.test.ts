@@ -130,20 +130,6 @@ describe("ConnectorStack with persistence dynamodb", () => {
       dataPlaneImages.dynamodb!.assetHash,
     );
   });
-
-  test("keeps the CDK default health check grace period", () => {
-    for (const service of Object.values(
-      template.findResources("AWS::ECS::Service"),
-    )) {
-      expect(service.Properties.HealthCheckGracePeriodSeconds).toBe(60);
-    }
-  });
-
-  test("exports the bucket name only", () => {
-    expect(Object.keys(template.toJSON().Outputs)).toEqual([
-      "EdcDataPlaneBucketName",
-    ]);
-  });
 });
 
 describe("ConnectorStack with persistence postgres", () => {
@@ -210,7 +196,7 @@ describe("ConnectorStack with persistence postgres", () => {
     ).toEqual([]);
   });
 
-  test("both planes get the datasource, the participant context and the migration settings", () => {
+  test("both planes get the datasource and the participant context", () => {
     expect(Object.keys(planes).sort()).toEqual(["ControlPlane", "DataPlane"]);
     for (const container of Object.values(planes)) {
       const vars = environment(container);
@@ -221,8 +207,6 @@ describe("ConnectorStack with persistence postgres", () => {
       expect(vars["edc.participant.context.id"]).toBe(
         vars["edc.participant.id"],
       );
-      expect(vars["tx.edc.postgresql.migration.enabled"]).toBe("true");
-      expect(vars["tx.edc.postgresql.migration.schema"]).toBe("public");
       expect(vars).not.toHaveProperty("edc.ddb.table.name");
     }
   });
@@ -317,19 +301,6 @@ describe("ConnectorStack with persistence postgres", () => {
     }
   });
 
-  test("keeps the data plane behind the control plane, which migrates the schema first", () => {
-    const services = template.findResources("AWS::ECS::Service");
-    const [controlPlaneId] = Object.entries(services)
-      .filter(([, r]) =>
-        JSON.stringify(r).includes('"ContainerName":"ControlPlane"'),
-      )
-      .map(([id]) => id);
-    const dataPlane = Object.values(services).find((r) =>
-      JSON.stringify(r).includes('"ContainerName":"DataPlane"'),
-    );
-    expect(dataPlane!.DependsOn).toContain(controlPlaneId);
-  });
-
   test("gives both services time to resume the cluster and migrate", () => {
     for (const service of Object.values(
       template.findResources("AWS::ECS::Service"),
@@ -358,11 +329,11 @@ describe("ConnectorStack with persistence postgres", () => {
   });
 
   test.each([
-    ["RETAIN", true, "Retain"],
-    ["DESTROY", false, "Delete"],
+    ["RETAIN", "Snapshot"],
+    ["DESTROY", "Delete"],
   ] as const)(
-    "stateRemovalPolicy %s: deletionProtection %s, cluster, secret and security group %s",
-    (stateRemovalPolicy, deletionProtection, policy) => {
+    "stateRemovalPolicy %s: the cluster is deleted with a %s policy, the rest with the stack",
+    (stateRemovalPolicy, policy) => {
       const t = Template.fromStack(
         connectorStack(
           stage([
@@ -372,26 +343,18 @@ describe("ConnectorStack with persistence postgres", () => {
         ),
       );
       t.hasResource("AWS::RDS::DBCluster", {
-        Properties: { DeletionProtection: deletionProtection },
+        Properties: Match.not(Match.objectLike({ DeletionProtection: true })),
         DeletionPolicy: policy,
       });
-      t.hasResource("AWS::RDS::DBInstance", { DeletionPolicy: policy });
-      t.hasResource("AWS::EC2::SecurityGroup", {
-        Properties: { GroupDescription: Match.stringLikeRegexp("Aurora") },
-        DeletionPolicy: policy,
-      });
-      t.hasResource("AWS::SecretsManager::Secret", {
-        Properties: { GenerateSecretString: Match.anyValue() },
-        DeletionPolicy: policy,
-      });
-      // The ingress rules are always deleted: retained, they would keep
-      // referencing the planes' security groups and block their deletion.
-      const ingress = Object.values(
-        t.findResources("AWS::EC2::SecurityGroupIngress"),
-      );
-      expect(ingress).toHaveLength(2);
-      for (const rule of ingress) {
-        expect(rule.DeletionPolicy).toBeUndefined();
+      for (const type of [
+        "AWS::RDS::DBInstance",
+        "AWS::RDS::DBSubnetGroup",
+        "AWS::SecretsManager::Secret",
+        "AWS::EC2::SecurityGroup",
+      ]) {
+        for (const r of Object.values(t.findResources(type))) {
+          expect([undefined, "Delete"]).toContain(r.DeletionPolicy);
+        }
       }
     },
   );

@@ -107,22 +107,22 @@ describe("SharedInfra runtime images", () => {
     return { stack, buildArgs };
   };
 
-  test("dynamodb only: one image per plane, no JAR build arg", () => {
+  test("dynamodb only: one image per plane, with the DynamoDB jar", () => {
     const { stack, buildArgs } = synthesize(["dynamodb"]);
     expect(buildArgs).toEqual({
-      ControlPlaneImage: undefined,
-      DataPlaneImage: undefined,
+      ControlPlaneImage: { JAR: "control-plane.jar" },
+      DataPlaneImage: { JAR: "data-plane.jar" },
     });
     expect(Object.keys(stack.controlPlaneImages)).toEqual(["dynamodb"]);
     expect(Object.keys(stack.dataPlaneImages)).toEqual(["dynamodb"]);
   });
 
-  test("dynamodb and postgres: four images, only the postgres ones carry JAR", () => {
+  test("dynamodb and postgres: four images, each with its own jar", () => {
     const { stack, buildArgs } = synthesize(["dynamodb", "postgres"]);
     expect(buildArgs).toEqual({
-      ControlPlaneImage: undefined,
+      ControlPlaneImage: { JAR: "control-plane.jar" },
       ControlPlanePostgresImage: { JAR: "control-plane-postgres.jar" },
-      DataPlaneImage: undefined,
+      DataPlaneImage: { JAR: "data-plane.jar" },
       DataPlanePostgresImage: { JAR: "data-plane-postgres.jar" },
     });
     // Variants of one plane build from the same directory but hash apart.

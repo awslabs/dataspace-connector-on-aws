@@ -129,7 +129,8 @@ export class PipelineStack extends Stack {
   /**
    * Before the deploy, deletes the BaSyx and connector stacks whose config is
    * gone, BaSyx first, and any left in ROLLBACK_COMPLETE by a failed first
-   * create, which accept no change set. CDK Pipelines never deletes a stack
+   * create, which accept no change set. That includes SharedInfra, checked
+   * last because the others depend on it. CDK Pipelines never deletes a stack
    * itself. A connector stack's delete removes its portal registration, a
    * BaSyx stack's delete its DTR offer.
    */
@@ -139,7 +140,9 @@ export class PipelineStack extends Stack {
   ): CodeBuildStep {
     const connectors = `${deploymentName}-Connector-`;
     const basyx = basyxStackName(deploymentName, "");
+    const sharedInfra = `${deploymentName}-SharedInfra`;
     const keep = [
+      sharedInfra,
       ...config.connectors.map((c) => `${connectors}${c.connectorId}`),
       ...basyxEntries(config).map((b) =>
         basyxStackName(deploymentName, b.bpnl),
@@ -149,7 +152,7 @@ export class PipelineStack extends Stack {
       commands: [
         `KEEP=" ${keep.join(" ")} "`,
         [
-          `for p in ${basyx} ${connectors}; do`,
+          `for p in ${basyx} ${connectors} ${sharedInfra}; do`,
           `aws cloudformation list-stacks --query "StackSummaries[?StackStatus!='DELETE_COMPLETE' && starts_with(StackName, '$p')].[StackName,StackStatus]" --output text |`,
           `while read -r s status; do`,
           `case "$KEEP" in *" $s "*) [ "$status" = ROLLBACK_COMPLETE ] || continue;; esac;`,
@@ -175,6 +178,7 @@ export class PipelineStack extends Stack {
           resources: [
             this.stackArn(`${connectors}*`),
             this.stackArn(`${basyx}*`),
+            this.stackArn(sharedInfra),
           ],
         }),
       ],

@@ -28,7 +28,6 @@ export interface EdcAuroraProps {
   readonly vpc: IVpc;
   readonly profile: DeploymentProfile;
   readonly removalPolicy: RemovalPolicy;
-  /** Fixed name: a retained cluster must be deleted manually before the stack can be created again. */
   readonly clusterIdentifier: string;
 }
 
@@ -55,14 +54,8 @@ export class EdcAurora extends Construct {
       description: `EDC Aurora cluster ${props.clusterIdentifier}`,
       vpc: props.vpc,
     });
-    // Retained with the cluster: the retained cluster's network interfaces
-    // still use the group, so EC2 would refuse to delete it and fail the
-    // connector stack's removal.
-    this.securityGroup.applyRemovalPolicy(props.removalPolicy);
 
-    // Retained with the cluster, so an operator can still log in to a retained cluster.
     this.secret = new DatabaseSecret(this, "Secret", { username: "edc" });
-    this.secret.applyRemovalPolicy(props.removalPolicy);
 
     this.cluster = new DatabaseCluster(this, "Cluster", {
       engine: DatabaseClusterEngine.auroraPostgres({
@@ -80,8 +73,12 @@ export class EdcAurora extends Construct {
       securityGroups: [this.securityGroup],
       vpc: props.vpc,
       vpcSubnets: { subnetType: SubnetType.PRIVATE_WITH_EGRESS },
-      deletionProtection: props.removalPolicy === RemovalPolicy.RETAIN,
-      removalPolicy: props.removalPolicy,
+      // RETAIN keeps the data as a final snapshot, so removing the connector
+      // leaves no cluster, security group or identifier behind.
+      removalPolicy:
+        props.removalPolicy === RemovalPolicy.RETAIN
+          ? RemovalPolicy.SNAPSHOT
+          : props.removalPolicy,
     });
 
     this.jdbcUrl = `jdbc:postgresql://${this.cluster.clusterEndpoint.hostname}:${POSTGRES_PORT}/${DATABASE_NAME}?sslmode=require`;
@@ -94,9 +91,6 @@ export class EdcAurora extends Construct {
    * `cluster` and these rules individually, because a dependency on this whole
    * construct would make one plane's service wait for the other plane's rule,
    * which waits for that plane's security group and so for the first service.
-   * The rules are deleted with the stack whatever the removal policy: retained,
-   * they would keep referencing the planes' security groups and block their
-   * deletion.
    */
   allowFrom(
     id: string,

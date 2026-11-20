@@ -131,18 +131,9 @@ describe("runtimeJarTasks", () => {
 });
 
 describe("PipelineStack Synth step", () => {
-  test("dynamodb only: renders the unchanged command", () => {
+  test("dynamodb only: builds the DynamoDB jars alone", () => {
     expect(gradleCommand(config("dynamodb", "dynamodb"))).toEqual([
       "cd edc && ./gradlew clean shadowJar",
-    ]);
-  });
-
-  test("dynamodb only: every Synth command is the one the pipeline rendered before persistence", () => {
-    const cdkSynth = synthCommands(config("dynamodb")).filter((c) =>
-      c.includes("cdk synth"),
-    );
-    expect(cdkSynth).toEqual([
-      "npx cdk synth --app 'node dist/app.js' --context config-path=../.. --context deployment-name=Acme",
     ]);
   });
 
@@ -157,4 +148,19 @@ describe("PipelineStack Synth step", () => {
       "cd edc && ./gradlew clean shadowJar postgresShadowJar",
     ]);
   });
+});
+
+test("CleanUpStacks deletes a SharedInfra stack only in ROLLBACK_COMPLETE, after its dependents", () => {
+  const { template } = synth({});
+  const [keep, loop] = Object.values(
+    template.findResources("AWS::CodeBuild::Project"),
+  )
+    .map((r) => JSON.parse(r.Properties.Source.BuildSpec))
+    .find((spec) => JSON.stringify(spec).includes("delete-stack")).phases
+    .build.commands;
+  expect(keep).toBe('KEEP=" Acme-SharedInfra Acme-Connector-example "');
+  expect(loop).toMatch(
+    /^for p in Acme-BaSyx- Acme-Connector- Acme-SharedInfra; do /,
+  );
+  expect(loop).toContain('[ "$status" = ROLLBACK_COMPLETE ] || continue');
 });

@@ -20,7 +20,6 @@ import {
   Bucket,
   BucketEncryption,
 } from "aws-cdk-lib/aws-s3";
-import { DockerImageAsset } from "aws-cdk-lib/aws-ecr-assets";
 import { ContainerImage, Secret as EcsSecret } from "aws-cdk-lib/aws-ecs";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
@@ -28,7 +27,6 @@ import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import {
   ConnectorYaml,
   DeploymentYaml,
-  PersistenceType,
   connectorBpnl,
   deriveAdminSecretName,
   deriveConnectorClusterIdentifier,
@@ -63,32 +61,10 @@ const TOKEN_SIGNER_PRIVATE_KEY = "edc.transfer.proxy.token.private-key";
 const TOKEN_VERIFIER_PUBLIC_KEY = "edc.transfer.proxy.token.public-key";
 
 /**
- * Both planes of a postgres connector run the Tractus-X Flyway migration at
- * boot, against the same database and schema. Concurrent runs serialize on
- * Flyway's lock.
- */
-const MIGRATION_SCHEMA = "public";
-
-/**
  * Covers an Aurora resume from auto-pause plus the first boot's schema migration,
  * during which the load balancer health check fails.
  */
 const AURORA_HEALTH_CHECK_GRACE_PERIOD = Duration.minutes(5);
-
-/** The image of one plane for a persistence type, which the shared infrastructure builds if a connector uses it. */
-function runtimeImage(
-  images: Partial<Record<PersistenceType, DockerImageAsset>>,
-  persistence: PersistenceType,
-  plane: string,
-): ContainerImage {
-  const asset = images[persistence];
-  if (!asset) {
-    throw new Error(
-      `No ${plane} image is built for persistence "${persistence}"; the shared infrastructure builds images only for the persistence types of the configured connectors`,
-    );
-  }
-  return ContainerImage.fromDockerImageAsset(asset);
-}
 
 export class ConnectorStack extends Stack {
   constructor(scope: Construct, id: string, props: ConnectorStackProps) {
@@ -290,8 +266,6 @@ export class ConnectorStack extends Stack {
         // connector-migration refuses to boot without it, and the value must
         // never change once set, so it is the participant id, which never does.
         "edc.participant.context.id": identity["edc.participant.id"],
-        "tx.edc.postgresql.migration.enabled": "true",
-        "tx.edc.postgresql.migration.schema": MIGRATION_SCHEMA,
       }),
     };
     const common = {
@@ -322,10 +296,9 @@ export class ConnectorStack extends Stack {
 
     const controlPlane = new EdcRuntime(this, "ControlPlane", {
       ...common,
-      image: runtimeImage(
-        infra.controlPlaneImages,
-        persistence,
-        "control plane",
+      // SharedInfra builds an image for every persistence type in use.
+      image: ContainerImage.fromDockerImageAsset(
+        infra.controlPlaneImages[persistence]!,
       ),
       cpu: connector.controlPlaneCpu,
       memoryLimitMiB: connector.controlPlaneMemoryLimitMiB,
@@ -348,7 +321,9 @@ export class ConnectorStack extends Stack {
     const dataPlanePublicUrl = `${infra.dataPlaneUrl}${connectorId}/`;
     const dataPlane = new EdcRuntime(this, "DataPlane", {
       ...common,
-      image: runtimeImage(infra.dataPlaneImages, persistence, "data plane"),
+      image: ContainerImage.fromDockerImageAsset(
+        infra.dataPlaneImages[persistence]!,
+      ),
       cpu: connector.dataPlaneCpu,
       memoryLimitMiB: connector.dataPlaneMemoryLimitMiB,
       ports: dpPorts,
