@@ -305,7 +305,7 @@ describe("ConnectorStack with persistence postgres", () => {
     for (const service of Object.values(
       template.findResources("AWS::ECS::Service"),
     )) {
-      expect(service.Properties.HealthCheckGracePeriodSeconds).toBe(120);
+      expect(service.Properties.HealthCheckGracePeriodSeconds).toBe(300);
     }
   });
 
