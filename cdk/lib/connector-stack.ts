@@ -64,7 +64,7 @@ const TOKEN_VERIFIER_PUBLIC_KEY = "edc.transfer.proxy.token.public-key";
  * Covers an Aurora resume from auto-pause plus the first boot's schema migration,
  * during which the load balancer health check fails.
  */
-const AURORA_HEALTH_CHECK_GRACE_PERIOD = Duration.minutes(5);
+const AURORA_HEALTH_CHECK_GRACE_PERIOD = Duration.minutes(2);
 
 export class ConnectorStack extends Stack {
   constructor(scope: Construct, id: string, props: ConnectorStackProps) {
