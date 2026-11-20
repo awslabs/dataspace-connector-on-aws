@@ -43,20 +43,25 @@ function synth(stateRemovalPolicy: StateRemovalPolicy = "RETAIN"): Template {
 const retained = synth();
 
 test.each([
-  ["RETAIN", "Retain", true],
-  ["DESTROY", "Delete", false],
+  ["RETAIN", "Snapshot"],
+  ["DESTROY", "Delete"],
 ] as const)(
-  "%s: cluster and its credentials secret follow the policy",
-  (policy, deletionPolicy, deletionProtection) => {
+  "%s: the cluster is deleted with a %s policy, its secret with the stack",
+  (policy, deletionPolicy) => {
     const t = policy === "RETAIN" ? retained : synth(policy);
     t.hasResource("AWS::RDS::DBCluster", {
       DeletionPolicy: deletionPolicy,
-      Properties: Match.objectLike({ DeletionProtection: deletionProtection }),
+      Properties: Match.not(Match.objectLike({ DeletionProtection: true })),
     });
-    t.hasResource("AWS::SecretsManager::Secret", {
-      DeletionPolicy: deletionPolicy,
-      Properties: Match.objectLike({ GenerateSecretString: Match.anyValue() }),
-    });
+    for (const r of Object.values(
+      t.findResources("AWS::SecretsManager::Secret", {
+        Properties: Match.objectLike({
+          GenerateSecretString: Match.anyValue(),
+        }),
+      }),
+    )) {
+      expect([undefined, "Delete"]).toContain(r.DeletionPolicy);
+    }
   },
 );
 

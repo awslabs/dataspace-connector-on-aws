@@ -518,7 +518,7 @@ Delete the contract definition first (it removes the offer from the catalog), th
 
 ### Ending transfers (and controlling cost)
 
-Transfers are not deleted; they are ended with `manage_transfer`. This matters on this project because open pull transfers keep a provider-side data-plane flow active and continue to consume DynamoDB (see the **open-transfers-and-dynamodb-cost** doc), so terminate transfers you no longer need:
+Transfers are not deleted; they are ended with `manage_transfer`. This matters on this project because open pull transfers keep a provider-side data-plane flow active and continue to consume the connector's store (DynamoDB or Aurora PostgreSQL, per its `persistence` setting; see the **open-transfers-and-dynamodb-cost** doc for DynamoDB), so terminate transfers you no longer need:
 
 ```python
 # End one transfer

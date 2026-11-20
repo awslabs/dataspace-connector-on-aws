@@ -7,7 +7,8 @@ RUN addgroup -g 1001 edc && \
     adduser -D -u 1001 -G edc edc
 
 WORKDIR /app
-COPY build/libs/control-plane.jar control-plane.jar
+ARG JAR=control-plane.jar
+COPY build/libs/${JAR} app.jar
 
 USER edc
 
@@ -15,4 +16,4 @@ ENTRYPOINT ["java", \
     "-XX:MaxRAMPercentage=75.0", \
     "-XX:+ExitOnOutOfMemoryError", \
     "-Djava.security.egd=file:/dev/./urandom", \
-    "-jar", "control-plane.jar"]
+    "-jar", "app.jar"]

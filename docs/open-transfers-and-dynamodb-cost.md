@@ -1,5 +1,8 @@
 # Open Transfers and DynamoDB Cost
 
+> [!NOTE]
+> This note applies to connectors with `persistence: dynamodb` (the default). A connector with `persistence: postgres` keeps its state in an Aurora PostgreSQL cluster instead; see the [Persistence](../README.md#persistence) section of the README.
+
 On this project's DynamoDB-backed stores, an idle-looking connector can run up a bill that resembles a busy one. The cause is open data transfers: EDC pull transfers stay active until explicitly ended, and each one a connector serves keeps consuming DynamoDB request units. This note explains that cost model and how to control it.
 
 ## How open transfers drive cost

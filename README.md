@@ -6,7 +6,7 @@ To participate in secure, sovereign data sharing through the Catena-X data space
 
 * Production-ready multi-connector deployment on AWS infrastructure, following AWS best practices
 * GitOps-driven operations using CDK Pipelines: add or remove connectors by editing YAML files in Git
-* Customization for [Tractus-X EDC](https://github.com/eclipse-tractusx/tractusx-edc), with AWS service integrations for [Amazon S3](https://aws.amazon.com/s3/), [AWS Secrets Manager](https://aws.amazon.com/secrets-manager/), and [Amazon DynamoDB](https://aws.amazon.com/dynamodb/)
+* Customization for [Tractus-X EDC](https://github.com/eclipse-tractusx/tractusx-edc), with AWS service integrations for [Amazon S3](https://aws.amazon.com/s3/), [AWS Secrets Manager](https://aws.amazon.com/secrets-manager/), and a per-connector choice of [Amazon DynamoDB](https://aws.amazon.com/dynamodb/) or [Amazon Aurora PostgreSQL](https://aws.amazon.com/rds/aurora/) for EDC state
 * Cost-optimized serverless infrastructure targeting <$25/month per connector at scale
 * AI-assisted connector management via an included [MCP server](mcp/) and guided [Kiro Power](kiro-power/) workflows for deployment, validation, and operations
 
@@ -30,7 +30,7 @@ To participate in secure, sovereign data sharing through the Catena-X data space
 Deployment is fully GitOps-driven via AWS CDK Pipelines. You run `./deploy.sh` once to create the pipeline and a configuration repository, then manage your entire connector fleet by editing YAML files in that repo:
 
 * **Add a connector**: add a `connector-<id>.yaml` file; the pipeline creates its technical user in the Cofinity-X Portal, registers it for discovery, and provisions its infrastructure.
-* **Remove a connector**: delete its YAML file; the pipeline tears down its stack, which deletes its portal registration and technical user. With `stateRemovalPolicy: RETAIN` (the default) its DynamoDB table and S3 bucket stay in your account.
+* **Remove a connector**: delete its YAML file; the pipeline tears down its stack, which deletes its portal registration and technical user. With `stateRemovalPolicy: RETAIN` (the default) its DynamoDB table and S3 bucket stay in your account, and an Aurora cluster is deleted after a final snapshot.
 * **Upgrade the connector software**: bump `appVersion` in `pipeline.yaml`; the pipeline rebuilds and redeploys all connectors.
 
 ### Deploy the Pipeline
@@ -117,7 +117,8 @@ Shared infrastructure plus Cofinity-X Portal integration. The pipeline derives e
 | `managementApiPrincipals` | | none | IAM principal ARNs allowed by the Management API's resource policy (IAM auth). |
 | `observabilityApiPrincipals` | | none | Same for the Observability API. |
 | `logLevel` | | Tractus-X default | EDC log level of all connectors: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR` or `OFF`. `DEBUG` and `TRACE` also turn on API Gateway data tracing, which logs full request and response bodies, including tokens, to CloudWatch. Don't use them in production. |
-| `stateRemovalPolicy` | | `RETAIN` | Whether stored state (each connector's DynamoDB table and S3 bucket, each BaSyx database) is kept (`RETAIN`) or deleted (`DESTROY`) with its stack. |
+| `stateRemovalPolicy` | | `RETAIN` | Whether stored state (each connector's DynamoDB table and S3 bucket, each Aurora database of a connector or BaSyx entry) is kept (`RETAIN`) or deleted (`DESTROY`) with its stack. `RETAIN` keeps an Aurora database as a final cluster snapshot and deletes the cluster. |
+| `persistence` | | `dynamodb` | EDC store: `dynamodb` (one DynamoDB table per connector) or `postgres` (one Aurora Serverless v2 PostgreSQL cluster per connector). Applies to all connectors; a connector may override it. |
 | `certificateArn`, `domainName`, `hostedZoneId` | all or none | | Custom domain, see [Custom Domain](#custom-domain). |
 | `basyx` | | | Digital Twin Registry per BPNL, see [Digital Twin Registry](#digital-twin-registry-eclipse-basyx). |
 
@@ -134,9 +135,21 @@ For each connector the pipeline creates a Cofinity-X Portal technical user (**Id
 | `dataPlaneCpu`, `dataPlaneMemoryLimitMiB` | | `256`, `512` | Data plane Fargate task size. For high-volume pulls use at least `1024`, `2048` (see [Submodels at Scale](docs/submodels-at-scale.md#size-the-data-plane)). |
 | `interactiveStateMachineIterationMillis` | | `10000` | Iteration interval of the negotiation, transfer and data-flow state machines. |
 | `backgroundStateMachineIterationMillis` | | `60000` | Iteration interval of the policy monitor and data-plane selector. |
-| `dataPlaneFlowLeaseMillis` | | `10000` | How often an open PULL flow renews its lease (one DynamoDB write). After 5 missed renewals another data plane may take the flow over. |
+| `dataPlaneFlowLeaseMillis` | | `10000` | How often an open PULL flow renews its lease (one store write). After 5 missed renewals another data plane may take the flow over. |
 | `stateRemovalPolicy` | | deployment value | Overrides `stateRemovalPolicy` for this connector. |
 | `logLevel` | | deployment value | Overrides `logLevel` for this connector. |
+| `persistence` | | deployment value | EDC store: `dynamodb` (one DynamoDB table per connector) or `postgres` (one Aurora Serverless v2 PostgreSQL cluster per connector). Overrides `persistence` for this connector. |
+
+### Persistence
+
+Each connector keeps its EDC state (assets, policies, contract definitions, negotiations, agreements, transfers, EDRs) in a store of its own. `persistence` in `deployment.yaml` sets the store of all connectors, and a connector file may override it, so one deployment can mix both types:
+
+* **`dynamodb`** (default): one on-demand DynamoDB table named `<deploymentName>-<connectorId>`. Its cost grows with request volume, mainly with open transfers (see [Open Transfers and DynamoDB Cost](docs/open-transfers-and-dynamodb-cost.md)).
+* **`postgres`**: one Aurora Serverless v2 PostgreSQL cluster per connector, with the upstream Tractus-X PostgreSQL stores. Both planes run the Tractus-X schema migration at boot. The credentials stay in AWS Secrets Manager and reach the runtimes as ECS secrets, and only the connector's own two services can reach the cluster. The cluster is configured to pause at 0 ACU, but the control plane queries it continuously, so expect it to stay at its 0.5 ACU minimum: about $51 per month and connector in eu-central-1 ($0.14 per ACU-hour), plus storage and I/O.
+
+The cluster identifier is `<deploymentname>-<connectorid>` in lowercase. It must follow the RDS naming rules (at most 63 characters, starting with a letter, no two consecutive hyphens), or synth fails.
+
+Changing `persistence` on an existing connector creates an empty store of the new type; EDC state does not move, and the old store stays or goes with `stateRemovalPolicy`. Under `RETAIN`, removing a `postgres` connector deletes its cluster after a final snapshot, so the connector can be added again right away. Restore the snapshot to recover the state, and delete it when you no longer need it.
 
 ### Custom Domain
 
@@ -161,7 +174,7 @@ The pipeline creates the services empty. Your applications write shell descripto
 
 Things to know:
 
-- **Removing a `basyx` entry:** the pipeline deletes the DTR asset and the BaSyx stack. With `RETAIN`, the Aurora cluster and its credentials secret stay in your account. Like a retained connector's DynamoDB table, the retained cluster keeps its fixed name, so delete it manually before adding the BPNL again.
+- **Removing a `basyx` entry:** the pipeline deletes the DTR asset and the BaSyx stack. With `RETAIN`, the Aurora cluster is deleted after a final snapshot.
 - **Idle cost:** the cluster is configured to pause at 0 ACU, but the DTR runs a database maintenance job every minute, so expect it to stay at its 0.5 ACU minimum.
 - **Token rate:** each data plane task caches the Cognito token until shortly before it expires, so it requests about one token per hour.
 
@@ -183,7 +196,7 @@ aws cloudformation delete-stack --stack-name DataspaceConnector-SharedInfra --re
 aws cloudformation delete-stack --stack-name DataspaceConnectorPipelineStack --region <region>
 ```
 
-Stack and repository names are prefixed by `deploymentName` (default `DataspaceConnector`); substitute your own if you set it. Finally delete the portal admin secrets you created and any retained tables, buckets and Aurora clusters.
+Stack and repository names are prefixed by `deploymentName` (default `DataspaceConnector`); substitute your own if you set it. Finally delete the portal admin secrets you created and any retained tables, buckets and Aurora snapshots.
 
 ## Deployment Profiles
 
@@ -201,7 +214,7 @@ Stack and repository names are prefixed by `deploymentName` (default `DataspaceC
 | 10 | ~$10/connector | ~$15/connector |
 | 100 | ~$7/connector | ~$12/connector |
 
-Baseline infrastructure cost drops significantly at scale because VPC, NAT Gateway, and ALB are shared. Per-connector cost is primarily Fargate compute + DynamoDB on-demand.
+Baseline infrastructure cost drops significantly at scale because VPC, NAT Gateway, and ALB are shared. Per-connector cost is primarily Fargate compute + DynamoDB on-demand; a `postgres` connector adds its Aurora cluster (see [Persistence](#persistence)).
 
 These figures reflect baseline (idle) cost. DynamoDB consumption, and therefore variable cost, scales with the number of active (open) transfers a connector serves. See [Open Transfers and DynamoDB Cost](docs/open-transfers-and-dynamodb-cost.md).
 
@@ -210,7 +223,7 @@ These figures reflect baseline (idle) cost. DynamoDB consumption, and therefore 
 * **Per-connector access control:** When deploying multiple connectors, you can restrict which IAM principals can access which connector's Management API. Supports single-account, cross-account, and organization-level trust patterns. See [Management API Access Patterns](docs/management-api-access-patterns.md).
 * **API Gateway payload limit:** 10 MB per request (REST API). Does not affect *Consumer Pull* scenarios or S3-backed data transfers.
 * **Exposed API surface:** The OpenAPI specs in `cdk/api/` expose every route Tractus-X serves on the management, protocol, public data-plane and health contexts, with request validation on parameters and bodies. For production, remove the routes your applications do not call. After an EDC upgrade, regenerate the specs with `scripts/regenerate-api-specs.py`. The internal control APIs between the planes, version details, and the data-plane management and consumer proxy contexts are not exposed. The federated catalog is not supported: its catalog context is not configured and Tractus-X ships it disabled.
-* **Open transfers accrue provider cost:** Pull transfers remain `STARTED` until explicitly terminated, and each open transfer keeps a provider-side data-plane flow active and consuming DynamoDB. Terminate transfers you no longer need via the Management API. See [Open Transfers and DynamoDB Cost](docs/open-transfers-and-dynamodb-cost.md).
+* **Open transfers accrue provider cost:** Pull transfers remain `STARTED` until explicitly terminated. On DynamoDB connectors, each open transfer keeps a provider-side data-plane flow active and consuming DynamoDB. Terminate transfers you no longer need via the Management API. See [Open Transfers and DynamoDB Cost](docs/open-transfers-and-dynamodb-cost.md).
 * **Fargate Spot availability:** In `development` profile, Spot capacity constraints may cause deployment delays during updates. Retry or use `production` profile for guaranteed placement.
 
 ## Learn More
@@ -223,7 +236,6 @@ These figures reflect baseline (idle) cost. DynamoDB consumption, and therefore 
 ## Backlog / Ideas 💡
 
 * Deployment of the entire [Tractus-X Hausanschluss](https://github.com/eclipse-tractusx/tractus-x-umbrella/blob/main/docs/user/common/guides/hausanschluss-bundles.md)
-* Configurable switch between DynamoDB and Aurora PostgreSQL for control plane persistence
 * Data plane extension to serve DynamoDB data as EDC asset type
 
 ## Security

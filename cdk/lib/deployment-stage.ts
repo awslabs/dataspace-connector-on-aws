@@ -14,6 +14,7 @@ import {
   connectorPriority,
   DeploymentConfig,
   basyxEntries,
+  persistenceTypesInUse,
 } from "./config/config";
 
 export interface DeploymentStageProps extends StageProps {
@@ -30,6 +31,7 @@ export class DeploymentStage extends Stage {
     const sharedInfra = new SharedInfraStack(this, "SharedInfra", {
       config: deployment,
       deploymentName: props.deploymentName,
+      persistenceTypes: persistenceTypesInUse(props.config),
     });
 
     const priorities = new Map<number, string>();

@@ -28,7 +28,7 @@ import { Cluster, ContainerInsights, ICluster } from "aws-cdk-lib/aws-ecs";
 import { DockerImageAsset, Platform } from "aws-cdk-lib/aws-ecr-assets";
 import { VpcLink } from "aws-cdk-lib/aws-apigatewayv2";
 
-import { DeploymentYaml, toPrincipals } from "./config/config";
+import { DeploymentYaml, PersistenceType, toPrincipals } from "./config/config";
 import {
   CONTROL_PLANE_PORTS as cpPorts,
   DATA_PLANE_PORTS as dpPorts,
@@ -43,15 +43,28 @@ import { BASYX_PORT } from "./basyx/names";
 export interface SharedInfraStackProps extends StackProps {
   readonly config: DeploymentYaml;
   readonly deploymentName: string;
+  /** Persistence types the connectors use; one image per plane is built for each. */
+  readonly persistenceTypes: ReadonlySet<PersistenceType>;
 }
+
+/** A runtime plane: its edc/ directory and the jar name prefix. */
+type Plane = "control-plane" | "data-plane";
+
+/** The jar a persistence type's image runs. */
+const jarName = (plane: Plane, persistence: PersistenceType): string =>
+  persistence === "postgres" ? `${plane}-postgres.jar` : `${plane}.jar`;
 
 export class SharedInfraStack extends Stack {
   readonly albArn: string;
   readonly albDnsName: string;
   readonly albSecurityGroupId: string;
   readonly edcTaskSecurityGroupId: string;
-  readonly controlPlaneImage: DockerImageAsset;
-  readonly dataPlaneImage: DockerImageAsset;
+  /** Control plane images of the persistence types in use. */
+  readonly controlPlaneImages: Partial<
+    Record<PersistenceType, DockerImageAsset>
+  >;
+  /** Data plane images of the persistence types in use. */
+  readonly dataPlaneImages: Partial<Record<PersistenceType, DockerImageAsset>>;
   readonly dataPlaneUrl: string;
   readonly dspUrl: string;
   readonly managementUrl: string;
@@ -87,18 +100,16 @@ export class SharedInfraStack extends Stack {
       vpc: this.vpc,
     });
 
-    // ignoreMode DOCKER applies the .dockerignore to the asset hash (not just the
-    // build), so the hash stays stable when the jar is unchanged.
-    this.controlPlaneImage = new DockerImageAsset(this, "ControlPlaneImage", {
-      directory: resolve(__dirname, "../../edc/control-plane"),
-      platform: Platform.LINUX_ARM64,
-      ignoreMode: IgnoreMode.DOCKER,
-    });
-    this.dataPlaneImage = new DockerImageAsset(this, "DataPlaneImage", {
-      directory: resolve(__dirname, "../../edc/data-plane"),
-      platform: Platform.LINUX_ARM64,
-      ignoreMode: IgnoreMode.DOCKER,
-    });
+    this.controlPlaneImages = this.planeImages(
+      "control-plane",
+      "ControlPlane",
+      props.persistenceTypes,
+    );
+    this.dataPlaneImages = this.planeImages(
+      "data-plane",
+      "DataPlane",
+      props.persistenceTypes,
+    );
 
     const albSg = new SecurityGroup(this, "AlbSecurityGroup", {
       description: "Security group for ALB communication with EDC services",
@@ -227,5 +238,37 @@ export class SharedInfraStack extends Stack {
     new CfnOutput(this, "AlbDnsName", { value: this.albDnsName });
     new CfnOutput(this, "DspApiUrl", { value: this.dspUrl });
     new CfnOutput(this, "ManagementApiUrl", { value: this.managementUrl });
+  }
+
+  /**
+   * One image asset per persistence type in use. Both variants of a plane
+   * build from the same directory and differ in the JAR build arg. Each asset
+   * excludes the other variant's jar, and ignoreMode DOCKER applies the
+   * .dockerignore to the asset hash (not just the build), so a hash only moves
+   * when its own jar changes.
+   */
+  private planeImages(
+    plane: Plane,
+    idPrefix: string,
+    persistenceTypes: ReadonlySet<PersistenceType>,
+  ): Partial<Record<PersistenceType, DockerImageAsset>> {
+    const images: Partial<Record<PersistenceType, DockerImageAsset>> = {};
+    for (const persistence of persistenceTypes) {
+      const other = persistence === "postgres" ? "dynamodb" : "postgres";
+      images[persistence] = new DockerImageAsset(
+        this,
+        persistence === "dynamodb"
+          ? `${idPrefix}Image`
+          : `${idPrefix}PostgresImage`,
+        {
+          directory: resolve(__dirname, `../../edc/${plane}`),
+          buildArgs: { JAR: jarName(plane, persistence) },
+          exclude: [`build/libs/${jarName(plane, other)}`],
+          platform: Platform.LINUX_ARM64,
+          ignoreMode: IgnoreMode.DOCKER,
+        },
+      );
+    }
+    return images;
   }
 }

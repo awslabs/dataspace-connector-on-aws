@@ -147,17 +147,13 @@ export class BasyxStack extends Stack {
     auroraSg.addIngressRule(basyxSg, Port.tcp(5432), "BaSyx services");
 
     // ─── Aurora ──────────────────────────────────────────────────────────────
-    // Retained with the cluster, so an operator can still log in to a retained cluster.
     const credentialsSecret = new DatabaseSecret(this, "DatabaseSecret", {
       username: "basyx",
     });
-    credentialsSecret.applyRemovalPolicy(removalPolicy);
     const database = new DatabaseCluster(this, "Database", {
       engine: DatabaseClusterEngine.auroraPostgres({
         version: AURORA_POSTGRES_VERSION,
       }),
-      // Fixed name, like the connector's DynamoDB table: a retained cluster
-      // must be deleted manually before the stack can be created again.
       clusterIdentifier: domainPrefix,
       credentials: Credentials.fromSecret(credentialsSecret),
       defaultDatabaseName: SERVICE_NAMES.dtr,
@@ -170,8 +166,12 @@ export class BasyxStack extends Stack {
       securityGroups: [auroraSg],
       vpc,
       vpcSubnets: { subnetType: SubnetType.PRIVATE_WITH_EGRESS },
-      deletionProtection: removalPolicy === RemovalPolicy.RETAIN,
-      removalPolicy,
+      // RETAIN keeps the data as a final snapshot, so removing the BPNL
+      // leaves no cluster, security group or identifier behind.
+      removalPolicy:
+        removalPolicy === RemovalPolicy.RETAIN
+          ? RemovalPolicy.SNAPSHOT
+          : removalPolicy,
     });
 
     // ─── Cognito ─────────────────────────────────────────────────────────────
