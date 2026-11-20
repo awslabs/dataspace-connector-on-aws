@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Stack, StackProps } from "aws-cdk-lib";
+import { Duration, Stack, StackProps } from "aws-cdk-lib";
 import { LinuxArmBuildImage, LinuxBuildImage } from "aws-cdk-lib/aws-codebuild";
 import { Code, Repository } from "aws-cdk-lib/aws-codecommit";
 import { PipelineType } from "aws-cdk-lib/aws-codepipeline";
@@ -132,7 +132,8 @@ export class PipelineStack extends Stack {
    * create, which accept no change set. That includes SharedInfra, checked
    * last because the others depend on it. CDK Pipelines never deletes a stack
    * itself. A connector stack's delete removes its portal registration, a
-   * BaSyx stack's delete its DTR offer.
+   * BaSyx stack's delete its DTR offer. The stacks of one group are deleted in
+   * parallel, because a stack with an Aurora cluster takes about 20 minutes.
    */
   private cleanUpStacksStep(
     deploymentName: string,
@@ -149,16 +150,21 @@ export class PipelineStack extends Stack {
       ),
     ];
     return new CodeBuildStep("CleanUpStacks", {
+      // Deleting a stack with an Aurora cluster takes about 20 minutes, and the
+      // BaSyx and connector groups run one after the other.
+      timeout: Duration.hours(2),
       commands: [
         `KEEP=" ${keep.join(" ")} "`,
         [
           `for p in ${basyx} ${connectors} ${sharedInfra}; do`,
-          `aws cloudformation list-stacks --query "StackSummaries[?StackStatus!='DELETE_COMPLETE' && starts_with(StackName, '$p')].[StackName,StackStatus]" --output text |`,
-          `while read -r s status; do`,
+          `l=$(aws cloudformation list-stacks --query "StackSummaries[?StackStatus!='DELETE_COMPLETE' && starts_with(StackName, '$p')].[StackName,StackStatus]" --output text) || exit 1;`,
+          `d=$(printf '%s\\n' "$l" | while read -r s status; do`,
+          `[ -n "$s" ] || continue;`,
           `case "$KEEP" in *" $s "*) [ "$status" = ROLLBACK_COMPLETE ] || continue;; esac;`,
-          `echo "Deleting $s ($status)";`,
-          `aws cloudformation delete-stack --stack-name "$s" && aws cloudformation wait stack-delete-complete --stack-name "$s" || exit 1;`,
-          `done || exit 1;`,
+          `echo "Deleting $s ($status)" >&2;`,
+          `aws cloudformation delete-stack --stack-name "$s" && echo "$s" || exit 1;`,
+          `done) || exit 1;`,
+          `for s in $d; do aws cloudformation wait stack-delete-complete --stack-name "$s" || exit 1; done;`,
           `done`,
         ].join(" "),
       ],

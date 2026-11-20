@@ -163,4 +163,8 @@ test("CleanUpStacks deletes a SharedInfra stack only in ROLLBACK_COMPLETE, after
     /^for p in Acme-BaSyx- Acme-Connector- Acme-SharedInfra; do /,
   );
   expect(loop).toContain('[ "$status" = ROLLBACK_COMPLETE ] || continue');
+  // All deletes of a group are issued before the first wait.
+  expect(loop).toMatch(
+    /delete-stack --stack-name "\$s" && echo "\$s".*done\) \|\| exit 1; for s in \$d; do aws cloudformation wait stack-delete-complete/,
+  );
 });
