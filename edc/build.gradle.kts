@@ -41,7 +41,7 @@ subprojects {
     // both variants share; `ddb` and `postgres` hold what differs:
     //   shadowJar          -> <project>.jar           (runtimeOnly + ddb)
     //   postgresShadowJar  -> <project>-postgres.jar  (runtimeOnly + postgres)
-    // postgresShadowJar is deliberately not wired into assemble/build.
+    // `build` builds both; the deploy pipeline runs only the tasks its connectors need.
     plugins.withId("com.gradleup.shadow") {
         val mainSourceSet = the<SourceSetContainer>()["main"]
         mainSourceSet.resources.srcDir(rootProject.file("logging"))
@@ -107,14 +107,16 @@ subprojects {
             archiveFileName.set("${project.name}.jar")
         }
 
-        tasks.register<ShadowJar>("postgresShadowJar") {
-            group = "build"
-            description = "Assembles the fat jar with the PostgreSQL stores instead of the DynamoDB ones."
-            archiveFileName.set("${project.name}-postgres.jar")
-            // Brings the shared log4j2.xml and any local resources.
-            from(mainSourceSet.output)
-            this.configurations.set(listOf(postgresRuntimeClasspath))
-        }
+        val postgresShadowJar =
+            tasks.register<ShadowJar>("postgresShadowJar") {
+                group = "build"
+                description = "Assembles the fat jar with the PostgreSQL stores instead of the DynamoDB ones."
+                archiveFileName.set("${project.name}-postgres.jar")
+                // Brings the shared log4j2.xml and any local resources.
+                from(mainSourceSet.output)
+                this.configurations.set(listOf(postgresRuntimeClasspath))
+            }
+        tasks.named("assemble") { dependsOn(postgresShadowJar) }
     }
 
     plugins.withId("io.swagger.core.v3.swagger-gradle-plugin") {

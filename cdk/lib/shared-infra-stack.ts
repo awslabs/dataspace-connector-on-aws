@@ -28,12 +28,7 @@ import { Cluster, ContainerInsights, ICluster } from "aws-cdk-lib/aws-ecs";
 import { DockerImageAsset, Platform } from "aws-cdk-lib/aws-ecr-assets";
 import { VpcLink } from "aws-cdk-lib/aws-apigatewayv2";
 
-import {
-  DeploymentYaml,
-  PERSISTENCE_TYPES,
-  PersistenceType,
-  toPrincipals,
-} from "./config/config";
+import { DeploymentYaml, PersistenceType, toPrincipals } from "./config/config";
 import {
   CONTROL_PLANE_PORTS as cpPorts,
   DATA_PLANE_PORTS as dpPorts,
@@ -55,7 +50,7 @@ export interface SharedInfraStackProps extends StackProps {
 /** A runtime plane: its edc/ directory and the jar name prefix. */
 type Plane = "control-plane" | "data-plane";
 
-/** The jar a persistence type's image runs; the Dockerfile default is the dynamodb jar. */
+/** The jar a persistence type's image runs. */
 const jarName = (plane: Plane, persistence: PersistenceType): string =>
   persistence === "postgres" ? `${plane}-postgres.jar` : `${plane}.jar`;
 
@@ -246,13 +241,11 @@ export class SharedInfraStack extends Stack {
   }
 
   /**
-   * One image asset per persistence type in use. Both variants of a plane share
-   * the asset directory and differ in the JAR build arg, which is part of the
-   * asset hash. The dynamodb image gets no build arg, so its hash does not
-   * change for deployments that only use it. Each asset excludes the other
-   * variant's jar so that rebuilding one jar does not move the other hash.
-   * ignoreMode DOCKER applies the .dockerignore to the hash (not just the
-   * build), so the hash stays stable when the jar is unchanged.
+   * One image asset per persistence type in use. Both variants of a plane
+   * build from the same directory and differ in the JAR build arg. Each asset
+   * excludes the other variant's jar, and ignoreMode DOCKER applies the
+   * .dockerignore to the asset hash (not just the build), so a hash only moves
+   * when its own jar changes.
    */
   private planeImages(
     plane: Plane,
@@ -260,8 +253,7 @@ export class SharedInfraStack extends Stack {
     persistenceTypes: ReadonlySet<PersistenceType>,
   ): Partial<Record<PersistenceType, DockerImageAsset>> {
     const images: Partial<Record<PersistenceType, DockerImageAsset>> = {};
-    for (const persistence of PERSISTENCE_TYPES) {
-      if (!persistenceTypes.has(persistence)) continue;
+    for (const persistence of persistenceTypes) {
       const other = persistence === "postgres" ? "dynamodb" : "postgres";
       images[persistence] = new DockerImageAsset(
         this,
@@ -270,9 +262,7 @@ export class SharedInfraStack extends Stack {
           : `${idPrefix}PostgresImage`,
         {
           directory: resolve(__dirname, `../../edc/${plane}`),
-          ...(persistence === "postgres"
-            ? { buildArgs: { JAR: jarName(plane, persistence) } }
-            : {}),
+          buildArgs: { JAR: jarName(plane, persistence) },
           exclude: [`build/libs/${jarName(plane, other)}`],
           platform: Platform.LINUX_ARM64,
           ignoreMode: IgnoreMode.DOCKER,

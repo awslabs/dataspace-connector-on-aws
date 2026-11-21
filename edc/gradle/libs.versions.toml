@@ -38,7 +38,6 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 log4j-core = { module = "org.apache.logging.log4j:log4j-core", version.ref = "log4j" }
 log4j-slf4j2-impl = { module = "org.apache.logging.log4j:log4j-slf4j2-impl", version.ref = "log4j" }
-postgres = { module = "org.postgresql:postgresql", version = "42.7.14" }
 tx-connector-migration = { module = "org.eclipse.tractusx.edc:connector-migration", version.ref = "tx" }
 tx-controlplane-base = { module = "org.eclipse.tractusx.edc:edc-controlplane-base", version.ref = "tx" }
 tx-core-agreements-bpns = { module = "org.eclipse.tractusx.edc:bpns-evaluation-core", version.ref = "tx" }

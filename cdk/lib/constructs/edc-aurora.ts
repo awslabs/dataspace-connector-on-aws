@@ -28,7 +28,6 @@ export interface EdcAuroraProps {
   readonly vpc: IVpc;
   readonly profile: DeploymentProfile;
   readonly removalPolicy: RemovalPolicy;
-  /** Fixed name: a retained cluster must be deleted manually before the stack can be created again. */
   readonly clusterIdentifier: string;
 }
 
@@ -43,7 +42,11 @@ export class EdcAurora extends Construct {
   readonly secret: DatabaseSecret;
   /** The cluster's security group; admit the runtimes with `allowFrom`. */
   readonly securityGroup: SecurityGroup;
-  /** Aurora PostgreSQL 17 and newer force TLS (rds.force_ssl=1). */
+  /**
+   * Aurora PostgreSQL 17 and newer force TLS (rds.force_ssl=1). The two
+   * timeouts let the first connection wait out a resume from auto-pause, which
+   * takes longer than the driver defaults (10 s connect, 5 s SSL response).
+   */
   readonly jdbcUrl: string;
 
   constructor(scope: Construct, id: string, props: EdcAuroraProps) {
@@ -55,14 +58,8 @@ export class EdcAurora extends Construct {
       description: `EDC Aurora cluster ${props.clusterIdentifier}`,
       vpc: props.vpc,
     });
-    // Retained with the cluster: the retained cluster's network interfaces
-    // still use the group, so EC2 would refuse to delete it and fail the
-    // connector stack's removal.
-    this.securityGroup.applyRemovalPolicy(props.removalPolicy);
 
-    // Retained with the cluster, so an operator can still log in to a retained cluster.
     this.secret = new DatabaseSecret(this, "Secret", { username: "edc" });
-    this.secret.applyRemovalPolicy(props.removalPolicy);
 
     this.cluster = new DatabaseCluster(this, "Cluster", {
       engine: DatabaseClusterEngine.auroraPostgres({
@@ -80,11 +77,15 @@ export class EdcAurora extends Construct {
       securityGroups: [this.securityGroup],
       vpc: props.vpc,
       vpcSubnets: { subnetType: SubnetType.PRIVATE_WITH_EGRESS },
-      deletionProtection: props.removalPolicy === RemovalPolicy.RETAIN,
-      removalPolicy: props.removalPolicy,
+      // RETAIN keeps the data as a final snapshot, so removing the connector
+      // leaves no cluster, security group or identifier behind.
+      removalPolicy:
+        props.removalPolicy === RemovalPolicy.RETAIN
+          ? RemovalPolicy.SNAPSHOT
+          : props.removalPolicy,
     });
 
-    this.jdbcUrl = `jdbc:postgresql://${this.cluster.clusterEndpoint.hostname}:${POSTGRES_PORT}/${DATABASE_NAME}?sslmode=require`;
+    this.jdbcUrl = `jdbc:postgresql://${this.cluster.clusterEndpoint.hostname}:${POSTGRES_PORT}/${DATABASE_NAME}?sslmode=require&connectTimeout=30&sslResponseTimeout=30000`;
   }
 
   /**
@@ -94,9 +95,6 @@ export class EdcAurora extends Construct {
    * `cluster` and these rules individually, because a dependency on this whole
    * construct would make one plane's service wait for the other plane's rule,
    * which waits for that plane's security group and so for the first service.
-   * The rules are deleted with the stack whatever the removal policy: retained,
-   * they would keep referencing the planes' security groups and block their
-   * deletion.
    */
   allowFrom(
     id: string,

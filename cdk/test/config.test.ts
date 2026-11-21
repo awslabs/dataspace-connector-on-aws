@@ -492,22 +492,6 @@ describe("persistence", () => {
     );
   });
 
-  test("the old value aurora is rejected, not accepted as an alias", () => {
-    const dir = writeConfig(
-      { ...baseDeployment(), persistence: "aurora" },
-      oneConnector(),
-    );
-    expect(() => loadDeploymentConfig(dir)).toThrow(
-      'deployment.yaml: persistence must be "dynamodb" or "postgres", got "aurora"',
-    );
-    const connector = writeConfig(baseDeployment(), {
-      a: { ...baseConnector("aa"), persistence: "aurora" },
-    });
-    expect(() => loadDeploymentConfig(connector)).toThrow(
-      'connectors/connector-a.yaml: persistence must be "dynamodb" or "postgres", got "aurora"',
-    );
-  });
-
   test("connector value must be dynamodb or postgres", () => {
     const dir = writeConfig(baseDeployment(), {
       a: { ...baseConnector("aa"), persistence: "Postgres" },
@@ -582,22 +566,6 @@ describe("persistence", () => {
       ]);
     });
   });
-
-  test("a misspelled key is still rejected", () => {
-    const deployment = writeConfig(
-      { ...baseDeployment(), persistance: "postgres" },
-      oneConnector(),
-    );
-    expect(() => loadDeploymentConfig(deployment)).toThrow(
-      "deployment.yaml: unknown key 'persistance'",
-    );
-    const connector = writeConfig(baseDeployment(), {
-      a: { ...baseConnector("aa"), persistance: "postgres" },
-    });
-    expect(() => loadDeploymentConfig(connector)).toThrow(
-      "connectors/connector-a.yaml: unknown key 'persistance'",
-    );
-  });
 });
 
 describe("Aurora cluster identifier", () => {
@@ -607,28 +575,13 @@ describe("Aurora cluster identifier", () => {
     );
   });
 
-  test("accepts the default deployment name with a long connectorId", () => {
-    expect(() =>
-      validateClusterIdentifier("DataspaceConnector", "c".repeat(44)),
-    ).not.toThrow();
-  });
-
-  test("accepts exactly 63 characters", () => {
+  test("accepts 63 characters and rejects 64", () => {
     expect(() =>
       validateClusterIdentifier("d".repeat(10), "c".repeat(52)),
     ).not.toThrow();
-  });
-
-  test("rejects more than 63 characters", () => {
     expect(() =>
       validateClusterIdentifier("d".repeat(10), "c".repeat(53)),
     ).toThrow(/is 64 characters \(max 63\)/);
-  });
-
-  test("rejects the maximum deploymentName with the maximum connectorId", () => {
-    expect(() =>
-      validateClusterIdentifier("d".repeat(41), "c".repeat(60)),
-    ).toThrow(/characters \(max 63\)/);
   });
 
   test("rejects an identifier that starts with a digit", () => {

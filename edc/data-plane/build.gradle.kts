@@ -25,5 +25,4 @@ dependencies {
     "postgres"(libs.edc.bom.dataplane.feature.sql)
     "postgres"(libs.edc.edr.index.sql)
     "postgres"(libs.tx.connector.migration)
-    "postgres"(libs.postgres)
 }
