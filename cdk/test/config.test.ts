@@ -8,6 +8,7 @@ import {
   ConnectorYaml,
   connectorPriority,
   deriveAdminSecretName,
+  deriveConnectorClusterIdentifier,
   deriveConnectorTableName,
   deriveSecretPrefix,
   connectorBpnl,
@@ -15,6 +16,7 @@ import {
   resolveDeploymentName,
   toPrincipals,
   toRemovalPolicy,
+  validateClusterIdentifier,
   validateConnectorId,
   validateDeploymentName,
   validateLogLevel,
@@ -26,6 +28,7 @@ import {
   basyxEntries,
   loadDeploymentConfig,
   loadPipelineConfig,
+  persistenceTypesInUse,
 } from "../lib/config/config";
 import { RemovalPolicy } from "aws-cdk-lib";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
@@ -429,6 +432,170 @@ describe("stateRemovalPolicy validation", () => {
     );
     expect(() => loadDeploymentConfig(dir)).toThrow(
       `deployment.yaml: basyx.${BPNL}.stateRemovalPolicy must be "RETAIN" or "DESTROY", got "X"`,
+    );
+  });
+});
+
+describe("persistence", () => {
+  test("deployment defaults to dynamodb", () => {
+    const { deployment, connectors } = loadDeploymentConfig(
+      writeConfig(baseDeployment(), oneConnector()),
+    );
+    expect(deployment.persistence).toBe("dynamodb");
+    expect(connectors[0].persistence).toBe("dynamodb");
+  });
+
+  test("connector inherits the deployment value", () => {
+    const { connectors } = loadDeploymentConfig(
+      writeConfig(
+        { ...baseDeployment(), persistence: "postgres" },
+        { a: baseConnector("aa"), b: baseConnector("bb") },
+      ),
+    );
+    expect(connectors.map((c) => c.persistence)).toEqual([
+      "postgres",
+      "postgres",
+    ]);
+  });
+
+  test("connector override wins over the deployment value", () => {
+    const { deployment, connectors } = loadDeploymentConfig(
+      writeConfig(baseDeployment(), {
+        a: { ...baseConnector("aa"), persistence: "postgres" },
+        b: baseConnector("bb"),
+      }),
+    );
+    expect(deployment.persistence).toBe("dynamodb");
+    expect(connectors.map((c) => c.persistence)).toEqual([
+      "postgres",
+      "dynamodb",
+    ]);
+  });
+
+  test("connector can override a postgres deployment back to dynamodb", () => {
+    const { connectors } = loadDeploymentConfig(
+      writeConfig(
+        { ...baseDeployment(), persistence: "postgres" },
+        { a: { ...baseConnector("aa"), persistence: "dynamodb" } },
+      ),
+    );
+    expect(connectors[0].persistence).toBe("dynamodb");
+  });
+
+  test("deployment value must be dynamodb or postgres", () => {
+    const dir = writeConfig(
+      { ...baseDeployment(), persistence: "mysql" },
+      oneConnector(),
+    );
+    expect(() => loadDeploymentConfig(dir)).toThrow(
+      'deployment.yaml: persistence must be "dynamodb" or "postgres", got "mysql"',
+    );
+  });
+
+  test("connector value must be dynamodb or postgres", () => {
+    const dir = writeConfig(baseDeployment(), {
+      a: { ...baseConnector("aa"), persistence: "Postgres" },
+    });
+    expect(() => loadDeploymentConfig(dir)).toThrow(
+      'connectors/connector-a.yaml: persistence must be "dynamodb" or "postgres", got "Postgres"',
+    );
+  });
+
+  test("an empty value is rejected rather than defaulted", () => {
+    const dir = writeConfig(baseDeployment(), {
+      a: { ...baseConnector("aa"), persistence: null },
+    });
+    expect(() => loadDeploymentConfig(dir)).toThrow(
+      'connectors/connector-a.yaml: persistence must be "dynamodb" or "postgres", got "null"',
+    );
+  });
+
+  describe("persistenceTypesInUse", () => {
+    const typesIn = (
+      deploymentPersistence: string | undefined,
+      overrides: Array<string | undefined>,
+    ) => {
+      const connectors = Object.fromEntries(
+        overrides.map((persistence, i) => [
+          `c${i}`,
+          {
+            ...baseConnector(`conn-${i}`),
+            ...(persistence ? { persistence } : {}),
+          },
+        ]),
+      );
+      return [
+        ...persistenceTypesInUse(
+          loadDeploymentConfig(
+            writeConfig(
+              {
+                ...baseDeployment(),
+                ...(deploymentPersistence
+                  ? { persistence: deploymentPersistence }
+                  : {}),
+              },
+              connectors,
+            ),
+          ),
+        ),
+      ];
+    };
+
+    test("is dynamodb alone by default", () => {
+      expect(typesIn(undefined, [undefined, undefined])).toEqual(["dynamodb"]);
+    });
+
+    test("follows the deployment default", () => {
+      expect(typesIn("postgres", [undefined, undefined])).toEqual(["postgres"]);
+    });
+
+    test("is postgres alone when every connector overrides to postgres", () => {
+      expect(typesIn(undefined, ["postgres", "postgres"])).toEqual([
+        "postgres",
+      ]);
+    });
+
+    test("lists both types in PERSISTENCE_TYPES order, once each", () => {
+      expect(typesIn(undefined, ["postgres", undefined, "postgres"])).toEqual([
+        "dynamodb",
+        "postgres",
+      ]);
+      expect(typesIn("postgres", ["dynamodb", undefined])).toEqual([
+        "dynamodb",
+        "postgres",
+      ]);
+    });
+  });
+});
+
+describe("Aurora cluster identifier", () => {
+  test("is the lowercased deployment and connector name", () => {
+    expect(deriveConnectorClusterIdentifier("DataspaceConnector", "ccm")).toBe(
+      "dataspaceconnector-ccm",
+    );
+  });
+
+  test("accepts 63 characters and rejects 64", () => {
+    expect(() =>
+      validateClusterIdentifier("d".repeat(10), "c".repeat(52)),
+    ).not.toThrow();
+    expect(() =>
+      validateClusterIdentifier("d".repeat(10), "c".repeat(53)),
+    ).toThrow(/is 64 characters \(max 63\)/);
+  });
+
+  test("rejects an identifier that starts with a digit", () => {
+    expect(() => validateClusterIdentifier("1dep", "ccm")).toThrow(
+      /must start with a letter/,
+    );
+  });
+
+  test("rejects consecutive hyphens from either part", () => {
+    expect(() => validateClusterIdentifier("dep--x", "ccm")).toThrow(
+      /two consecutive hyphens/,
+    );
+    expect(() => validateClusterIdentifier("dep", "a--b")).toThrow(
+      /two consecutive hyphens/,
     );
   });
 });

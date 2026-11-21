@@ -7,7 +7,8 @@ RUN addgroup -g 1001 edc && \
     adduser -D -u 1001 -G edc edc
 
 WORKDIR /app
-COPY build/libs/data-plane.jar data-plane.jar
+ARG JAR=data-plane.jar
+COPY build/libs/${JAR} app.jar
 
 USER edc
 
@@ -15,4 +16,4 @@ ENTRYPOINT ["java", \
     "-XX:MaxRAMPercentage=75.0", \
     "-XX:+ExitOnOutOfMemoryError", \
     "-Djava.security.egd=file:/dev/./urandom", \
-    "-jar", "data-plane.jar"]
+    "-jar", "app.jar"]

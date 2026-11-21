@@ -11,6 +11,16 @@
     </Appenders>
     <Loggers>
         <Logger name="org.eclipse.edc.monitor.logger" level="${env:EDC_LOG_LEVEL:-INFO}" additivity="false">
+            <!--
+              The PostgreSQL connection pool looks up the datasource URL, user and
+              password in the vault before the configuration. Those vault names are
+              account-global, so the task role may not read them, and each lookup
+              would log an AccessDenied error and a fallback warning at boot.
+            -->
+            <Filters>
+                <RegexFilter regex="(?s).*secretsmanager:GetSecretValue on resource: edc\.datasource\.default\.(url|user|password) .*" onMatch="DENY" onMismatch="NEUTRAL"/>
+                <RegexFilter regex="Datasource configuration value 'edc\.datasource\.default\.(url|user|password)' not found in vault, will fall back to Config\..*" onMatch="DENY" onMismatch="NEUTRAL"/>
+            </Filters>
             <AppenderRef ref="Console"/>
         </Logger>
         <!-- Capped at INFO: at DEBUG these log credentials (SigV4 session tokens, Authorization headers, secret values). -->

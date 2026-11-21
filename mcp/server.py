@@ -789,15 +789,17 @@ async def manage_transfer(
     Batch cleanup: pass transfer_process_id="all_started" to apply the action to
     every currently STARTED transfer (selected server-side by EDC's STARTED state
     code). This is the recommended way to reap idle provider-side pull transfers,
-    which keep consuming DynamoDB on this AWS deployment. Returns a per-id summary.
+    which keep consuming the connector's store (DynamoDB on-demand request units,
+    where used). Returns a per-id summary.
 
     Returns (single): {success, transfer_process_id, action, resulting_state}.
     Returns (all_started): {action, batch, total, succeeded[], skipped[], failed[]}.
     """
     if transfer_process_id == "all_started":
-        # STARTED transfers are what accrue provider-side DynamoDB cost. Filter
-        # server-side by EDC's TransferProcessStates integer code for STARTED (the
-        # store compares the numeric state, not the "STARTED" string label).
+        # STARTED transfers are what accrue provider-side store cost (DynamoDB
+        # on-demand request units, where used). Filter server-side by EDC's
+        # TransferProcessStates integer code for STARTED (the store compares the
+        # numeric state, not the "STARTED" string label).
         spec = _build_query_spec(
             0, 500,
             [{"operandLeft": "state", "operator": "=", "operandRight": _TRANSFER_STATE_STARTED}],
